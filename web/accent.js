@@ -39,7 +39,23 @@ function setAccent(h) {
   r.setProperty("--violet", `hsl(${(h + 38) % 360} 85% 62%)`);
   r.setProperty("--orange", `hsl(${(h + 322) % 360} 100% 58%)`);
 }
+// Colour themes: "auto" follows each game's accent; the others fix the whole palette.
+const THEMES = [["auto", "Auto"], ["classic", "Classic", null], ["synth", "Synth", 305], ["matrix", "Matrix", 135], ["sunset", "Sunset", 22], ["ice", "Ice", 190], ["crimson", "Crimson", 355]];
+const themeId = () => THEMES.find(t => t[0] === localStorage.getItem("mcl-theme"))?.[0] || "auto";
+function applyTheme() {
+  const b = $("#theme"), t = THEMES.find(x => x[0] === themeId());
+  if (b) { b.textContent = "🎨 " + t[1]; b.title = `Color theme: ${t[1]} (click to change)`; b.classList.toggle("on", t[0] !== "auto"); }
+  accentKey = "";
+  if (t[0] === "auto") { const g = games.find(x => x.id === sel); if (g) applyAccent(g); else setAccent(null); }
+  else setAccent(t[2]);
+}
+function cycleTheme() {
+  const i = THEMES.findIndex(t => t[0] === themeId());
+  localStorage.setItem("mcl-theme", THEMES[(i + 1) % THEMES.length][0]);
+  applyTheme(); sfx("cat");
+}
 async function applyAccent(g) {
+  if (themeId() !== "auto") return;
   const key = [g.id, g.accent, g.cover, g.icon].join("|");
   if (key === accentKey) return;
   accentKey = key;

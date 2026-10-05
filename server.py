@@ -122,12 +122,20 @@ def load_games():
                     if f.is_file():
                         g[key] = f"media/{g['id']}/{f.name}"
                         break
+        shots = [p for p in g.get("screenshots") or [] if isinstance(p, str) and p.startswith(f"media/{g['id']}/")
+                 and SHOT_RE.match(p.rsplit("/", 1)[-1]) and (HERE / p).is_file()]
+        if shots:
+            g["screenshots"] = shots
+        else:
+            g.pop("screenshots", None)
     return games
 
 
 FIELDS = ("name", "exec", "cwd", "tagline", "description", "tags", "category", "accent")
 KINDS = {"cover": ("jpg", "jpeg", "png", "webp"), "icon": ("jpg", "jpeg", "png", "webp", "svg"),
-         "video": ("mp4", "webm")}
+         "video": ("mp4", "webm"), "shot": ("jpg", "jpeg", "png", "webp")}
+MAX_SHOTS = 24
+SHOT_RE = re.compile(r"^shot-[0-9a-f]{8}\.(jpg|jpeg|png|webp)$")
 MAX_UPLOAD = 1 << 30
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
@@ -232,7 +240,7 @@ def http_get(url, limit):
 
 
 def download_media(gid, kind, url):
-    limit = MAX_UPLOAD if kind == "video" else MAX_IMAGE
+    limit = MAX_UPLOAD if kind == "video" else MAX_IMAGE  # shots are images too
     body, ctype = http_get(url, limit)
     ext = CTYPES.get(ctype) or urllib.parse.urlparse(url).path.rsplit(".", 1)[-1].lower().replace("jpeg", "jpg")
     if ext == "jpeg":
@@ -252,6 +260,16 @@ def commit_media(gid, kind, tmp, ext):
     if not game:
         tmp.unlink(missing_ok=True)
         return False
+    if kind == "shot":
+        shots = game.setdefault("screenshots", [])
+        if len(shots) >= MAX_SHOTS:
+            tmp.unlink(missing_ok=True)
+            raise FetchError(f"a game can have at most {MAX_SHOTS} screenshots")
+        dest = tmp.parent / f"shot-{secrets.token_hex(4)}.{ext}"
+        os.replace(tmp, dest)
+        shots.append(f"media/{gid}/{dest.name}")
+        write_games(games)
+        return True
     remove_media(gid, kind)
     dest = tmp.parent / f"{kind}.{ext}"
     os.replace(tmp, dest)
@@ -450,6 +468,18 @@ class Handler(SimpleHTTPRequestHandler):
                     if st.pop(m[1], None) is not None:
                         STATS.write_text(json.dumps(st))
                 return self._json({"status": "deleted"})
+            m = re.fullmatch(r"/api/shot/delete/([a-z0-9-]+)", self.path)
+            if m:
+                game = next((x for x in games if x["id"] == m[1]), None)
+                path = str(data.get("path") or "")
+                if not game or path not in (game.get("screenshots") or []) or not SHOT_RE.match(path.rsplit("/", 1)[-1]):
+                    return self._json({"error": "unknown screenshot"}, 404)
+                game["screenshots"].remove(path)
+                if not game["screenshots"]:
+                    game.pop("screenshots")
+                (HERE / path).unlink(missing_ok=True)
+                write_games(games)
+                return self._json({"status": "deleted"})
             m = re.fullmatch(r"/api/clear/([a-z0-9-]+)/(cover|icon|video)", self.path)
             if m:
                 game = next((x for x in games if x["id"] == m[1]), None)
@@ -531,7 +561,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"results": steam_search(str(data.get("q") or "")[:100])})
             if self.path == "/api/steam/details":
                 return self._json(steam_details(data.get("appid")))
-            m = re.fullmatch(r"/api/fetch/([a-z0-9-]+)/(cover|icon|video)", self.path)
+            m = re.fullmatch(r"/api/fetch/([a-z0-9-]+)/(cover|icon|video|shot)", self.path)
             if not m:
                 return self._json({"error": "not found"}, 404)
             gid, kind = m.groups()
@@ -546,13 +576,13 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"error": str(e) or "bad request"}, 400)
 
     def _upload(self):
-        m = re.fullmatch(r"/api/upload/([a-z0-9-]+)/(cover|icon|video)", self.path.split("?")[0])
+        m = re.fullmatch(r"/api/upload/([a-z0-9-]+)/(cover|icon|video|shot)", self.path.split("?")[0])
         if not m:
             return self.send_error(404)
         gid, kind = m.groups()
         ext = self.path.partition("?ext=")[2].lower().lstrip(".")
         n = int(self.headers.get("Content-Length") or 0)
-        if ext not in KINDS[kind] or not 0 < n <= MAX_UPLOAD:
+        if ext not in KINDS[kind] or not 0 < n <= (MAX_UPLOAD if kind == "video" else MAX_IMAGE):
             return self._json({"error": "unsupported file type or size"}, 400)
         if not any(x["id"] == gid for x in read_raw()):
             return self._json({"error": "unknown game"}, 404)
@@ -569,9 +599,12 @@ class Handler(SimpleHTTPRequestHandler):
         if left:
             tmp.unlink(missing_ok=True)
             return self._json({"error": "incomplete upload"}, 400)
-        with lock:
-            if not commit_media(gid, kind, tmp, ext):
-                return self._json({"error": "unknown game"}, 404)
+        try:
+            with lock:
+                if not commit_media(gid, kind, tmp, ext):
+                    return self._json({"error": "unknown game"}, 404)
+        except FetchError as e:
+            return self._json({"error": str(e)}, 400)
         return self._json({"status": "ok"})
 
 

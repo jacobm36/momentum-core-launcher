@@ -12,7 +12,7 @@ function applyPanel() {
   button.title = `Selected-game panel: ${featured ? "Featured" : "Classic"} (click to switch)`;
   button.setAttribute("aria-pressed", String(featured));
 }
-let games = [], token = "", running = new Set(), sel = null, filter = "", padOn = false, dragging = null, failed = {};
+let games = [], token = "", running = new Set(), sel = null, filter = "", tagSel = new Set(), padOn = false, dragging = null, failed = {};
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hue = s => [...s].reduce((a, c) => a + c.charCodeAt(0) * 7, 0) % 360;

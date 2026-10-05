@@ -9,7 +9,7 @@ function pressed(key, on, fn, repeat = 180) {
   if (!on) { delete held[key]; return; }
   if (!held[key] || now - held[key].t > (held[key].n ? repeat : 400)) { held[key] = { t: now, n: true }; fn(); }
 }
-const topDlg = () => ["odlg", "qdlg", "bdlg", "idlg", "ndlg", "sdlg", "dlg"].map(i => $("#" + i)).find(d => d.open);
+const topDlg = () => ["odlg", "qdlg", "gdlg", "bdlg", "idlg", "ndlg", "sdlg", "dlg"].map(i => $("#" + i)).find(d => d.open);
 const FOCUSABLE = 'button,input:not([type=file]):not([type=hidden]),textarea,a[href],[tabindex="0"]';
 const focusables = scope => [...scope.querySelectorAll(FOCUSABLE)].filter(e => !e.disabled && !e.hidden && e.getClientRects().length && !(e.closest("#odlg") && e.id === "oinp"));
 function moveFocus(dir) {
@@ -59,13 +59,13 @@ function padAction(b, ax, ay) {
     pressed("up", moves.up, () => step(-1));
     pressed("down", moves.down, () => step(1));
   } else for (const k in moves) pressed(k, moves[k], () => moveFocus(k));
-  pressed("lb", b(4), () => { if (!d) jump(-1); }, 300);
-  pressed("rb", b(5), () => { if (!d) jump(1); }, 300);
+  pressed("lb", b(4), () => { if (!d) jump(-1); else d.nav?.(-1); }, 300);
+  pressed("rb", b(5), () => { if (!d) jump(1); else d.nav?.(1); }, 300);
   pressed("a", b(0), () => { if (d || uiMode) activate(); else { const g = games.find(x => x.id === sel); if (g) launch(g); } }, 1e9);
   pressed("b", b(1), () => {
     if (d) cancelDialog(d);
     else if (uiMode) leaveUi();
-    else { $("#search").value = ""; filter = ""; renderList(); }
+    else clearFilters();
   }, 1e9);
   pressed("x", b(2), () => { if (d?.id === "odlg") d.oskKey?.("back"); else if (!d) editor(); }, d?.id === "odlg" ? 120 : 1e9);
   pressed("y", b(3), () => { if (d?.id === "odlg") d.oskKey?.(" "); else if (!d) { const g = games.find(x => x.id === sel); if (g) editor(g); } }, d?.id === "odlg" ? 120 : 1e9);
@@ -93,7 +93,7 @@ function pollPad() {
 for (const t of ["pointerdown", "keydown"]) addEventListener(t, () => { document.documentElement.classList.remove("gp"); if (t === "pointerdown") uiMode = false; }, true);
 
 // On-screen keyboard. Also used for category rename; physical typing works in it too.
-const KEYROWS = ["1234567890", "qwertyuiop", "asdfghjkl-", "zxcvbnm,./", ":_~@?&=+'\""];
+const KEYROWS = ["1234567890", "qwertyuiop", "asdfghjkl-", "zxcvbnm,./", ":_~@?&=+'\"", "#!%()[]*;$"];
 function oskPrompt(title, value = "", { multiline = false } = {}) {
   const d = $("#odlg");
   return new Promise(res => {
@@ -101,13 +101,14 @@ function oskPrompt(title, value = "", { multiline = false } = {}) {
     d.innerHTML = `<form method="dialog" onsubmit="return false"><h2>${esc(title)}</h2>
       ${multiline ? '<textarea id="oinp" rows="4"></textarea>' : '<input id="oinp" autocomplete="off">'}
       <div id="okeys">${KEYROWS.map(r => `<div>${[...r].map(c => `<button type="button" data-k="${esc(c)}">${esc(c)}</button>`).join("")}</div>`).join("")}
-        <div><button type="button" data-k="shift" class="wide">⇧ Shift</button><button type="button" data-k=" " class="space">Space</button>${multiline ? '<button type="button" data-k="\n" class="wide">↵</button>' : ""}<button type="button" data-k="back" class="wide">⌫</button></div></div>
+        <div><button type="button" data-k="shift" class="wide">⇧ Shift</button><button type="button" data-k=" " class="space">Space</button>${multiline ? '<button type="button" data-k="\n" class="wide">↵</button>' : ""}<button type="button" data-k="back" class="wide">⌫</button><button type="button" data-k="clear" class="wide">Clear</button></div></div>
       <div class="padhint"><kbd>X</kbd>Backspace <kbd>Y</kbd>Space <kbd>Start</kbd>Done <kbd>B</kbd>Cancel</div>
       <div class="btns"><button type="button" id="ocancel">Cancel</button><button type="button" id="ook" class="primary">Done</button></div></form>`;
     const inp = $("#oinp"); inp.value = value;
     const key = k => {
       if (k === "shift") { shift = !shift; d.classList.toggle("shift", shift); return; }
       if (k === "back") inp.value = inp.value.slice(0, -1);
+      else if (k === "clear") inp.value = "";
       else { inp.value += shift ? k.toUpperCase() : k; if (shift) { shift = false; d.classList.remove("shift"); } }
       sfx("tick");
     };

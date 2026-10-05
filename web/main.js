@@ -22,7 +22,7 @@ $("#snd").onclick = () => { localStorage.setItem("mcl-sound", soundOn() ? "off" 
 $("#rum").onclick = () => { localStorage.setItem("mcl-rumble", rumbleOn() ? "off" : "on"); applyRumble(); rumble("ok"); };
 $("#fx").onclick = () => { localStorage.setItem("mcl-anim", animOn() ? "off" : "on"); applyFx(); };
 $("#dlg").addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && e.target.matches(".sr, .thumbs img")) { e.preventDefault(); e.target.click(); } });
-applyFx(); applySound(); applyRumble(); applyPanel(); applySort(); splash();
+applyFx(); applySound(); applyRumble(); applyPanel(); applySort(); applyTheme(); splash();
 hints();
 refresh(true);
 requestAnimationFrame(pollPad);

@@ -11,8 +11,9 @@
 <aside>
   <header><img src="/web/logo-full.png" alt="Momentum"><span>CORE LAUNCHER</span></header>
   <input id="search" type="search" placeholder="Search games…" autocomplete="off">
+  <div id="tagbar" hidden></div>
   <nav id="list"></nav>
-  <div class="side-btns"><button id="add">+ Add game</button><button id="sort" title="Sort order (S)"></button><button id="stats" title="Playtime summary (T)">📊</button><button id="bell" class="badged" title="Notifications (N)">🔔</button><button id="jobsbtn" class="badged" title="Installs &amp; jobs (I)">📥</button><button id="backupbtn" title="Backup &amp; restore (B)">💾</button><button id="panel" title="Toggle selected-game panel style" aria-pressed="false"></button><button id="fx" title="Toggle animations and intro"></button><button id="snd" title="Toggle sound effects"></button><button id="rum" title="Toggle controller rumble" hidden>📳</button><button id="full" title="Toggle fullscreen (F11)">⛶</button><button id="quit" title="Exit launcher">⏻</button></div>
+  <div class="side-btns"><button id="add">+ Add game</button><button id="sort" title="Sort order (S)"></button><button id="stats" title="Playtime summary (T)">📊</button><button id="theme" title="Color theme"></button><button id="bell" class="badged" title="Notifications (N)">🔔</button><button id="jobsbtn" class="badged" title="Installs &amp; jobs (I)">📥</button><button id="backupbtn" title="Backup &amp; restore (B)">💾</button><button id="panel" title="Toggle selected-game panel style" aria-pressed="false"></button><button id="fx" title="Toggle animations and intro"></button><button id="snd" title="Toggle sound effects"></button><button id="rum" title="Toggle controller rumble" hidden>📳</button><button id="full" title="Toggle fullscreen (F11)">⛶</button><button id="quit" title="Exit launcher">⏻</button></div>
   <footer id="hints"></footer>
 </aside>
 <main id="stage">
@@ -28,6 +29,7 @@
   <div class="btns"><button value="cancel" id="qno" autofocus>Cancel</button><button value="ok" class="primary" id="qyes">Exit</button></div></form></dialog>
 <dialog id="sdlg"></dialog>
 <dialog id="odlg"></dialog>
+<dialog id="gdlg"></dialog>
 <dialog id="ndlg"></dialog>
 <dialog id="idlg"></dialog>
 <dialog id="bdlg"></dialog>
@@ -44,6 +46,7 @@
 <script src="/web/gamepad.js"></script>
 <script src="/web/shell.js"></script>
 <script src="/web/stats.js"></script>
+<script src="/web/gallery.js"></script>
 <script src="/web/notify.js"></script>
 <script src="/web/jobs.js"></script>
 <script src="/web/backup.js"></script>

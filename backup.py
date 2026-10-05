@@ -126,6 +126,10 @@ def _check_games(raw):
             v = g.get(k)
             if v is not None and not (isinstance(v, str) and v.startswith("media/") and ".." not in v):
                 raise BackupError(f"invalid {k} path for {g['id']}")
+        shots = g.get("screenshots")
+        if shots is not None and not (isinstance(shots, list) and len(shots) <= 100 and all(
+                isinstance(v, str) and v.startswith("media/") and ".." not in v for v in shots)):
+            raise BackupError(f"invalid screenshots for {g['id']}")
     return games
 
 

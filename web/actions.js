@@ -34,8 +34,8 @@ async function removeGame(g) {
   await refresh(); select(next && next !== g.id ? next : flat()[0]?.id);
 }
 
-const ACCEPT = { cover: "image/*", icon: "image/*", video: "video/mp4,video/webm" };
-const LABEL = { cover: "Background art", icon: "Icon", video: "Background video" };
+const ACCEPT = { cover: "image/*", icon: "image/*", video: "video/mp4,video/webm", shot: "image/*" };
+const LABEL = { cover: "Background art", icon: "Icon", video: "Background video", shot: "Screenshot" };
 const extOf = f => (f.name.split(".").pop() || "").toLowerCase();
 const kindOfFile = f => f.type.startsWith("video/") ? "video" : f.type.startsWith("image/") ? "cover" : null;
 
@@ -47,9 +47,12 @@ async function sendMedia(id, kind, p) {
 }
 
 function editor(g) {
-  const isNew = !g, d = $("#dlg"), f = $("#form"), pending = {}, blobs = [];
+  const isNew = !g, d = $("#dlg"), f = $("#form"), pending = {}, blobs = [], shots = [];
   g = g || { tags: [] };
   const cats = [...new Set(games.map(x => x.category).filter(Boolean))];
+  const allTags = [...new Map(games.flatMap(x => x.tags || []).map(t => [t.toLowerCase(), t])).values()].sort((a, b) => a.localeCompare(b)).slice(0, 40);
+  const SWATCHES = ["#22b8ff", "#8a4dff", "#ff2d95", "#ff6a2b", "#ffc933", "#3ddc97", "#ff4d6d"];
+  const chips = (kind, items) => items.length ? `<div class="chips" data-chips="${kind}">${items.map(c => `<button type="button" data-v="${esc(c)}">${esc(c)}</button>`).join("")}</div>` : "";
   const slot = k => `<div class="slot" data-kind="${k}"><div class="slot-h">${LABEL[k]}</div>
     <div class="preview" id="pv-${k}"></div>
     <div class="slot-in"><input type="file" name="${k}" accept="${ACCEPT[k]}"><input type="url" name="url-${k}" placeholder="…or paste a link (https://)"></div>
@@ -61,11 +64,17 @@ function editor(g) {
     <label>Launch command or script path *<input name="exec" required value="${esc(g.exec || "")}" placeholder="/home/you/Games/game.sh"></label>
     <label>Working directory (optional)<input name="cwd" value="${esc(g.cwd || "")}"></label>
     <label>Category<input name="category" list="cats" value="${esc(g.category || "")}"><datalist id="cats">${cats.map(c => `<option value="${esc(c)}">`).join("")}</datalist></label>
+    ${chips("category", cats)}
     <label>Accent color (optional, like #ff3030; blank = automatic from the art)<input name="accent" value="${esc(g.accent || "")}" placeholder="#ff3030" pattern="#[0-9a-fA-F]{6}"></label>
+    <div class="chips swatches" data-chips="accent">${SWATCHES.map(c => `<button type="button" data-v="${c}" style="--sw:${c}" title="${c}" aria-label="Accent ${c}"></button>`).join("")}<button type="button" data-v="">Auto</button></div>
     <label>Tagline<input name="tagline" value="${esc(g.tagline || "")}"></label>
     <label>Description<textarea name="description" rows="4">${esc(g.description || "")}</textarea></label>
     <label>Tags (comma separated)<input name="tags" value="${esc((g.tags || []).join(", "))}"></label>
+    ${chips("tags", allTags)}
     ${["cover", "icon", "video"].map(slot).join("")}
+    <div class="slot" data-kind="shot"><div class="slot-h">Screenshots</div><div class="shotgrid" id="shotgrid"></div>
+      <div class="slot-in"><input type="file" name="shot" accept="image/*" multiple><input type="url" name="url-shot" placeholder="…or paste an image link and press Enter"></div>
+      <small class="drop-hint">Drop images here. Up to 24 per game.</small></div>
     <div class="err" id="ferr"></div>
     <div class="padhint" ${padOn ? "" : "hidden"}><kbd>D-pad</kbd>Move <kbd>A</kbd>Select / type <kbd>Start</kbd>Save <kbd>B</kbd>Cancel</div>
     <div class="btns"><button type="button" id="cancel">Cancel</button><button type="submit" class="primary">Save</button></div>`;
@@ -101,6 +110,51 @@ function editor(g) {
     } catch { $("#ferr").textContent = "Frames can only be grabbed from videos on this computer: upload the file, or save first."; }
   };
 
+  const tagList = () => f.elements.tags.value.split(",").map(t => t.trim()).filter(Boolean);
+  const syncChips = () => {
+    const tl = tagList().map(t => t.toLowerCase());
+    f.querySelectorAll("[data-chips]").forEach(box => box.querySelectorAll("button").forEach(b => {
+      const k = box.dataset.chips, v = b.dataset.v;
+      b.classList.toggle("on", k === "tags" ? tl.includes(v.toLowerCase()) : k === "category" ? f.elements.category.value === v : f.elements.accent.value.toLowerCase() === v.toLowerCase());
+    }));
+  };
+  f.querySelectorAll("[data-chips]").forEach(box => box.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const v = b.dataset.v, k = box.dataset.chips;
+    if (k === "tags") {
+      const tl = tagList(), i = tl.findIndex(t => t.toLowerCase() === v.toLowerCase());
+      if (i >= 0) tl.splice(i, 1); else tl.push(v);
+      f.elements.tags.value = tl.join(", ");
+    } else f.elements[k].value = v;
+    syncChips(); sfx("tick");
+  });
+  ["category", "accent", "tags"].forEach(k => f.elements[k].addEventListener("input", syncChips));
+  syncChips();
+
+  const drawShots = () => {
+    const have = (g.screenshots || []).map(p => ({ src: url(p), path: p })), add = shots.map((p, i) => ({ src: p.file ? (p.blobUrl ||= (blobs.push(URL.createObjectURL(p.file)), blobs.at(-1))) : p.url, i }));
+    $("#shotgrid").innerHTML = [...have.map(s => `<div class="shot"><img src="${esc(s.src)}" alt=""><button type="button" data-del="${esc(s.path)}" title="Remove screenshot">✕</button></div>`),
+      ...add.map(s => `<div class="shot new"><img src="${esc(s.src)}" alt=""><button type="button" data-drop="${s.i}" title="Don't add">✕</button></div>`)].join("") || '<small class="drop-hint">No screenshots yet.</small>';
+  };
+  const room = () => 24 - (g.screenshots?.length || 0) - shots.length;
+  const addShots = list => { for (const file of list) if (file.type.startsWith("image/") && room() > 0) shots.push({ file }); drawShots(); };
+  const addShotUrl = el => { const v = el.value.trim(); if (v && room() > 0 && !shots.some(s => s.url === v)) shots.push({ url: v }); el.value = ""; drawShots(); };
+  $("#shotgrid").onclick = async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.drop) { shots.splice(+b.dataset.drop, 1); drawShots(); return; }
+    if (!b.dataset.del || !g.id) return;
+    await post(`/api/shot/delete/${g.id}`, { path: b.dataset.del });
+    g.screenshots = (g.screenshots || []).filter(p => p !== b.dataset.del); drawShots(); await refresh(); renderDetail();
+  };
+  f.elements.shot.onchange = e => { addShots([...e.target.files]); e.target.value = ""; };
+  f.elements["url-shot"].onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); addShotUrl(e.target); } };
+  f.elements["url-shot"].onchange = e => addShotUrl(e.target);
+  const shotSlot = f.querySelector('.slot[data-kind="shot"]');
+  shotSlot.ondragover = e => { if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); shotSlot.classList.add("over"); } };
+  shotSlot.ondragleave = () => shotSlot.classList.remove("over");
+  shotSlot.ondrop = e => { e.preventDefault(); e.stopPropagation(); shotSlot.classList.remove("over"); addShots([...e.dataTransfer.files]); };
+  drawShots();
+
   $("#steam").onclick = async () => {
     const q = f.elements.name.value.trim(), box = $("#steamres");
     if (!q) { box.textContent = "Type the game's name first."; return; }
@@ -117,16 +171,18 @@ function editor(g) {
       f.elements.tags.value = dd.tags.join(", ") || f.elements.tags.value;
       if (!f.elements.tagline.value) f.elements.tagline.value = dd.tagline || "";
       if (isNew && dd.name) f.elements.name.value = dd.name;
-      box.innerHTML = `<div class="slot-h">Pick a background (click one)</div><div class="thumbs">${dd.covers.map((u, n) => `<img tabindex="0" src="${esc(u)}" data-u="${esc(u)}" class="${n ? "" : "picked"}" alt="">`).join("")}</div>`;
+      box.innerHTML = `<div class="slot-h">Pick a background (click one)</div><div class="thumbs">${dd.covers.map((u, n) => `<img tabindex="0" src="${esc(u)}" data-u="${esc(u)}" class="${n ? "" : "picked"}" alt="">`).join("")}</div>${dd.covers.length > 1 ? '<button type="button" id="steamshots">Add these as screenshots</button>' : ""}`;
       if (dd.covers[0]) setPending("cover", { url: dd.covers[0] });
       if (dd.icon && !g.icon) setPending("icon", { url: dd.icon });
-      box.onclick = ev => { const im = ev.target.closest("img[data-u]"); if (!im) return; box.querySelectorAll("img").forEach(x => x.classList.toggle("picked", x === im)); setPending("cover", { url: im.dataset.u }); };
+      box.onclick = ev => {
+        if (ev.target.id === "steamshots") { for (const u of dd.covers.slice(0, 8)) if (!shots.some(s => s.url === u) && room() > 0) shots.push({ url: u }); drawShots(); ev.target.disabled = true; ev.target.textContent = "Added to screenshots"; return; }
+        const im = ev.target.closest("img[data-u]"); if (!im) return; box.querySelectorAll("img").forEach(x => x.classList.toggle("picked", x === im)); setPending("cover", { url: im.dataset.u }); };
     };
   };
 
   const snap = () => JSON.stringify([...new FormData(f)].filter(([, v]) => typeof v === "string"));
   const before = snap();
-  f.dirty = () => snap() !== before || Object.keys(pending).length > 0;
+  f.dirty = () => snap() !== before || Object.keys(pending).length > 0 || shots.length > 0;
   d.onclose = () => blobs.forEach(URL.revokeObjectURL);
   $("#cancel").onclick = () => d.close();
   f.onsubmit = async e => {
@@ -140,6 +196,12 @@ function editor(g) {
       const u = await sendMedia(j.id, k, pending[k]);
       if (u.error) { err.textContent = `${LABEL[k]}: ${u.error}. Fix it or clear that field, then Save again.`; delete pending[k].file; return; }
       delete pending[k];
+    }
+    for (const p of [...shots]) {
+      err.textContent = "Saving screenshots…";
+      const u = await sendMedia(j.id, "shot", p);
+      if (u.error) { err.textContent = `Screenshot: ${u.error}. Remove it or fix it, then Save again.`; sfx("err"); return; }
+      shots.splice(shots.indexOf(p), 1);
     }
     d.close(); sfx("ok"); ver = Date.now(); await refresh(); select(j.id);
   };

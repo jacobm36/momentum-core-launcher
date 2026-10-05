@@ -34,7 +34,7 @@ function openStats() {
     <div class="btns"><button type="button" id="sclose" class="primary" autofocus>Close</button></div>`;
   d.onclick = e => {
     const r = e.target.closest(".srow");
-    if (r) { d.close(); filter = ""; $("#search").value = ""; select(r.dataset.id); }
+    if (r) { d.close(); filter = ""; tagSel.clear(); $("#search").value = ""; select(r.dataset.id); }
     else if (e.target.id === "sclose") d.close();
   };
   d.onkeydown = e => { if (e.key === "Escape") { e.preventDefault(); d.close(); } };

@@ -66,7 +66,7 @@ function select(id) {
 function step(d) { const l = flat(), i = l.findIndex(g => g.id === sel); if (l.length) select(l[(i + d + l.length) % l.length].id); } // wraps around at either end
 // Jump to the Favorites or Recently played section; pressing again steps through its games.
 function jumpTo(list) {
-  if (filter || !list.length) return;
+  if (filtering() || !list.length) return;
   const i = list.findIndex(g => g.id === sel);
   select(list[(i + 1) % list.length].id); sfx("cat");
 }
@@ -119,11 +119,16 @@ $("#list").addEventListener("drop", async e => {
   if (i && i.dataset.id !== id) await moveGame(id, i.dataset.id, after);
   else if (c) await moveGame(id, null, false, c.dataset.cat);
 });
+if ($("#theme")) $("#theme").onclick = e => { e.currentTarget.blur(); cycleTheme(); };
 if ($("#sort")) $("#sort").onclick = e => { e.currentTarget.blur(); cycleSort(); };
 if ($("#stats")) $("#stats").onclick = e => { e.currentTarget.blur(); openStats(); };
 $("#detail").addEventListener("click", e => {
   const t = e.target.closest("[data-tag]"); if (!t) return;
-  filter = t.dataset.tag; $("#search").value = filter; renderList(); sfx("cat");
+  toggleTag(t.dataset.tag);
+});
+$("#tagbar")?.addEventListener("click", e => {
+  const b = e.target.closest("[data-untag]"); if (!b) return;
+  if (b.dataset.untag === "*") { tagSel.clear(); renderList(); renderDetail(); sfx("tick"); } else toggleTag(b.dataset.untag);
 });
 $("#search").oninput = e => { filter = e.target.value; renderList(); };
 document.addEventListener("keydown", e => {
@@ -135,7 +140,7 @@ document.addEventListener("keydown", e => {
   if (topDlg()) return;
   const inSearch = e.target.id === "search";
   if (inSearch && !["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(e.key)) return;
-  if (e.altKey && !filter && sortMode() === "cat" && (e.key === "ArrowDown" || e.key === "ArrowUp")) { nudge(sel, e.key === "ArrowDown" ? 1 : -1); e.preventDefault(); }
+  if (e.altKey && !filtering() && sortMode() === "cat" && (e.key === "ArrowDown" || e.key === "ArrowUp")) { nudge(sel, e.key === "ArrowDown" ? 1 : -1); e.preventDefault(); }
   else if (e.key === "ArrowDown") { step(1); e.preventDefault(); }
   else if (e.key === "ArrowUp") { step(-1); e.preventDefault(); }
   else if (e.key.toLowerCase() === "r" && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea")) jumpTo(recent());
@@ -148,7 +153,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "PageUp") jump(-1);
   else if (e.key === "Escape") {
     if ($("#splash")) return; // Esc just skips the intro
-    $("#search").value = ""; filter = ""; $("#search").blur(); renderList();
+    $("#search").blur(); clearFilters();
   }
   else if ((e.key === "Enter" || e.key === " ") && e.target.closest("[data-act], [data-tag]")) { e.target.click(); e.preventDefault(); }
   else if (e.key === "Enter" && !e.target.closest("button")) { const g = games.find(x => x.id === sel); if (g) launch(g); }
