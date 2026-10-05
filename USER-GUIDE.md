@@ -24,8 +24,10 @@ cd ~/Projects/GamesRepo/momentum-core-launcher
 | Previous/next category | PgUp / PgDn | LB / RB |
 | Clear search | Esc | B |
 | Favorite / unfavorite the selected game | F, or the ☆ Favorite button | Back / Select |
-| Jump to Recently played (press again for the next one) | R | — |
-| Jump to Favorites (press again for the next one) | Shift+F | — |
+| Jump to Recently played (press again for the next one) | R | LT |
+| Jump to Favorites (press again for the next one) | Shift+F | RT |
+| Cycle sort order (Category / Last played / Most played / A–Z) | S | L3 (stick click) |
+| Playtime summary | T | R3 (stick click) |
 | Add a game | + Add game button | X |
 | Edit the selected game | Edit button | Y |
 | Menu mode (reach every button) | Tab | Start |
@@ -208,3 +210,9 @@ Only shortcuts whose launch command matches a game in `games.json` are moved. Th
 - The launcher rewrites `games.json` when you add, edit, remove or reorder games. Keep a backup copy if you've hand-edited it heavily.
 - Closing the launcher doesn't close games you started. They keep running on their own.
 - It needs Python 3 and Chrome or Chromium. Otherwise it falls back to your default browser.
+
+## Sorting, tag filter and playtime summary
+
+- The **⇅** button (or **S**) cycles the sidebar order: Category (default), Last played, Most played, A–Z. Your choice is remembered. Non-category orders show one flat list, so drag-to-reorder and Alt+arrow nudging are disabled until you go back to Category.
+- Click (or press Enter on) a tag chip in the game panel to search for that tag.
+- The **📊** button (or **T**) opens a summary: total playtime, launches, games played, and your five most-played games. Select a game there to jump to it. There is no play streak because only totals and the last-played time are stored.

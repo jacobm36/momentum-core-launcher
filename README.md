@@ -22,7 +22,7 @@ cp games.example.json games.json   # or run ./import_games.py to import .desktop
 ./install.sh                       # optional: add an app-menu / Desktop shortcut
 ```
 
-Handy keys: **↑/↓** select, **Enter** play, **F** favorite, **R** jump to recent games, **Shift+F** jump to favorites, **Ctrl+Q** quit.
+Handy keys: **↑/↓** select, **Enter** play, **F** favorite, **R** jump to recent games, **Shift+F** jump to favorites, **S** change sort order, **T** playtime summary, **Ctrl+Q** quit.
 An empty library shows a welcome screen with an **Add a game** button. See [USER-GUIDE.md](USER-GUIDE.md) for everything else.
 
 ## Your data stays local
