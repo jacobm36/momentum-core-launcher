@@ -24,6 +24,8 @@ cd ~/Projects/GamesRepo/momentum-core-launcher
 | Previous/next category | PgUp / PgDn | LB / RB |
 | Clear search | Esc | B |
 | Favorite / unfavorite the selected game | F, or the ☆ Favorite button | Back / Select |
+| Jump to Recently played (press again for the next one) | R | — |
+| Jump to Favorites (press again for the next one) | Shift+F | — |
 | Add a game | + Add game button | X |
 | Edit the selected game | Edit button | Y |
 | Menu mode (reach every button) | Tab | Start |

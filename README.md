@@ -1,5 +1,7 @@
 # Momentum Core Launcher
 
+![Momentum Core Launcher showing the Featured panel with demo games](docs/screenshot.png)
+
 A local, controller-friendly game launcher with a cyberpunk / retro-arcade look. A tiny Python
 (stdlib-only) server plus a vanilla HTML/CSS/JS front end, shown in a Chrome kiosk or app window.
 
@@ -20,7 +22,8 @@ cp games.example.json games.json   # or run ./import_games.py to import .desktop
 ./install.sh                       # optional: add an app-menu / Desktop shortcut
 ```
 
-Press **Ctrl+Q** or click ⏻ to quit. See [USER-GUIDE.md](USER-GUIDE.md) for everything else.
+Handy keys: **↑/↓** select, **Enter** play, **F** favorite, **R** jump to recent games, **Shift+F** jump to favorites, **Ctrl+Q** quit.
+An empty library shows a welcome screen with an **Add a game** button. See [USER-GUIDE.md](USER-GUIDE.md) for everything else.
 
 ## Your data stays local
 

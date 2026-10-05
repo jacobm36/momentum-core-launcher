@@ -231,7 +231,12 @@ function renderListInner() {
 function renderDetail() { keepFocus(renderDetailInner); }
 function renderDetailInner() {
   const g = games.find(x => x.id === sel), el = $("#detail"), bg = $("#bg"), art = $("#art");
-  if (!g) { el.innerHTML = '<p class="empty">No games found.</p>'; return; }
+  if (!g) {
+    el.innerHTML = games.length ? '<p class="empty">No games found.</p>'
+      : `<div class="welcome"><h1>Welcome to Momentum</h1><p>Your library is empty. Add your first game, or import every game that already has a <code>.desktop</code> shortcut.</p><button id="welcome-add" class="primary">+ Add a game</button><p class="hint">Or run <code>./import_games.py</code> in the launcher folder, then reopen this window.</p></div>`;
+    $("#welcome-add")?.addEventListener("click", () => editor());
+    return;
+  }
   const on = running.has(g.id);
   if (shown !== g.id) { shown = g.id; for (const n of [el, art]) { n.classList.remove("swap"); void n.offsetWidth; n.classList.add("swap"); } }
   const tagline = `<div class="tagline">${esc(g.tagline || g.category || "")}</div>`;
@@ -476,6 +481,12 @@ function select(id) {
   [...document.querySelectorAll(".item.sel")].pop()?.scrollIntoView({ block: "nearest", behavior: animOn() ? "smooth" : "auto" });
 }
 function step(d) { const l = flat(), i = l.findIndex(g => g.id === sel); if (l.length) select(l[(i + d + l.length) % l.length].id); } // wraps around at either end
+// Jump to the Favorites or Recently played section; pressing again steps through its games.
+function jumpTo(list) {
+  if (filter || !list.length) return;
+  const i = list.findIndex(g => g.id === sel);
+  select(list[(i + 1) % list.length].id); sfx("cat");
+}
 function jump(d) { // previous/next category
   const cs = ordered(); if (!cs.length) return;
   const ci = cs.findIndex(c => c.items.some(g => g.id === sel));
@@ -533,7 +544,9 @@ document.addEventListener("keydown", e => {
   if (e.altKey && !filter && (e.key === "ArrowDown" || e.key === "ArrowUp")) { nudge(sel, e.key === "ArrowDown" ? 1 : -1); e.preventDefault(); }
   else if (e.key === "ArrowDown") { step(1); e.preventDefault(); }
   else if (e.key === "ArrowUp") { step(-1); e.preventDefault(); }
-  else if (e.key.toLowerCase() === "f" && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea")) toggleFav(games.find(x => x.id === sel));
+  else if (e.key.toLowerCase() === "r" && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea")) jumpTo(recent());
+  else if (e.key === "F" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea")) jumpTo(favs());
+  else if (e.key.toLowerCase() === "f" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea")) toggleFav(games.find(x => x.id === sel));
   else if (e.key === "PageDown") jump(1);
   else if (e.key === "PageUp") jump(-1);
   else if (e.key === "Escape") {
@@ -676,7 +689,7 @@ function hints() {
   $("#rum").hidden = !padOn;
   $("#hints").innerHTML = padOn
     ? "<span><kbd>A</kbd>Play</span><span><kbd>LB</kbd><kbd>RB</kbd>Category</span><span><kbd>Back</kbd>★</span><span><kbd>X</kbd>Add</span><span><kbd>Y</kbd>Edit</span><span><kbd>Start</kbd>Menu</span>"
-    : "<span><kbd>↑</kbd><kbd>↓</kbd>Select</span><span><kbd>Enter</kbd>Play</span><span><kbd>PgUp</kbd><kbd>PgDn</kbd>Category</span><span><kbd>F</kbd>★ Favorite</span>";
+    : "<span><kbd>↑</kbd><kbd>↓</kbd>Select</span><span><kbd>Enter</kbd>Play</span><span><kbd>PgUp</kbd><kbd>PgDn</kbd>Category</span><span><kbd>F</kbd>★ Favorite</span><span><kbd>R</kbd>Recent</span><span><kbd>⇧F</kbd>Favorites</span>";
 }
 addEventListener("gamepaddisconnected", () => { padOn = false; hints(); });
 
