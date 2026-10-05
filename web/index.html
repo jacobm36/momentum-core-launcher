@@ -12,7 +12,7 @@
   <header><img src="/web/logo-full.png" alt="Momentum"><span>CORE LAUNCHER</span></header>
   <input id="search" type="search" placeholder="Search games…" autocomplete="off">
   <nav id="list"></nav>
-  <div class="side-btns"><button id="add">+ Add game</button><button id="panel" title="Toggle selected-game panel style" aria-pressed="false"></button><button id="fx" title="Toggle animations and intro"></button><button id="snd" title="Toggle sound effects"></button><button id="rum" title="Toggle controller rumble" hidden>📳</button><button id="full" title="Toggle fullscreen (F11)">⛶</button><button id="quit" title="Exit launcher">⏻</button></div>
+  <div class="side-btns"><button id="add">+ Add game</button><button id="sort" title="Sort order (S)"></button><button id="stats" title="Playtime summary (T)">📊</button><button id="panel" title="Toggle selected-game panel style" aria-pressed="false"></button><button id="fx" title="Toggle animations and intro"></button><button id="snd" title="Toggle sound effects"></button><button id="rum" title="Toggle controller rumble" hidden>📳</button><button id="full" title="Toggle fullscreen (F11)">⛶</button><button id="quit" title="Exit launcher">⏻</button></div>
   <footer id="hints"></footer>
 </aside>
 <main id="stage">
@@ -24,7 +24,9 @@
 </main>
 <dialog id="dlg"><form id="form" method="dialog"></form></dialog>
 <dialog id="qdlg"><form method="dialog" id="qform"><h2 id="qtitle">Exit launcher?</h2><p id="qmsg"></p>
+  <div class="padhint pad-only"><kbd>A</kbd>Choose <kbd>B</kbd>Cancel</div>
   <div class="btns"><button value="cancel" id="qno" autofocus>Cancel</button><button value="ok" class="primary" id="qyes">Exit</button></div></form></dialog>
+<dialog id="sdlg"></dialog>
 <dialog id="odlg"></dialog>
 <div id="splash"><img src="/web/logo-full.png" alt=""><div class="bar"></div></div>
 <div id="flash"></div>

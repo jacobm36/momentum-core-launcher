@@ -22,6 +22,7 @@ const rumbleOn = () => localStorage.getItem("mcl-rumble") !== "off";
 function applyRumble() { $("#rum").classList.toggle("off", !rumbleOn()); $("#rum").title = rumbleOn() ? "Controller rumble: on" : "Controller rumble: off"; }
 const RUMBLE = {
   cat: [[0, 70, 0.3, 0.1]],
+  open: [[0, 45, 0.25, 0.05]],
   ok: [[0, 60, 0.4, 0.2], [90, 90, 0.6, 0.3]],
   del: [[0, 140, 0.2, 0.6]],
   err: [[0, 90, 0.5, 0.5], [140, 90, 0.5, 0.5]],
@@ -205,8 +206,33 @@ function visible() {
   return games.filter(g => g.name.toLowerCase().includes(q) || (g.tags || []).some(t => t.toLowerCase().includes(q)));
 }
 
+const SORTS = [["cat", "Category"], ["last", "Last played"], ["time", "Most played"], ["az", "A–Z"]];
+const sortMode = () => SORTS.find(s => s[0] === localStorage.getItem("mcl-sort"))?.[0] || "cat";
+function applySort() {
+  const b = $("#sort"); if (!b) return;
+  const [, label] = SORTS.find(s => s[0] === sortMode());
+  b.textContent = "⇅ " + label; b.title = `Sorted by: ${label} (S to change)`; b.classList.toggle("on", sortMode() !== "cat");
+}
+function cycleSort() {
+  const i = SORTS.findIndex(s => s[0] === sortMode());
+  localStorage.setItem("mcl-sort", SORTS[(i + 1) % SORTS.length][0]);
+  applySort(); renderList(); sfx("cat");
+  [...document.querySelectorAll(".item.sel")].pop()?.scrollIntoView({ block: "nearest" });
+}
+const SORT_BY = {
+  last: (a, b) => (stats[b.id]?.last || 0) - (stats[a.id]?.last || 0),
+  time: (a, b) => (stats[b.id]?.seconds || 0) - (stats[a.id]?.seconds || 0),
+  az: () => 0,
+};
+
 // Games grouped by category, in the order categories first appear in games.json.
+// Other sort orders give a single flat group.
 function ordered() {
+  const m = sortMode();
+  if (m !== "cat") {
+    const items = [...visible()].sort((a, b) => SORT_BY[m](a, b) || a.name.localeCompare(b.name));
+    return items.length ? [{ cat: SORTS.find(s => s[0] === m)[1], items, sorted: true }] : [];
+  }
   const cats = [...new Set(visible().map(g => g.category || "Other"))];
   return cats.map(c => ({ cat: c, items: visible().filter(g => (g.category || "Other") === c) }));
 }
@@ -225,7 +251,7 @@ function renderList() { keepFocus(renderListInner); }
 function renderListInner() {
   const rc = filter ? [] : recent(), fv = filter ? [] : favs();
   $("#list").innerHTML = (fv.length ? `<div class="cat favs"><span>★ Favorites</span></div>` + fv.map(g => row(g, false)).join("") : "") + (rc.length ? `<div class="cat recent"><span>Recently played</span></div>` + rc.map(g => row(g, false)).join("") : "") + ordered().map(c =>
-    `<div class="cat" data-cat="${esc(c.cat)}"><span>${esc(c.cat)}</span>${filter ? "" : '<span class="catbtns"><b tabindex="0" role="button" data-act="up" title="Move category up">▲</b><b tabindex="0" role="button" data-act="down" title="Move category down">▼</b><b tabindex="0" role="button" data-act="rename" title="Rename category">✎</b></span>'}</div>` + c.items.map(g => row(g)).join("")).join("");
+    `<div class="cat" ${c.sorted ? "" : `data-cat="${esc(c.cat)}"`}><span>${c.sorted ? "Sorted: " : ""}${esc(c.cat)}</span>${filter || c.sorted ? "" : '<span class="catbtns"><b tabindex="0" role="button" data-act="up" title="Move category up">▲</b><b tabindex="0" role="button" data-act="down" title="Move category down">▼</b><b tabindex="0" role="button" data-act="rename" title="Rename category">✎</b></span>'}</div>` + c.items.map(g => row(g, !c.sorted)).join("")).join("");
 }
 
 function renderDetail() { keepFocus(renderDetailInner); }
@@ -240,7 +266,7 @@ function renderDetailInner() {
   const on = running.has(g.id);
   if (shown !== g.id) { shown = g.id; for (const n of [el, art]) { n.classList.remove("swap"); void n.offsetWidth; n.classList.add("swap"); } }
   const tagline = `<div class="tagline">${esc(g.tagline || g.category || "")}</div>`;
-  const tags = `<div class="tags">${(g.tags || []).map(t => `<span>${esc(t)}</span>`).join("")}</div>`;
+  const tags = `<div class="tags">${(g.tags || []).map(t => `<span data-tag="${esc(t)}" tabindex="0" role="button" title="Show games tagged ${esc(t)}">${esc(t)}</span>`).join("")}</div>`;
   const play = `<button id="play" ${on ? "disabled" : ""}>${on ? "RUNNING" : "▶ PLAY"}</button>`;
   const actions = `${play}<span id="toast"></span><span class="manage"><button id="fav" aria-pressed="${!!g.favorite}">${g.favorite ? "★ Favorited" : "☆ Favorite"}</button><button id="edit">Edit</button><button id="del">Remove</button></span>`;
   if (featuredPanel()) {
@@ -489,6 +515,7 @@ function jumpTo(list) {
 }
 function jump(d) { // previous/next category
   const cs = ordered(); if (!cs.length) return;
+  if (cs[0].sorted) { const l = cs[0].items, i = Math.max(0, l.findIndex(g => g.id === sel)); select(l[Math.min(l.length - 1, Math.max(0, i + d * 8))].id); sfx("cat"); return; }
   const ci = cs.findIndex(c => c.items.some(g => g.id === sel));
   select(cs[(ci + d + cs.length) % cs.length].items[0].id); sfx("cat");
 }
@@ -531,6 +558,12 @@ $("#list").addEventListener("drop", async e => {
   if (i && i.dataset.id !== id) await moveGame(id, i.dataset.id, after);
   else if (c) await moveGame(id, null, false, c.dataset.cat);
 });
+if ($("#sort")) $("#sort").onclick = e => { e.currentTarget.blur(); cycleSort(); };
+if ($("#stats")) $("#stats").onclick = e => { e.currentTarget.blur(); openStats(); };
+$("#detail").addEventListener("click", e => {
+  const t = e.target.closest("[data-tag]"); if (!t) return;
+  filter = t.dataset.tag; $("#search").value = filter; renderList(); sfx("cat");
+});
 $("#search").oninput = e => { filter = e.target.value; renderList(); };
 document.addEventListener("keydown", e => {
   if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "q") {
@@ -541,10 +574,12 @@ document.addEventListener("keydown", e => {
   if (topDlg()) return;
   const inSearch = e.target.id === "search";
   if (inSearch && !["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(e.key)) return;
-  if (e.altKey && !filter && (e.key === "ArrowDown" || e.key === "ArrowUp")) { nudge(sel, e.key === "ArrowDown" ? 1 : -1); e.preventDefault(); }
+  if (e.altKey && !filter && sortMode() === "cat" && (e.key === "ArrowDown" || e.key === "ArrowUp")) { nudge(sel, e.key === "ArrowDown" ? 1 : -1); e.preventDefault(); }
   else if (e.key === "ArrowDown") { step(1); e.preventDefault(); }
   else if (e.key === "ArrowUp") { step(-1); e.preventDefault(); }
   else if (e.key.toLowerCase() === "r" && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea")) jumpTo(recent());
+  else if (!e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea") && e.key.toLowerCase() === "s") cycleSort();
+  else if (!e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea") && e.key.toLowerCase() === "t") openStats();
   else if (e.key === "F" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea")) jumpTo(favs());
   else if (e.key.toLowerCase() === "f" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea")) toggleFav(games.find(x => x.id === sel));
   else if (e.key === "PageDown") jump(1);
@@ -553,11 +588,11 @@ document.addEventListener("keydown", e => {
     if ($("#splash")) return; // Esc just skips the intro
     $("#search").value = ""; filter = ""; $("#search").blur(); renderList();
   }
-  else if ((e.key === "Enter" || e.key === " ") && e.target.closest("[data-act]")) { e.target.click(); e.preventDefault(); }
+  else if ((e.key === "Enter" || e.key === " ") && e.target.closest("[data-act], [data-tag]")) { e.target.click(); e.preventDefault(); }
   else if (e.key === "Enter" && !e.target.closest("button")) { const g = games.find(x => x.id === sel); if (g) launch(g); }
 });
 
-// Gamepad. Main screen: D-pad/stick = move, A = play, LB/RB = category, X = add game, Y = edit game,
+// Gamepad. Main screen: D-pad/stick = move, A = play, LB/RB = category, LT/RT = recent/favorites, L3 = sort, R3 = stats, X = add game, Y = edit game,
 // Start = menu mode (move focus between every button), B = clear search / leave menu mode.
 // In dialogs: D-pad moves focus, A presses or edits a text field (on-screen keyboard), Start = save/done, B = cancel.
 const held = {};
@@ -567,7 +602,7 @@ function pressed(key, on, fn, repeat = 180) {
   if (!on) { delete held[key]; return; }
   if (!held[key] || now - held[key].t > (held[key].n ? repeat : 400)) { held[key] = { t: now, n: true }; fn(); }
 }
-const topDlg = () => ["odlg", "qdlg", "dlg"].map(i => $("#" + i)).find(d => d.open);
+const topDlg = () => ["odlg", "qdlg", "sdlg", "dlg"].map(i => $("#" + i)).find(d => d.open);
 const FOCUSABLE = 'button,input:not([type=file]):not([type=hidden]),textarea,a[href],[tabindex="0"]';
 const focusables = scope => [...scope.querySelectorAll(FOCUSABLE)].filter(e => !e.disabled && !e.hidden && e.getClientRects().length && !(e.closest("#odlg") && e.id === "oinp"));
 function moveFocus(dir) {
@@ -627,6 +662,10 @@ function padAction(b, ax, ay) {
   }, 1e9);
   pressed("x", b(2), () => { if (d?.id === "odlg") d.oskKey?.("back"); else if (!d) editor(); }, d?.id === "odlg" ? 120 : 1e9);
   pressed("y", b(3), () => { if (d?.id === "odlg") d.oskKey?.(" "); else if (!d) { const g = games.find(x => x.id === sel); if (g) editor(g); } }, d?.id === "odlg" ? 120 : 1e9);
+  pressed("lt", b(6), () => { if (!d && !uiMode) jumpTo(recent()); }, 300);
+  pressed("rt", b(7), () => { if (!d && !uiMode) jumpTo(favs()); }, 300);
+  pressed("l3", b(10), () => { if (!d) cycleSort(); }, 1e9);
+  pressed("r3", b(11), () => { if (!d) openStats(); }, 1e9);
   pressed("fav", b(8), () => { if (!d && !uiMode) toggleFav(games.find(x => x.id === sel)); }, 1e9);
   pressed("start", b(9), () => {
     if (!d) uiMode ? leaveUi() : enterUi();
@@ -688,8 +727,8 @@ function ask(title, msg, ok) {
 function hints() {
   $("#rum").hidden = !padOn;
   $("#hints").innerHTML = padOn
-    ? "<span><kbd>A</kbd>Play</span><span><kbd>LB</kbd><kbd>RB</kbd>Category</span><span><kbd>Back</kbd>★</span><span><kbd>X</kbd>Add</span><span><kbd>Y</kbd>Edit</span><span><kbd>Start</kbd>Menu</span>"
-    : "<span><kbd>↑</kbd><kbd>↓</kbd>Select</span><span><kbd>Enter</kbd>Play</span><span><kbd>PgUp</kbd><kbd>PgDn</kbd>Category</span><span><kbd>F</kbd>★ Favorite</span><span><kbd>R</kbd>Recent</span><span><kbd>⇧F</kbd>Favorites</span>";
+    ? "<span><kbd>A</kbd>Play</span><span><kbd>LB</kbd><kbd>RB</kbd>Category</span><span><kbd>LT</kbd>Recent</span><span><kbd>RT</kbd>Favs</span><span><kbd>L3</kbd>Sort</span><span><kbd>R3</kbd>Stats</span><span><kbd>Back</kbd>★</span><span><kbd>X</kbd>Add</span><span><kbd>Y</kbd>Edit</span><span><kbd>Start</kbd>Menu</span>"
+    : "<span><kbd>↑</kbd><kbd>↓</kbd>Select</span><span><kbd>Enter</kbd>Play</span><span><kbd>PgUp</kbd><kbd>PgDn</kbd>Category</span><span><kbd>F</kbd>★ Favorite</span><span><kbd>R</kbd>Recent</span><span><kbd>⇧F</kbd>Favorites</span><span><kbd>S</kbd>Sort</span><span><kbd>T</kbd>Stats</span>";
 }
 addEventListener("gamepaddisconnected", () => { padOn = false; hints(); });
 
@@ -707,6 +746,26 @@ function splash() {
   sfx("intro");
   const poll = () => { if (done) return; if ([...(navigator.getGamepads?.() || [])].some(p => p?.buttons.some(b => b.pressed))) end(); else requestAnimationFrame(poll); };
   poll();
+}
+const hm = s => s < 60 ? "0m" : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h ${Math.floor(s % 3600 / 60)}m`;
+function openStats() {
+  const d = $("#sdlg"); if (!d || topDlg()) return;
+  const rows = games.map(g => ({ g, s: stats[g.id] || {} })), played = rows.filter(r => r.s.launches);
+  const total = rows.reduce((n, r) => n + (r.s.seconds || 0), 0), launches = rows.reduce((n, r) => n + (r.s.launches || 0), 0);
+  const top = [...played].filter(r => r.s.seconds).sort((a, b) => b.s.seconds - a.s.seconds).slice(0, 5), max = top[0]?.s.seconds || 1;
+  const tile = (v, l) => `<div class="stile"><b>${v}</b><span>${l}</span></div>`;
+  d.innerHTML = `<h2>Playtime</h2>
+    <div class="sgrid">${tile(hm(total), "Total playtime")}${tile(launches, "Launches")}${tile(`${played.length} of ${games.length}`, "Games played")}${tile(games.length - played.length, "Never played")}</div>
+    ${top.length ? `<h3>Most played</h3><div class="stop">${top.map(r => `<button type="button" class="srow" data-id="${esc(r.g.id)}"><span class="sname">${esc(r.g.name)}</span><span class="sbar"><i style="width:${Math.max(4, Math.round(r.s.seconds / max * 100))}%"></i></span><span class="stime">${hm(r.s.seconds)}</span></button>`).join("")}</div>` : '<p class="sempty">No playtime recorded yet. Play a game and come back.</p>'}
+    <div class="padhint pad-only"><kbd>A</kbd>Choose <kbd>B</kbd>Close</div>
+    <div class="btns"><button type="button" id="sclose" class="primary" autofocus>Close</button></div>`;
+  d.onclick = e => {
+    const r = e.target.closest(".srow");
+    if (r) { d.close(); filter = ""; $("#search").value = ""; select(r.dataset.id); }
+    else if (e.target.id === "sclose") d.close();
+  };
+  d.onkeydown = e => { if (e.key === "Escape") { e.preventDefault(); d.close(); } };
+  d.showModal(); sfx("open");
 }
 async function askQuit() {
   const n = running.size;
@@ -730,7 +789,7 @@ $("#snd").onclick = () => { localStorage.setItem("mcl-sound", soundOn() ? "off" 
 $("#rum").onclick = () => { localStorage.setItem("mcl-rumble", rumbleOn() ? "off" : "on"); applyRumble(); rumble("ok"); };
 $("#fx").onclick = () => { localStorage.setItem("mcl-anim", animOn() ? "off" : "on"); applyFx(); };
 $("#dlg").addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && e.target.matches(".sr, .thumbs img")) { e.preventDefault(); e.target.click(); } });
-applyFx(); applySound(); applyRumble(); applyPanel(); splash();
+applyFx(); applySound(); applyRumble(); applyPanel(); applySort(); splash();
 hints();
 refresh(true);
 requestAnimationFrame(pollPad);

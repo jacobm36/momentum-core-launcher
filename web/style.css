@@ -232,3 +232,28 @@ body.noanim #flash{display:none}
 .welcome .hint{font-size:13px;margin-top:18px}
 .welcome code{background:#ffffff14;padding:1px 6px;border-radius:5px;color:var(--fg)}
 .welcome button.primary{border:0;border-radius:10px;padding:14px 26px;font-size:16px;font-weight:700;color:#fff;cursor:pointer;background:linear-gradient(90deg,var(--orange),#ff2d95)}
+
+/* Sort button, playtime dialog, tag chips, controller hints */
+#sort,#stats{border:1px solid var(--line);background:transparent;color:var(--dim);border-radius:8px;padding:0 10px;cursor:pointer;font-size:12px}
+#sort:hover,#stats:hover,#sort.on{color:var(--fg);border-color:var(--violet)}
+#sort:focus-visible,#stats:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.tags span[data-tag]{cursor:pointer}
+.tags span[data-tag]:hover,.tags span[data-tag]:focus-visible{color:var(--fg);border-color:var(--violet);outline:none}
+.pad-only{display:none}
+.gp .pad-only{display:flex}
+#sdlg{width:560px;padding:22px 26px}
+#sdlg h2{margin:0 0 14px}
+#sdlg h3{margin:18px 0 8px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.stile{background:#0b0e1dcc;border:1px solid var(--line);border-radius:10px;padding:12px 10px;text-align:center}
+.stile b{display:block;font-size:20px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.stile span{font-size:11px;color:var(--dim)}
+.stop{display:flex;flex-direction:column;gap:4px}
+.srow{display:grid;grid-template-columns:150px 1fr 64px;gap:12px;align-items:center;padding:7px 8px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--fg);cursor:pointer;text-align:left;font:inherit}
+.srow:hover,.srow:focus-visible{background:#12162b;border-color:var(--line);outline:none}
+.sname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sbar{height:8px;border-radius:99px;background:#161a33;overflow:hidden}
+.sbar i{display:block;height:100%;background:var(--grad);border-radius:99px}
+.stime{text-align:right;color:var(--dim);font-size:13px}
+.sempty{color:var(--dim)}
+#sdlg .btns{margin-top:18px}
