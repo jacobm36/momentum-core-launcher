@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Momentum Core Launcher</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/web/icon-256.png">
+<link rel="stylesheet" href="/web/style.css">
+</head>
+<body>
+<aside>
+  <header><img src="/web/logo-full.png" alt="Momentum"><span>CORE LAUNCHER</span></header>
+  <input id="search" type="search" placeholder="Search games…" autocomplete="off">
+  <nav id="list"></nav>
+  <div class="side-btns"><button id="add">+ Add game</button><button id="panel" title="Toggle selected-game panel style" aria-pressed="false"></button><button id="fx" title="Toggle animations and intro"></button><button id="snd" title="Toggle sound effects"></button><button id="rum" title="Toggle controller rumble" hidden>📳</button><button id="full" title="Toggle fullscreen (F11)">⛶</button><button id="quit" title="Exit launcher">⏻</button></div>
+  <footer id="hints"></footer>
+</aside>
+<main id="stage">
+  <div class="art" id="art"></div>
+  <video id="bg" muted loop playsinline></video>
+  <div class="grid"></div>
+  <div class="shade"></div>
+  <section id="detail"></section>
+</main>
+<dialog id="dlg"><form id="form" method="dialog"></form></dialog>
+<dialog id="qdlg"><form method="dialog" id="qform"><h2 id="qtitle">Exit launcher?</h2><p id="qmsg"></p>
+  <div class="btns"><button value="cancel" id="qno" autofocus>Cancel</button><button value="ok" class="primary" id="qyes">Exit</button></div></form></dialog>
+<dialog id="odlg"></dialog>
+<div id="splash"><img src="/web/logo-full.png" alt=""><div class="bar"></div></div>
+<div id="flash"></div>
+<div id="launching"><div class="ring"></div><div id="lname"></div></div>
+<script src="/web/app.js"></script>
+</body>
+</html>

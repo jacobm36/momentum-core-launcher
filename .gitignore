@@ -1,0 +1,11 @@
+# Personal library and data
+games.json
+playstats.json
+logs/
+media/
+*.bak
+
+# Runtime / tooling
+__pycache__/
+*.tmp
+.DS_Store

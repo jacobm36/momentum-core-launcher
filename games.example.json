@@ -1,0 +1,12 @@
+[
+  {
+    "id": "my-game",
+    "name": "My Game",
+    "exec": "/home/you/Games/MyGame/start.sh",
+    "cwd": "/home/you/Games/MyGame",
+    "tagline": "A short hook",
+    "description": "One or two sentences about the game.",
+    "tags": ["Action", "Retro"],
+    "category": "Favorites"
+  }
+]
