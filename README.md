@@ -1,6 +1,6 @@
 # Momentum Core Launcher
 
-![Momentum Core Launcher showing the Featured panel with demo games](docs/screenshot.png)
+![Momentum Core Launcher showing the Featured panel, sort button and demo games](docs/screenshot.png)
 
 ![Playtime summary with streaks and a weekly chart](docs/stats.png)
 
