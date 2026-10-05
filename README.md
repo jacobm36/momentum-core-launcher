@@ -29,11 +29,13 @@ An empty library shows a welcome screen with an **Add a game** button. See [USER
 
 ## Your data stays local
 
-`games.json`, `playstats.json`, `logs/` and `media/` are git-ignored: they hold your personal library,
+`games.json`, `playstats.json`, `logs/`, `jobs/`, `backups/` and `media/` are git-ignored: they hold your personal library,
 play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|png|webp`,
 `video.mp4|webm`) or add it from the in-app editor.
 
 ## Notes
+
+- Built-in notifications (N), background jobs (I) and backup/restore (B); see the user guide.
 
 - The server binds to `127.0.0.1` only, validates the Host header and requires a per-session token
   for changes.

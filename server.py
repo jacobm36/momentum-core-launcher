@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import backup
+from jobs import Jobs
+
 HERE = Path(__file__).resolve().parent
 PORT = int(os.environ.get("MCL_PORT", 47615))
 TOKEN = secrets.token_urlsafe(24)
@@ -134,6 +137,26 @@ def write_games(games):
     with os.fdopen(fd, "w") as f:
         f.write(json.dumps(games, indent=2, ensure_ascii=False) + "\n")
     os.replace(name, HERE / "games.json")
+
+
+def write_stats_obj(obj):
+    with stats_lock:
+        tmp = STATS.with_suffix(".tmp")
+        tmp.write_text(json.dumps(obj))
+        os.replace(tmp, STATS)
+
+
+JOBS = Jobs(HERE / "jobs")
+DEV = os.environ.get("MCL_DEV") == "1"  # enables the harmless demo job endpoint
+
+
+def do_restore(path):
+    """Validate an archive, snapshot the current library, then replace it. Returns (games, snapshot)."""
+    backup.read_backup(path)  # reject bad archives before touching anything
+    with lock:
+        snap = backup.make_backup(HERE, "pre-restore")
+        n = backup.restore(HERE, path, write_games, write_stats_obj)
+    return n, snap
 
 
 def slugify(name):
@@ -298,7 +321,14 @@ class Handler(SimpleHTTPRequestHandler):
             LAST_SEEN = time.time()
             with lock:
                 state = {k for k, p in running.items() if alive(p)}
-            return self._json({"token": TOKEN, "running": sorted(state), "failed": dict(failed), "games": load_games(), "stats": load_stats()})
+            return self._json({"token": TOKEN, "running": sorted(state), "failed": dict(failed), "games": load_games(), "stats": load_stats(), "jobs": JOBS.list()})
+        if path == "/api/backups":
+            return self._json({"backups": backup.list_backups(HERE)})
+        m = re.fullmatch(r"/api/jobs/(j[0-9a-f]{8})", path)
+        if m:
+            tail = int((urllib.parse.parse_qs(self.path.partition("?")[2]).get("tail") or ["8000"])[0] or 8000)
+            j = JOBS.get(m[1], tail)
+            return self._json(j) if j else self._json({"error": "unknown job"}, 404)
         if path == "/":
             self.path = "/web/index.html"
         elif not (path.startswith("/web/") or path.startswith("/media/")):
@@ -342,8 +372,10 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"status": "launched"})
         if self.path == "/api/quit":
             self._json({"status": "bye"})
-            threading.Timer(0.3, lambda: (close_browser(), os._exit(0))).start()
+            threading.Timer(0.3, lambda: (JOBS.shutdown(), close_browser(), os._exit(0))).start()
             return
+        if self.path.startswith(("/api/jobs/", "/api/backups/")):
+            return self._ops()
         if self.path.startswith("/api/upload/"):
             return self._upload()
         try:
@@ -429,6 +461,70 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"status": "cleared"})
         self.send_error(404)
 
+    def _ops(self):
+        """Background jobs and backups."""
+        path = self.path
+        try:
+            if path == "/api/backups/restore-upload":
+                n = int(self.headers.get("Content-Length") or 0)
+                if not 0 < n <= backup.MAX_TOTAL:
+                    return self._json({"error": "unsupported file size"}, 400)
+                d = HERE / "backups"
+                d.mkdir(exist_ok=True)
+                with tempfile.NamedTemporaryFile(dir=d, prefix=".up.", suffix=".tmp", delete=False) as f:
+                    tmp, left = Path(f.name), n
+                    while left:
+                        chunk = self.rfile.read(min(1 << 20, left))
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        left -= len(chunk)
+                try:
+                    if left:
+                        return self._json({"error": "incomplete upload"}, 400)
+                    count, snap = do_restore(tmp)
+                finally:
+                    tmp.unlink(missing_ok=True)
+                return self._json({"status": "restored", "games": count, "snapshot": snap})
+            n = int(self.headers.get("Content-Length") or 0)
+            data = json.loads(self.rfile.read(n) or b"{}") if n < 1 << 20 else {}
+            if path == "/api/jobs/demo" and DEV:
+                step = lambda name, secs, code=0: {"name": name, "argv": [sys.executable, "-u", "-c",
+                    f"import time,sys\nfor i in range({int(secs * 4)}):\n    print('{name}', i, flush=True); time.sleep(.25)\nsys.exit({code})"]}
+                steps = [step("Download files", 3), step("Unpack", 2), step("Configure", 3, 1 if data.get("fail") else 0), step("Create shortcut", 1)]
+                return self._json({"id": JOBS.submit(str(data.get("title") or "Demo install"), steps)})
+            m = re.fullmatch(r"/api/jobs/(j[0-9a-f]{8})/(cancel|retry|dismiss)", path)
+            if m:
+                ok = getattr(JOBS, m[2])(m[1])
+                return self._json({"status": m[2]}) if ok else self._json({"error": f"cannot {m[2]} this job"}, 409)
+            if path == "/api/backups/create":
+                name = backup.make_backup(HERE, "manual", bool(data.get("media")))
+                return self._json({"name": name})
+            m = re.fullmatch(r"/api/backups/(restore|delete|download)/([A-Za-z0-9._-]+)", path)
+            if m:
+                action, name = m.groups()
+                if action == "delete":
+                    backup.delete_backup(HERE, name)
+                    return self._json({"status": "deleted"})
+                f = backup.backup_path(HERE, name)
+                if action == "restore":
+                    count, snap = do_restore(f)
+                    return self._json({"status": "restored", "games": count, "snapshot": snap})
+                size = f.stat().st_size
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Length", str(size))
+                self.end_headers()
+                with open(f, "rb") as src:
+                    while chunk := src.read(1 << 20):
+                        self.wfile.write(chunk)
+                return
+        except backup.BackupError as e:
+            return self._json({"error": str(e)}, 400)
+        except (ValueError, TypeError, OSError) as e:
+            return self._json({"error": str(e) or "bad request"}, 400)
+        self.send_error(404)
+
     def _net(self, data):
         try:
             if self.path == "/api/steam/search":
@@ -495,7 +591,7 @@ def watchdog():
     # Exit shortly after the window closes (no polling from the page).
     while True:
         time.sleep(5)
-        if time.time() - LAST_SEEN > 60:
+        if time.time() - LAST_SEEN > 60 and not JOBS.active_count():
             # Credit time for games still running when the launcher closes.
             for gid, p in list(running.items()):
                 if alive(p) and gid in started:
@@ -505,6 +601,7 @@ def watchdog():
 
 if __name__ == "__main__":
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    threading.Thread(target=lambda: backup.auto_backup_if_due(HERE), daemon=True).start()
     if "--no-exit" not in sys.argv:
         threading.Thread(target=watchdog, daemon=True).start()
     srv.serve_forever()

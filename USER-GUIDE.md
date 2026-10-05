@@ -28,6 +28,9 @@ cd ~/Projects/GamesRepo/momentum-core-launcher
 | Jump to Favorites (press again for the next one) | Shift+F | RT |
 | Cycle sort order (Category / Last played / Most played / A–Z) | S | L3 (stick click) |
 | Playtime summary | T | R3 (stick click) |
+| Notifications history | N | |
+| Installs & background jobs | I | |
+| Backup & restore | B | |
 | Add a game | + Add game button | X |
 | Edit the selected game | Edit button | Y |
 | Menu mode (reach every button) | Tab | Start |
@@ -87,7 +90,10 @@ momentum-core-launcher/
 ├── games.json            ← your game list
 ├── playstats.json        ← play history (created automatically)
 ├── media/<game-id>/      ← art and video per game
-├── web/                  ← launcher look and feel (HTML/CSS/JS, logo)
+├── backups/              ← backup snapshots (created automatically / on request)
+├── jobs/                 ← background job records and logs
+├── web/                  ← launcher look and feel (HTML/CSS, one small JS file per feature)
+├── backup.py, jobs.py    ← backup/restore and background-job engines
 ├── server.py             ← small local server that starts games
 ├── launch.sh             ← what the icon runs
 ├── install.sh            ← creates the app menu + Desktop icon
@@ -216,3 +222,9 @@ Only shortcuts whose launch command matches a game in `games.json` are moved. Th
 - The **⇅** button (or **S**) cycles the sidebar order: Category (default), Last played, Most played, A–Z. Your choice is remembered. Non-category orders show one flat list, so drag-to-reorder and Alt+arrow nudging are disabled until you go back to Category.
 - Click (or press Enter on) a tag chip in the game panel to search for that tag.
 - The **📊** button (or **T**) opens a summary: total playtime, launches, games played, and your five most-played games. Select a game there to jump to it. It also shows your current and best play streaks and a last-7-days chart. Daily history is recorded per game from the first session after this feature was added, so streaks start from then (older totals are kept but have no day attached).
+
+## Notifications, installs and backups
+
+- **🔔 Notifications (N):** pop-up messages (launch errors, finished installs, backups) also land in a history of the last 50.
+- **📥 Installs & jobs (I):** background jobs with progress, a live log, Cancel, Retry (resumes from the failed step) and Dismiss. The launcher stays open while a job runs and warns you before exiting. Jobs interrupted by a quit show as "interrupted" so you can retry.
+- **💾 Backup & restore (B):** saves your game list, tags, favorites and playtime to `backups/` (optionally with artwork and videos). A config-only backup is made automatically about once a week. Restore from a snapshot or a downloaded `.zip`; the current library is saved first as a `pre-restore` snapshot. Browser settings (sound, sort order, panel style) are not included. Only restore backups you made yourself.

@@ -12,7 +12,7 @@
   <header><img src="/web/logo-full.png" alt="Momentum"><span>CORE LAUNCHER</span></header>
   <input id="search" type="search" placeholder="Search games…" autocomplete="off">
   <nav id="list"></nav>
-  <div class="side-btns"><button id="add">+ Add game</button><button id="sort" title="Sort order (S)"></button><button id="stats" title="Playtime summary (T)">📊</button><button id="panel" title="Toggle selected-game panel style" aria-pressed="false"></button><button id="fx" title="Toggle animations and intro"></button><button id="snd" title="Toggle sound effects"></button><button id="rum" title="Toggle controller rumble" hidden>📳</button><button id="full" title="Toggle fullscreen (F11)">⛶</button><button id="quit" title="Exit launcher">⏻</button></div>
+  <div class="side-btns"><button id="add">+ Add game</button><button id="sort" title="Sort order (S)"></button><button id="stats" title="Playtime summary (T)">📊</button><button id="bell" class="badged" title="Notifications (N)">🔔</button><button id="jobsbtn" class="badged" title="Installs &amp; jobs (I)">📥</button><button id="backupbtn" title="Backup &amp; restore (B)">💾</button><button id="panel" title="Toggle selected-game panel style" aria-pressed="false"></button><button id="fx" title="Toggle animations and intro"></button><button id="snd" title="Toggle sound effects"></button><button id="rum" title="Toggle controller rumble" hidden>📳</button><button id="full" title="Toggle fullscreen (F11)">⛶</button><button id="quit" title="Exit launcher">⏻</button></div>
   <footer id="hints"></footer>
 </aside>
 <main id="stage">
@@ -28,9 +28,25 @@
   <div class="btns"><button value="cancel" id="qno" autofocus>Cancel</button><button value="ok" class="primary" id="qyes">Exit</button></div></form></dialog>
 <dialog id="sdlg"></dialog>
 <dialog id="odlg"></dialog>
+<dialog id="ndlg"></dialog>
+<dialog id="idlg"></dialog>
+<dialog id="bdlg"></dialog>
+<div id="toasts" popover="manual" aria-live="polite"></div>
 <div id="splash"><img src="/web/logo-full.png" alt=""><div class="bar"></div></div>
 <div id="flash"></div>
 <div id="launching"><div class="ring"></div><div id="lname"></div></div>
-<script src="/web/app.js"></script>
+<script src="/web/core.js"></script>
+<script src="/web/accent.js"></script>
+<script src="/web/sound.js"></script>
+<script src="/web/library.js"></script>
+<script src="/web/actions.js"></script>
+<script src="/web/navigation.js"></script>
+<script src="/web/gamepad.js"></script>
+<script src="/web/shell.js"></script>
+<script src="/web/stats.js"></script>
+<script src="/web/notify.js"></script>
+<script src="/web/jobs.js"></script>
+<script src="/web/backup.js"></script>
+<script src="/web/main.js"></script>
 </body>
 </html>
