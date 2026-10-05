@@ -13,7 +13,7 @@ per-game launch logs, and artwork/trailer fetching.
 
 ## Requirements
 
-- Linux with Python 3.8+ (3.12 tested)
+- Linux with Python 3.9+ (3.12 tested)
 - Google Chrome or Chromium (falls back to `xdg-open`)
 
 ## Quick start

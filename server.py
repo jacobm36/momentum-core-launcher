@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Momentum Core Launcher: tiny local server (stdlib only, localhost only)."""
-import ipaddress, json, os, re, secrets, shlex, socket, subprocess, sys, tempfile, threading, time
+import fcntl, ipaddress, json, os, re, secrets, shlex, socket, subprocess, sys, tempfile, threading, time
 import urllib.error, urllib.parse, urllib.request
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -10,7 +10,30 @@ HERE = Path(__file__).resolve().parent
 PORT = int(os.environ.get("MCL_PORT", 47615))
 TOKEN = secrets.token_urlsafe(24)
 LAST_SEEN = time.time()
-lock = threading.Lock()
+
+
+class CatalogLock:
+    """Thread lock plus an flock on games.json.lock, so import_games.py can't interleave with a save."""
+    def __init__(self):
+        self.t = threading.Lock()
+
+    def __enter__(self):
+        self.t.acquire()
+        try:
+            self.f = open(HERE / "games.json.lock", "w")
+            fcntl.flock(self.f, fcntl.LOCK_EX)
+        except BaseException:
+            self.t.release()
+            raise
+
+    def __exit__(self, *exc):
+        try:
+            self.f.close()
+        finally:
+            self.t.release()
+
+
+lock = CatalogLock()
 running = {}  # id -> Popen
 started = {}  # id -> start time
 failed = {}   # id -> exit code, for launches that died within FAIL_WINDOW seconds
@@ -71,7 +94,10 @@ def track(gid, p, t0):
         failed[gid] = rc
     while alive(p):
         time.sleep(2)
-    update_stats(gid, lambda e: add_time(e, started.pop(gid, t0), time.time()))
+    # A quick relaunch may already have replaced started[gid]; only close out our own session.
+    if started.get(gid) == t0:
+        del started[gid]
+    update_stats(gid, lambda e: add_time(e, t0, time.time()))
 
 
 def read_raw():
@@ -104,9 +130,10 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 
 def write_games(games):
-    tmp = HERE / "games.json.tmp"
-    tmp.write_text(json.dumps(games, indent=2, ensure_ascii=False) + "\n")
-    os.replace(tmp, HERE / "games.json")
+    fd, name = tempfile.mkstemp(dir=HERE, prefix="games.", suffix=".tmp")
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps(games, indent=2, ensure_ascii=False) + "\n")
+    os.replace(name, HERE / "games.json")
 
 
 def slugify(name):

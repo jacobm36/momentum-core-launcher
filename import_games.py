@@ -2,7 +2,7 @@
 """Seed games.json from ~/.local/share/applications *.desktop files (Category=Game).
 Existing entries (matched by id) are preserved, so your edits are never overwritten.
 With --update, existing entries also get their exec/cwd refreshed from the .desktop file."""
-import json, os, re, shutil, sys, configparser
+import fcntl, json, os, re, shutil, sys, tempfile, configparser
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -32,8 +32,9 @@ for f in sorted(APPS.glob("*.desktop")):
     if gid in known:
         if UPDATE:
             g = next(x for x in games if x["id"] == gid)
-            for key, val in (("exec", exec_), ("cwd", e.get("Path"))):
-                if val and g.get(key) != val:
+            # A missing Path in the .desktop file clears cwd (None means "remove the key").
+            for key, val in (("exec", exec_), ("cwd", e.get("Path") or None)):
+                if g.get(key) != val and (val or key == "cwd"):
                     updates.setdefault(gid, {})[key] = val
                     print("updated", gid, key)
         continue
@@ -52,11 +53,19 @@ for f in sorted(APPS.glob("*.desktop")):
     print("added", gid)
 
 # Re-read just before writing so edits saved by the launcher meanwhile are kept, then replace atomically.
-games = json.loads(out.read_text()) if out.exists() else []
-have = {g["id"] for g in games}
-for g in games:
-    g.update(updates.get(g["id"], {}))
-games += [g for g in added if g["id"] not in have]
-tmp = out.with_suffix(".json.tmp")
-tmp.write_text(json.dumps(games, indent=2, ensure_ascii=False) + "\n")
-os.replace(tmp, out)
+# The flock is shared with the server, which holds it for every catalog save.
+with open(HERE / "games.json.lock", "w") as lockf:
+    fcntl.flock(lockf, fcntl.LOCK_EX)
+    games = json.loads(out.read_text()) if out.exists() else []
+    have = {g["id"] for g in games}
+    for g in games:
+        for key, val in updates.get(g["id"], {}).items():
+            if val is None:
+                g.pop(key, None)
+            else:
+                g[key] = val
+    games += [g for g in added if g["id"] not in have]
+    fd, name = tempfile.mkstemp(dir=HERE, prefix="games.", suffix=".tmp")
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps(games, indent=2, ensure_ascii=False) + "\n")
+    os.replace(name, out)
