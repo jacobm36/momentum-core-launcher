@@ -2,6 +2,7 @@
 """Momentum Core Launcher: tiny local server (stdlib only, localhost only)."""
 import ipaddress, json, os, re, secrets, shlex, socket, subprocess, sys, tempfile, threading, time
 import urllib.error, urllib.parse, urllib.request
+from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -16,7 +17,7 @@ failed = {}   # id -> exit code, for launches that died within FAIL_WINDOW secon
 LOGS = HERE / "logs"
 FAIL_WINDOW = 5
 stats_lock = threading.Lock()
-STATS = HERE / "playstats.json"  # id -> {last, launches, seconds}; kept apart from games.json
+STATS = HERE / "playstats.json"  # id -> {last, launches, seconds, days: {YYYY-MM-DD: seconds}}; kept apart from games.json
 
 
 def load_stats():
@@ -33,6 +34,22 @@ def update_stats(gid, fn):
         tmp = STATS.with_suffix(".tmp")
         tmp.write_text(json.dumps(st))
         os.replace(tmp, STATS)
+
+
+def add_time(e, start, end):
+    """Add a play session to the totals and to the per-day history (split at local midnight)."""
+    end = max(end, start)
+    e["seconds"] = e.get("seconds", 0) + int(end - start)
+    days = e.setdefault("days", {})
+    t = start
+    while True:
+        d = datetime.fromtimestamp(t)
+        midnight = (d.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).timestamp()
+        key = d.strftime("%Y-%m-%d")
+        days[key] = days.get(key, 0) + int(min(end, midnight) - t)
+        if end <= midnight:
+            break
+        t = midnight
 
 
 def alive(p):
@@ -54,7 +71,7 @@ def track(gid, p, t0):
         failed[gid] = rc
     while alive(p):
         time.sleep(2)
-    update_stats(gid, lambda e: e.update(seconds=e["seconds"] + int(time.time() - started.pop(gid, t0))))
+    update_stats(gid, lambda e: add_time(e, started.pop(gid, t0), time.time()))
 
 
 def read_raw():
@@ -293,7 +310,7 @@ class Handler(SimpleHTTPRequestHandler):
                     if log is not subprocess.DEVNULL:
                         log.close()
                 t0 = started[gid] = time.time()
-                update_stats(gid, lambda e: e.update(last=int(t0), launches=e["launches"] + 1))
+                update_stats(gid, lambda e: (e.update(last=int(t0), launches=e["launches"] + 1), add_time(e, t0, t0)))
                 threading.Thread(target=track, args=(gid, running[gid], t0), daemon=True).start()
             return self._json({"status": "launched"})
         if self.path == "/api/quit":
@@ -455,7 +472,7 @@ def watchdog():
             # Credit time for games still running when the launcher closes.
             for gid, p in list(running.items()):
                 if alive(p) and gid in started:
-                    update_stats(gid, lambda e: e.update(seconds=e["seconds"] + int(time.time() - started.get(gid, time.time()))))
+                    update_stats(gid, lambda e: add_time(e, started.get(gid, time.time()), time.time()))
             os._exit(0)
 
 

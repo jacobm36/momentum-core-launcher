@@ -244,7 +244,7 @@ body.noanim #flash{display:none}
 #sdlg{width:560px;padding:22px 26px}
 #sdlg h2{margin:0 0 14px}
 #sdlg h3{margin:18px 0 8px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);font-weight:600}
-.sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.sgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .stile{background:#0b0e1dcc;border:1px solid var(--line);border-radius:10px;padding:12px 10px;text-align:center}
 .stile b{display:block;font-size:20px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .stile span{font-size:11px;color:var(--dim)}
@@ -257,3 +257,9 @@ body.noanim #flash{display:none}
 .stime{text-align:right;color:var(--dim);font-size:13px}
 .sempty{color:var(--dim)}
 #sdlg .btns{margin-top:18px}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;height:96px;align-items:end}
+.wday{display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.wbar{flex:1;width:100%;max-width:34px;display:flex;align-items:flex-end;border-radius:6px;background:#161a33;overflow:hidden}
+.wbar i{display:block;width:100%;background:linear-gradient(0deg,var(--blue),var(--violet) 55%,var(--orange));border-radius:6px}
+.wval{font-size:10px;color:var(--dim);min-height:12px}
+.wlab{font-size:11px;color:var(--dim)}

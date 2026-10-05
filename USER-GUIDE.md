@@ -215,4 +215,4 @@ Only shortcuts whose launch command matches a game in `games.json` are moved. Th
 
 - The **⇅** button (or **S**) cycles the sidebar order: Category (default), Last played, Most played, A–Z. Your choice is remembered. Non-category orders show one flat list, so drag-to-reorder and Alt+arrow nudging are disabled until you go back to Category.
 - Click (or press Enter on) a tag chip in the game panel to search for that tag.
-- The **📊** button (or **T**) opens a summary: total playtime, launches, games played, and your five most-played games. Select a game there to jump to it. There is no play streak because only totals and the last-played time are stored.
+- The **📊** button (or **T**) opens a summary: total playtime, launches, games played, and your five most-played games. Select a game there to jump to it. It also shows your current and best play streaks and a last-7-days chart. Daily history is recorded per game from the first session after this feature was added, so streaks start from then (older totals are kept but have no day attached).

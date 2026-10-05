@@ -2,6 +2,8 @@
 
 ![Momentum Core Launcher showing the Featured panel with demo games](docs/screenshot.png)
 
+![Playtime summary with streaks and a weekly chart](docs/stats.png)
+
 A local, controller-friendly game launcher with a cyberpunk / retro-arcade look. A tiny Python
 (stdlib-only) server plus a vanilla HTML/CSS/JS front end, shown in a Chrome kiosk or app window.
 
