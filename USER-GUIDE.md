@@ -57,7 +57,7 @@ If the launcher was already open when you start it again, Chrome reuses that win
 
 ## 2e. Exiting
 
-Click the **⏻** button in the sidebar, or press **Ctrl+Q** (**Esc** only clears the search box), and confirm (use ←/→ or ↑/↓ to switch between Cancel and Exit, Enter to choose, Esc to cancel) to close the launcher window and its background server. Games you started keep running. Closing the window with the window's own close button still works too, and the server stops by itself shortly afterwards.
+Click the **⏻** button in the sidebar, or press **Ctrl+Q** (**Esc** only clears the search box), and confirm (use ←/→ or ↑/↓ to switch between Cancel and Exit, Enter to choose, Esc to cancel) to close the launcher window and its background server. Games you started keep running. If an install is still running, only the window closes: the install carries on in the background and the server stops once it finishes. Reopen the launcher to check on it. Closing the window with the window's own close button still works too, and the server stops by itself shortly afterwards.
 
 ## 2a. Animations and intro
 
@@ -94,6 +94,8 @@ momentum-core-launcher/
 ├── jobs/                 ← background job records and logs
 ├── web/                  ← launcher look and feel (HTML/CSS, one small JS file per feature)
 ├── backup.py, jobs.py    ← backup/restore and background-job engines
+├── mcl_intent.py         ← helper install packages use to record changes before making them
+├── tests/                ← automated tests (python3 -m unittest discover -s tests)
 ├── server.py             ← small local server that starts games
 ├── launch.sh             ← what the icon runs
 ├── install.sh            ← creates the app menu + Desktop icon
@@ -205,6 +207,8 @@ Only shortcuts whose launch command matches a game in `games.json` are moved. Th
 |---|---|
 | Window doesn't open | Run `./launch.sh` in a terminal to see errors. |
 | Game does nothing when launched | Run its `exec` command in a terminal to check it works. |
+| RetroArch opens with a title bar or a clipped game image | With RetroArch closed, back up `~/.config/retroarch/retroarch.cfg`. Set `video_fullscreen = "true"`, `video_windowed_fullscreen = "true"` (borderless fullscreen), and both `video_fullscreen_x` and `video_fullscreen_y` to `"0"` (automatic display resolution). |
+| Supermodel leaves a strip above the game or clips the bottom | Use `-fullscreen` in the game's wrapper instead of `-window -borderless -window-pos=0,0`. A screen-sized window is not fullscreen: the desktop may place it below the top panel, even when Momentum is closed. |
 | Page says "Failed to fetch" | The server stopped. Close the window and click the icon again. |
 | Steam lookup or link download fails | It needs an internet connection. Check the link opens in your browser and points straight to an image or mp4/webm file. |
 | Port in use | Set another port: `MCL_PORT=48000 ./launch.sh` |
@@ -226,5 +230,11 @@ Only shortcuts whose launch command matches a game in `games.json` are moved. Th
 ## Notifications, installs and backups
 
 - **🔔 Notifications (N):** pop-up messages (launch errors, finished installs, backups) also land in a history of the last 50.
-- **📥 Installs & jobs (I):** background jobs with progress, a live log, Cancel, Retry (resumes from the failed step) and Dismiss. The launcher stays open while a job runs and warns you before exiting. Jobs interrupted by a quit show as "interrupted" so you can retry.
+- **📥 Installs & jobs (I):** background jobs with progress, a live log, Cancel, Retry and Dismiss.
+  - **Exiting never stops a running job.** The window closes but the job finishes in the background.
+  - **Cancel is a request, not a kill.** The job shows "cancel requested" and stops at the next safe point.
+  - **Results:** *succeeded*, *needs action* (installed, but something must be finished by hand), *conflicted* (existing files are in the way), *failed*, *cancelled*, or *interrupted* (the computer restarted or the launcher crashed mid-job).
+  - **Awaiting approval:** some installs pause after checking your system and show what they plan to do. Approve to continue or Cancel to stop. If the plan changes on retry, it asks again.
+  - **Leftover processes:** if a job's programs are still running after a crash, Retry and Dismiss stay unavailable until they exit.
+  - **Retry:** installs start again from the beginning and re-check everything. Simple jobs resume from the failed step.
 - **💾 Backup & restore (B):** saves your game list, tags, favorites and playtime to `backups/` (optionally with artwork and videos). A config-only backup is made automatically about once a week. Restore from a snapshot or a downloaded `.zip`; the current library is saved first as a `pre-restore` snapshot. Browser settings (sound, sort order, panel style) are not included. Only restore backups you made yourself.

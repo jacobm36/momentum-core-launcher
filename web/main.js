@@ -1,7 +1,7 @@
 // Quit dialog, toolbar toggles and startup. Loaded last.
 async function askQuit() {
   const n = running.size, ij = typeof jobs !== "undefined" ? jobs.filter(jobActive).length : 0;
-  const msg = [n ? `${n} game${n > 1 ? "s are" : " is"} still running and will keep running after the launcher closes.` : "", ij ? `${ij} install${ij > 1 ? "s are" : " is"} in progress and will be stopped.` : ""].filter(Boolean).join(" ") || "The launcher will close.";
+  const msg = [n ? `${n} game${n > 1 ? "s are" : " is"} still running and will keep running after the launcher closes.` : "", ij ? `${ij} install${ij > 1 ? "s are" : " is"} in progress and will keep running; reopen the launcher to check on ${ij > 1 ? "them" : "it"}.` : ""].filter(Boolean).join(" ") || "The launcher will close.";
   if (!await ask("Exit launcher?", msg, "Exit")) return;
   try { await post("/api/quit"); } catch { /* server may already be gone */ }
   document.body.innerHTML = '<p style="margin:40vh auto;text-align:center;color:#8087a8">Launcher closed. You can close this window.</p>';

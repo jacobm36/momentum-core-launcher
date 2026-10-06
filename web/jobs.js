@@ -1,20 +1,38 @@
 // Background jobs (installs): status badge, job list, live logs.
 let jobs = [], jobState = {}, jobsReady = false, logPoll = null, openLog = null;
-const jobActive = j => j.status === "queued" || j.status === "running";
+const jobActive = j => ["queued", "running", "cancel-requested"].includes(j.status);
 function handleJobs(list) {
   jobs = list || [];
   for (const j of jobs) {
     const prev = jobState[j.id]; jobState[j.id] = j.status;
     if (!jobsReady || prev === j.status || !prev) continue;
-    if (j.status === "done") { notify(`${j.title} finished.`, { kind: "ok", title: "Install complete" }); sfx("ok"); }
+    if (j.status === "succeeded") { notify(`${j.title} finished.`, { kind: "ok", title: "Install complete" }); sfx("ok"); }
     else if (j.status === "failed") { notify(j.error || "A step failed.", { kind: "error", title: `${j.title} failed` }); sfx("err"); }
-    else if (j.status === "interrupted") notify("Stopped when the launcher closed. You can retry it.", { kind: "warn", title: j.title });
+    else if (j.status === "interrupted") notify(j.error || "Stopped unexpectedly. You can retry it.", { kind: "warn", title: j.title });
+    else if (j.status === "awaiting-approval") notify("Review the plan and approve it to continue.", { kind: "warn", title: j.title });
+    else if (j.status === "needs-action") notify(j.actions?.[0]?.message || j.error || "Something needs your attention.", { kind: "warn", title: j.title });
+    else if (j.status === "conflicted") notify(j.error || "It conflicts with existing files.", { kind: "warn", title: j.title });
   }
   jobsReady = true;
   const b = $("#jobsbtn"); if (b) { const n = jobs.filter(jobActive).length; b.dataset.badge = n || ""; b.classList.toggle("busy", n > 0); }
   if ($("#idlg")?.open) renderJobs();
 }
-const jobPct = j => j.total ? Math.round((j.status === "done" ? j.total : j.done) / j.total * 100) : 0;
+const jobPct = j => {
+  if (!j.total) return 0;
+  if (j.status === "succeeded") return 100;
+  const p = j.progress, part = p && p.total ? Math.min(1, p.current / p.total) : 0;
+  return Math.round((j.done + part) / j.total * 100);
+};
+const jobLabel = s => s.replace(/-/g, " ");
+function jobSub(j) {
+  if (j.status === "cancel-requested") return "Cancellation requested; finishing current step.";
+  if (j.error) return j.error;
+  if (j.status === "needs-action" && j.actions.length) return j.actions.map(a => a.message).join(" ");
+  if (j.status === "awaiting-approval") return "Waiting for your approval.";
+  const p = j.progress;
+  if (jobActive(j) && p) return `${p.message}${p.total ? ` (${p.current}/${p.total}${p.unit ? " " + p.unit : ""})` : ""}`;
+  return jobActive(j) && j.step ? `${j.step} (${j.done}/${j.total})` : `${j.done}/${j.total} steps`;
+}
 let jobSig = "";
 function renderJobs(force) {
   const sig = JSON.stringify([jobs, openLog]);
@@ -22,12 +40,15 @@ function renderJobs(force) {
   jobSig = sig;
   const d = $("#idlg"), foc = document.activeElement?.closest?.(".job") && [document.activeElement.closest(".job").dataset.id, document.activeElement.dataset.a], keep = d.querySelector(".jlist")?.scrollTop || 0;
   d.querySelector(".jlist").innerHTML = jobs.length ? jobs.map(j => {
-    const acts = jobActive(j) ? `<button type="button" data-a="cancel">Cancel</button>`
-      : `${j.status === "done" ? "" : '<button type="button" data-a="retry">Retry</button>'}<button type="button" data-a="dismiss">Dismiss</button>`;
+    const acts = j.status === "cancel-requested" ? ""
+      : jobActive(j) ? `<button type="button" data-a="cancel">Cancel</button>`
+      : j.status === "awaiting-approval" ? `<button type="button" data-a="approve">Approve</button><button type="button" data-a="cancel">Cancel</button>`
+      : j.surviving ? ""
+      : `${j.status === "succeeded" || j.manual ? "" : '<button type="button" data-a="retry">Retry</button>'}<button type="button" data-a="dismiss">Dismiss</button>`;
     return `<div class="job ${esc(j.status)}" data-id="${esc(j.id)}">
-      <div class="jhead"><b>${esc(j.title)}</b><span class="jstat">${esc(j.status)}</span></div>
+      <div class="jhead"><b>${esc(j.title)}</b><span class="jstat">${esc(jobLabel(j.status))}</span></div>
       <div class="jbar"><i style="width:${jobPct(j)}%"></i></div>
-      <div class="jsub">${esc(j.error || (jobActive(j) && j.step ? `${j.step} (${j.done}/${j.total})` : `${j.done}/${j.total} steps`))}</div>
+      <div class="jsub">${esc(jobSub(j))}</div>
       <div class="jbtns"><button type="button" data-a="log">${openLog === j.id ? "Hide log" : "Log"}</button>${acts}</div>
       ${openLog === j.id ? '<pre class="jlog"></pre>' : ""}</div>`;
   }).join("") : '<p class="sempty">No installs or background jobs yet.</p>';
@@ -56,7 +77,8 @@ function openJobs() {
     const b = e.target.closest("[data-a]"); if (!b) return;
     const id = b.closest(".job").dataset.id, a = b.dataset.a;
     if (a === "log") { openLog = openLog === id ? null : id; return renderJobs(); }
-    const r = await post(`/api/jobs/${id}/${a}`);
+    const job = jobs.find(x => x.id === id);
+    const r = await post(`/api/jobs/${id}/${a}`, a === "approve" ? { plan_digest: job?.plan_digest } : undefined);
     if (!r.ok) notify((await r.json().catch(() => ({}))).error || "That didn't work.", { kind: "error" });
     sfx("tick"); refresh();
   };

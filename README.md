@@ -35,7 +35,8 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
 
 ## Notes
 
-- Built-in notifications (N), background jobs (I) and backup/restore (B); see the user guide.
+- Built-in notifications (N), background jobs (I) and backup/restore (B); see the user guide. Jobs keep running after the launcher closes.
+- Tests: `python3 -m unittest discover -s tests`.
 
 - The server binds to `127.0.0.1` only, validates the Host header and requires a per-session token
   for changes.

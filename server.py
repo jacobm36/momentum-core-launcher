@@ -7,7 +7,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import backup
-from jobs import Jobs
+from jobs import Jobs, RunnerBusy
 
 HERE = Path(__file__).resolve().parent
 PORT = int(os.environ.get("MCL_PORT", 47615))
@@ -154,7 +154,7 @@ def write_stats_obj(obj):
         os.replace(tmp, STATS)
 
 
-JOBS = Jobs(HERE / "jobs")
+JOBS = None  # created in __main__ after the port is bound, so a second copy never touches job records
 DEV = os.environ.get("MCL_DEV") == "1"  # enables the harmless demo job endpoint
 
 
@@ -340,6 +340,8 @@ class Handler(SimpleHTTPRequestHandler):
             with lock:
                 state = {k for k, p in running.items() if alive(p)}
             return self._json({"token": TOKEN, "running": sorted(state), "failed": dict(failed), "games": load_games(), "stats": load_stats(), "jobs": JOBS.list()})
+        if path == "/api/id":
+            return self._json({"app": "momentum-core-launcher"})
         if path == "/api/backups":
             return self._json({"backups": backup.list_backups(HERE)})
         m = re.fullmatch(r"/api/jobs/(j[0-9a-f]{8})", path)
@@ -390,7 +392,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"status": "launched"})
         if self.path == "/api/quit":
             self._json({"status": "bye"})
-            threading.Timer(0.3, lambda: (JOBS.shutdown(), close_browser(), os._exit(0))).start()
+            # Installs keep running after the window closes; the watchdog stops the server once they finish.
+            threading.Timer(0.3, lambda: (close_browser(), JOBS.active_count() or os._exit(0))).start()
             return
         if self.path.startswith(("/api/jobs/", "/api/backups/")):
             return self._ops()
@@ -523,10 +526,10 @@ class Handler(SimpleHTTPRequestHandler):
                     f"import time,sys\nfor i in range({int(secs * 4)}):\n    print('{name}', i, flush=True); time.sleep(.25)\nsys.exit({code})"]}
                 steps = [step("Download files", 3), step("Unpack", 2), step("Configure", 3, 1 if data.get("fail") else 0), step("Create shortcut", 1)]
                 return self._json({"id": JOBS.submit(str(data.get("title") or "Demo install"), steps)})
-            m = re.fullmatch(r"/api/jobs/(j[0-9a-f]{8})/(cancel|retry|dismiss)", path)
+            m = re.fullmatch(r"/api/jobs/(j[0-9a-f]{8})/(cancel|retry|dismiss|approve)", path)
             if m:
-                ok = getattr(JOBS, m[2])(m[1])
-                return self._json({"status": m[2]}) if ok else self._json({"error": f"cannot {m[2]} this job"}, 409)
+                r = JOBS.approve(m[1], str(data.get("plan_digest") or "")) if m[2] == "approve" else getattr(JOBS, m[2])(m[1])
+                return self._json({"status": m[2]}) if r is True else self._json({"error": r or f"cannot {m[2]} this job"}, 409)
             if path == "/api/backups/create":
                 name = backup.make_backup(HERE, "manual", bool(data.get("media")))
                 return self._json({"name": name})
@@ -634,6 +637,10 @@ def watchdog():
 
 if __name__ == "__main__":
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    try:
+        JOBS = Jobs(HERE / "jobs")
+    except RunnerBusy as e:
+        sys.exit(f"Momentum Core Launcher: {e}")
     threading.Thread(target=lambda: backup.auto_backup_if_due(HERE), daemon=True).start()
     if "--no-exit" not in sys.argv:
         threading.Thread(target=watchdog, daemon=True).start()
