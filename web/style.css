@@ -291,6 +291,27 @@ body.noanim #flash{display:none}
 .job.awaiting-approval .jstat,.job.needs-action .jstat,.job.conflicted .jstat,.job.interrupted .jstat{color:#ffb020}
 .jbar{height:6px;border-radius:3px;background:#0b0d1d;margin:8px 0;overflow:hidden}
 .jbar i{display:block;height:100%;background:var(--grad);transition:width .3s}
+.jbar.indeterminate i{width:35%!important;opacity:.6}
+#pdlg,#rdlg{box-sizing:border-box;width:720px;padding:22px 26px;overflow:auto}
+#pdlg h2,#rdlg h2{margin:0 0 14px}
+#pdlg h3,#rdlg h3{margin:20px 0 10px;font-size:14px}
+#pdlg label{display:block;margin:12px 0;font-size:13px;color:var(--dim)}
+#pdlg input:not([type=checkbox]),#pdlg select{display:block;box-sizing:border-box;width:100%;margin-top:6px;padding:10px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:7px}
+#pdlg button,#rdlg button,#ipackages,#iprepare{padding:8px 14px;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:7px;cursor:pointer}
+#pdlg .primary,#rdlg .primary{background:var(--grad);font-weight:700}
+#pdlg button:disabled,#rdlg button:disabled{opacity:.45;cursor:not-allowed}
+#pdlg .pkg-check,#rdlg .pkg-check{display:flex;align-items:flex-start;gap:10px;margin:16px 0;color:var(--fg);font-size:14px}
+.pkg-check input{flex-shrink:0}
+.pkg-row{display:flex;justify-content:space-between;gap:12px;align-items:center;border-bottom:1px solid var(--line);padding:12px 0}
+.pkg-row .bsub{display:block;margin-top:5px}
+.pkg-error{color:#ff8096}
+.pkg-warning{color:var(--fg);border-left:3px solid #e9b34a;padding:10px 12px;font-size:13px;line-height:1.5}
+.pkg-digest,.pkg-path{display:block;overflow-wrap:anywhere;font-size:12px}
+.pkg-json{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);padding:12px;border-radius:7px;font-size:12px;max-height:320px;overflow:auto}
+.pkg-actions{max-height:280px;overflow:auto;border:1px solid var(--line);padding:0 12px;border-radius:7px}
+.pkg-actions article{border-bottom:1px solid var(--line);padding:12px 0}
+#pdlg details,#rdlg details{margin:16px 0}
+#pdlg summary,#rdlg summary{cursor:pointer;color:var(--dim)}
 .job.failed .jbar i{background:#ff4d6d}
 .jsub,.bsub,.bnote{color:var(--dim);font-size:13px}
 .bsub{margin-left:8px}

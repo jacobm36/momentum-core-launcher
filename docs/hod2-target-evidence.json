@@ -1,0 +1,40 @@
+{
+  "evidence_version": 1,
+  "package_id": "the-house-of-the-dead-2",
+  "package_version": "0.1.1",
+  "package_digest": "sha256:1b6d80a851b550d03861863864f0aa87fe0886a126f470942441aa17415fe309",
+  "provider": "flatpak",
+  "scope": "user",
+  "app_id": "org.flycast.Flycast",
+  "emulator_version": "v2.7",
+  "emulator_commit": "86ec4d845a66ff07cdba8e003d8549e93cd7a814b519766e1f744e530c5d3e5b",
+  "tested_date": "2026-10-05",
+  "environment": {
+    "os": "ubuntu",
+    "release": "24.04",
+    "architecture": "x86_64",
+    "display": "X11",
+    "fullscreen": "1920x1080 at 0,0"
+  },
+  "checks": {
+    "temporary_install_receipt_catalog": "passed",
+    "direct_cue_launch": "passed",
+    "package_launch_flags": "passed",
+    "read_only_game_access": "passed",
+    "fullscreen": "passed",
+    "start": "user-confirmed",
+    "aim": "user-confirmed",
+    "fire": "user-confirmed",
+    "off_screen_reload": "user-confirmed",
+    "clean_exit": "passed",
+    "isolated_state_creation": "passed",
+    "original_config_and_data_unchanged": "passed"
+  },
+  "limits": [
+    "One local Ubuntu laptop; not a fresh-machine or other-platform certification.",
+    "Profile isolation was applied inside the Flatpak sandbox before executing Flycast because Flatpak resets XDG variables.",
+    "The test used a separate temporary installation and fresh configuration/save directories.",
+    "This evidence permits this exact HOD2 package and Flycast build; new installations still require their own manual gameplay confirmation.",
+    "Relaunch/state persistence and other games or emulator builds are not claimed as tested."
+  ]
+}

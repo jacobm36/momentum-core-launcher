@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Package UI test</title>
+<link rel="stylesheet" href="/web/style.css"></head><body>
+<button id="jobsbtn">Jobs</button>
+<dialog id="dlg"></dialog><dialog id="odlg"></dialog><dialog id="qdlg"></dialog>
+<dialog id="gdlg"></dialog><dialog id="bdlg"></dialog><dialog id="idlg"></dialog>
+<dialog id="ndlg"></dialog><dialog id="sdlg"></dialog><dialog id="pdlg"></dialog><dialog id="rdlg"></dialog>
+<pre id="result">RUNNING</pre>
+<script>
+function sfx() {}
+function notify() {}
+let submitted = [], failApprove = false, blockApproval = true, importFailed = false;
+const digest = "sha256:" + "a".repeat(64), jobDigest = "sha256:" + "b".repeat(64);
+const summary = { id: "test-game", version: "1.0.0", name: "<img src=x onerror='throw 1'> Test", digest, platform_issues: [] };
+const detail = { ...summary, home_games: "/home/test/Games",
+  dependencies: { flycast: { flatpak_available: true, installed: true, version: "v2.7", capabilities_checked: false } }, manifest: {
+  inputs: [{ id: "source_dir", type: "directory", required: true },
+    { id: "games_root", type: "directory", required: true, default: "home_games" },
+    { id: "mode", type: "choice", choices: ["fast", "careful"], default: "careful" },
+    { id: "optional", type: "boolean", default: false }],
+  platform: {}, actions: { network: [], privileges: [] }, requires: [], testing: {}
+}};
+const job = { id: "j00000001", title: "Install Test", status: "awaiting-approval", done: 1, total: 2,
+  plan_digest: jobDigest, actions: [], surviving: 0, manual: false };
+const plan = { ...job, plan: { game_directory: "/home/test/Games/Test",
+  actions: [{ op: "replace", ownership: "managed", path: "/home/test/bin/game",
+    before: { kind: "file" }, after: { kind: "file" }, backup: "/home/test/backups/game" }],
+  dependencies: { flycast: { installed: true } }, preserve: [{ path: "/home/test/save" }],
+  state_destinations: ["/home/test/state"], manual_actions: [{ message: "Confirm aiming and fullscreen" }] }};
+function reply(data, status = 200) { return Promise.resolve(new Response(JSON.stringify(data), { status })); }
+fetch = async path => {
+  if (path === "/api/packages") return reply({ packages: [summary] });
+  if (path === "/api/packages/test-game/1.0.0") return reply(detail);
+  if (path.startsWith("/api/jobs/")) return reply({ ...plan,
+    ...(blockApproval ? { approval_blocked: "Session 5 capability checks required" } : {}) });
+  throw new Error("Unexpected GET " + path);
+};
+async function post(path, body, raw) {
+  submitted.push({ path, body, raw });
+  if (path === "/api/packages/import-upload") return importFailed ? reply({ error: "Invalid ZIP" }, 400) : reply(summary);
+  if (path === "/api/packages/import") return reply(summary);
+  if (path === "/api/packages/install") return reply({ id: job.id });
+  if (path === "/api/dependencies/flycast/prepare") return reply({ id: job.id });
+  if (path.endsWith("/approve")) return failApprove ? reply({ error: "The plan changed; review it again" }, 409) : reply({ status: "approve" });
+  if (path.endsWith("/cancel")) return reply({ status: "cancel" });
+  throw new Error("Unexpected POST " + path);
+}
+async function refresh() { handleJobs([job]); }
+</script>
+<script src="/web/core.js"></script><script src="/web/gamepad.js"></script>
+<script src="/web/jobs.js"></script><script src="/web/packages.js"></script>
+<script>
+const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+function check(value, message) { if (!value) throw new Error(message); }
+async function until(fn) {
+  for (let i = 0; i < 100; i++) { if (fn()) return; await tick(); }
+  throw new Error("Timed out waiting for UI");
+}
+(async () => {
+  games = [{ id: "existing", name: "My existing entry" }];
+  openJobs(); $("#ipackages").click(); await tick();
+  check(topDlg().id === "pdlg", "package dialog has controller focus");
+  check(!$("#pdlg img"), "package metadata is escaped");
+  $("#pkg-path").value = "/home/test/package-folder"; $("#pkg-import-path").click();
+  await until(() => !$("#pkg-import-path").disabled);
+  check(submitted.some(s => s.body?.path === "/home/test/package-folder"), "folder import sends absolute path");
+  const files = new DataTransfer(); files.items.add(new File(["zip"], "package.zip"));
+  $("#pkg-file").files = files.files; $("#pkg-file").dispatchEvent(new Event("change"));
+  await until(() => !$("#pkg-zip").disabled);
+  check(submitted.some(s => s.raw instanceof File), "ZIP uses raw file upload");
+  importFailed = true;
+  const invalidFiles = new DataTransfer(); invalidFiles.items.add(new File(["invalid"], "invalid.zip"));
+  $("#pkg-file").files = invalidFiles.files; $("#pkg-file").dispatchEvent(new Event("change"));
+  await until(() => !$("#pkg-zip").disabled);
+  check($(".pkg-error").textContent.includes("Invalid ZIP"), "upload error surfaced");
+  await selectPackage("test-game", "1.0.0");
+  check($("#pkg-preflight").disabled, "trust is mandatory");
+  check($("#pkg-input-games_root").value === "/home/test/Games", "home_games resolved");
+  check($("#pkg-input-mode").value === "careful", "choice default retained");
+  check($("#pdlg").textContent.includes("v2.7"), "detected dependency version shown");
+  check($("#pdlg").textContent.includes("not be automatically upgraded"), "dependency reuse promise shown");
+  check($("#pdlg").textContent.includes("Only the tested HOD2 package"), "untested package gate explained");
+  $("#pkg-input-mode").focus(); activate();
+  check($("#pkg-input-mode").value === "fast", "controller cycles choice");
+  $("#pkg-input-mode").value = "careful";
+  $("#pkg-input-source_dir").value = "/home/test/disc";
+  $("#pkg-association").value = "existing";
+  $("#pkg-trust").click(); check(!$("#pkg-preflight").disabled, "trust enables preflight");
+  $("#pkg-setup").requestSubmit();
+  await until(() => !$("#pdlg").open && $("#idlg [data-a=review]"));
+  const install = submitted.find(s => s.path === "/api/packages/install");
+  check(install.body.trusted_digest === digest, "trust bound to digest");
+  check(install.body.inputs.optional === false, "boolean false stays typed");
+  check(install.body.inputs.mode === "careful", "choice sent");
+  check(install.body.catalog_entry_id === "existing", "explicit association sent");
+  check(!$("#pdlg").open && $("#idlg").open, "returns to jobs");
+  check(!$("#idlg [data-a=approve]"), "no unreviewed approve shortcut");
+  $("#idlg [data-a=review]").click(); await until(() => $("#plan-approve"));
+  check(topDlg().id === "rdlg", "review dialog controller focus");
+  const bounds = $("#rdlg").getBoundingClientRect();
+  check(bounds.left >= 0 && bounds.right <= innerWidth && bounds.height <= innerHeight,
+    "plan dialog stays inside the viewport");
+  check($("#rdlg").textContent.includes("/home/test/backups/game"), "backup shown");
+  check($("#rdlg").textContent.includes("Confirm aiming"), "manual setup shown");
+  check($("#plan-approve").disabled && $("#plan-consent").disabled, "capability gate disables approval");
+  $("#plan-close").click(); blockApproval = false;
+  await reviewPackagePlan(job.id);
+  $("#plan-consent").click(); check(!$("#plan-approve").disabled, "plan consent enables approval");
+  failApprove = true; $("#plan-approve").click(); await until(() => !$("#rdlg .pkg-error").hidden);
+  check($("#rdlg .pkg-error").textContent.includes("plan changed"), "stale plan error shown");
+  check($("#plan-approve").disabled && !$("#plan-consent").checked, "stale consent reset");
+  failApprove = false; $("#plan-consent").click(); $("#plan-approve").click(); await until(() => !$("#rdlg").open);
+  check(!$("#rdlg").open, "successful approval closes review");
+  check(jobPct({ status: "running", done: 1, total: 2, progress: { current: 10, total: 40 } }) === 25, "progress is step-local");
+  check(jobPct({ status: "running", done: 1, total: 2 }) === 0, "unknown totals do not invent percentage");
+  check(jobSub({ installation: "installed", readiness: "setup-required", actions: [] }).includes("setup required"), "readiness is separate from success");
+  const approved = submitted.find(s => s.path.endsWith("/approve"));
+  check(approved.body.plan_digest === jobDigest, "approval uses reviewed digest");
+  $("#idlg").close(); openPackages(); await tick();
+  detail.install_enabled = true;
+  await selectPackage("test-game", "1.0.0");
+  check($("#pdlg").textContent.includes("passed the target test"), "enabled target evidence explained");
+  check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "enabled target still requires trust");
+  detail.platform_issues = ["Wrong architecture"];
+  await selectPackage("test-game", "1.0.0"); $("#pkg-trust").click();
+  check($("#pkg-preflight").disabled, "unsupported platform blocked");
+  $("#pdlg").close();
+  openJobs(); $("#iprepare").click(); await until(() => !$("#iprepare").disabled);
+  check(submitted.some(s => s.path === "/api/dependencies/flycast/prepare"), "separate dependency preflight requested");
+  plan.plan.operation = "prepare-dependency";
+  plan.plan.dependency_commands = [["flatpak", "install", "--user", "--noninteractive", "-y", "flathub", "org.flycast.Flycast"]];
+  await reviewPackagePlan(job.id);
+  check($("#rdlg").textContent.includes("--noninteractive"), "exact dependency command shown");
+  check($("#plan-approve").textContent.includes("dependency preparation"), "dependency approval distinguished from game install");
+  check($("#plan-approve").disabled, "dependency approval also requires explicit consent");
+  $("#plan-close").click(); $("#idlg").close();
+  check(jobSub({ kind: "dependency", status: "succeeded" }).includes("No game installed"), "dependency success does not imply game success");
+  document.querySelector("#result").textContent = "PASS: imports, trust, plan, controller focus, platform, capability gates and separate Flycast preparation";
+})().catch(error => { document.querySelector("#result").textContent = "FAIL: " + error.stack; });
+</script></body></html>

@@ -7,6 +7,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import backup
+import installs
 import packages
 from jobs import Jobs, RunnerBusy
 
@@ -145,7 +146,14 @@ def write_games(games):
     fd, name = tempfile.mkstemp(dir=HERE, prefix="games.", suffix=".tmp")
     with os.fdopen(fd, "w") as f:
         f.write(json.dumps(games, indent=2, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(name, HERE / "games.json")
+    dfd = os.open(HERE, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
 
 
 def write_stats_obj(obj):
@@ -156,6 +164,7 @@ def write_stats_obj(obj):
 
 
 JOBS = None  # created in __main__ after the port is bound, so a second copy never touches job records
+INSTALLS = None
 DEV = os.environ.get("MCL_DEV") == "1"  # enables the harmless demo job endpoint
 
 
@@ -347,6 +356,12 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"backups": backup.list_backups(HERE)})
         if path == "/api/packages":
             return self._json({"packages": packages.list_packages(HERE)})
+        m = re.fullmatch(r"/api/packages/([a-z0-9-]+)/([^/]+)", path)
+        if m:
+            try:
+                return self._json(INSTALLS.package_details(*m.groups()))
+            except (packages.PackageError, installs.InstallError, OSError, ValueError) as e:
+                return self._json({"error": str(e)}, 400)
         m = re.fullmatch(r"/api/jobs/(j[0-9a-f]{8})", path)
         if m:
             tail = int((urllib.parse.parse_qs(self.path.partition("?")[2]).get("tail") or ["8000"])[0] or 8000)
@@ -367,11 +382,15 @@ class Handler(SimpleHTTPRequestHandler):
             if not game:
                 return self._json({"error": "unknown game"}, 404)
             with lock:
+                if INSTALLS and INSTALLS.busy_for_game(gid):
+                    return self._json({"error": "An installation is checking or changing this game; wait for it to finish"}, 409)
                 p = running.get(gid)
                 if p and alive(p):
                     return self._json({"status": "already running"})
                 failed.pop(gid, None)
                 try:
+                    if not str(game.get("exec") or "").strip():
+                        return self._json({"error": "this game has no launch command"}, 409)
                     LOGS.mkdir(exist_ok=True)
                     log = open(LOGS / f"{gid}.log", "wb")
                 except OSError:
@@ -398,7 +417,7 @@ class Handler(SimpleHTTPRequestHandler):
             # Installs keep running after the window closes; the watchdog stops the server once they finish.
             threading.Timer(0.3, lambda: (close_browser(), JOBS.active_count() or os._exit(0))).start()
             return
-        if self.path.startswith(("/api/jobs/", "/api/backups/", "/api/packages/")):
+        if self.path.startswith(("/api/jobs/", "/api/backups/", "/api/packages/", "/api/dependencies/")):
             return self._ops()
         if self.path.startswith("/api/upload/"):
             return self._upload()
@@ -501,6 +520,22 @@ class Handler(SimpleHTTPRequestHandler):
         """Background jobs and backups."""
         path = self.path
         try:
+            if path == "/api/packages/import-upload":
+                n = int(self.headers.get("Content-Length") or 0)
+                if not 0 < n <= MAX_UPLOAD:
+                    return self._json({"error": "ZIP must be nonempty and no larger than 1 GiB"}, 400)
+                with tempfile.TemporaryDirectory(prefix="mcl-upload-") as tmp:
+                    archive = Path(tmp) / "package.zip"
+                    with archive.open("wb") as f:
+                        left = n
+                        while left:
+                            chunk = self.rfile.read(min(1 << 20, left))
+                            if not chunk:
+                                return self._json({"error": "incomplete package upload"}, 400)
+                            f.write(chunk)
+                            left -= len(chunk)
+                    result = packages.import_package(archive, HERE)
+                return self._json(result)
             if path == "/api/backups/restore-upload":
                 n = int(self.headers.get("Content-Length") or 0)
                 if not 0 < n <= backup.MAX_TOTAL:
@@ -531,13 +566,29 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"id": JOBS.submit(str(data.get("title") or "Demo install"), steps)})
             m = re.fullmatch(r"/api/jobs/(j[0-9a-f]{8})/(cancel|retry|dismiss|approve)", path)
             if m:
-                r = JOBS.approve(m[1], str(data.get("plan_digest") or "")) if m[2] == "approve" else getattr(JOBS, m[2])(m[1])
+                r = INSTALLS.approve(m[1], str(data.get("plan_digest") or "")) if m[2] == "approve" else getattr(JOBS, m[2])(m[1])
                 return self._json({"status": m[2]}) if r is True else self._json({"error": r or f"cannot {m[2]} this job"}, 409)
             if path == "/api/packages/import":
                 src = data.get("path")
                 if not isinstance(src, str) or not os.path.isabs(src):
                     return self._json({"error": "an absolute folder or ZIP path is required"}, 400)
                 return self._json(packages.import_package(src, HERE))
+            if path == "/api/packages/install":
+                if not INSTALLS:
+                    return self._json({"error": "install support is unavailable"}, 503)
+                pid, ver = str(data.get("id") or ""), str(data.get("version") or "")
+                src = data.get("source_dir")
+                root = data.get("games_root")
+                if root is not None and (not isinstance(root, str) or not os.path.isabs(root)):
+                    return self._json({"error": "games_root must be an absolute directory path"}, 400)
+                assoc = data.get("catalog_entry_id")
+                if assoc is not None and not re.fullmatch(r"[a-z0-9-]{1,80}", str(assoc)):
+                    return self._json({"error": "catalog_entry_id has an invalid format"}, 400)
+                jid = INSTALLS.submit_install(pid, ver, src, root, str(assoc) if assoc else None,
+                                             trusted_digest=data.get("trusted_digest"), inputs=data.get("inputs"))
+                return self._json({"id": jid})
+            if path == "/api/dependencies/flycast/prepare":
+                return self._json({"id": INSTALLS.prepare_flycast()})
             if path == "/api/backups/create":
                 name = backup.make_backup(HERE, "manual", bool(data.get("media")))
                 return self._json({"name": name})
@@ -564,6 +615,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"error": "; ".join(e.problems[:5]), "problems": e.problems}, 400)
         except backup.BackupError as e:
             return self._json({"error": str(e)}, 400)
+        except subprocess.TimeoutExpired:
+            return self._json({"error": "Flatpak detection timed out; no package scripts were started"}, 409)
         except (ValueError, TypeError, OSError) as e:
             return self._json({"error": str(e) or "bad request"}, 400)
         self.send_error(404)
@@ -648,9 +701,11 @@ def watchdog():
 if __name__ == "__main__":
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     try:
-        JOBS = Jobs(HERE / "jobs")
+        JOBS = Jobs(HERE / "jobs", on_success=lambda j: INSTALLS.on_success(j) if INSTALLS else None)
     except RunnerBusy as e:
         sys.exit(f"Momentum Core Launcher: {e}")
+    INSTALLS = installs.Installs(HERE, lock, read_raw, write_games, JOBS)
+    INSTALLS.recover_pending_catalog()
     threading.Thread(target=lambda: backup.auto_backup_if_due(HERE), daemon=True).start()
     if "--no-exit" not in sys.argv:
         threading.Thread(target=watchdog, daemon=True).start()

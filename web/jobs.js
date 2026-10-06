@@ -6,7 +6,7 @@ function handleJobs(list) {
   for (const j of jobs) {
     const prev = jobState[j.id]; jobState[j.id] = j.status;
     if (!jobsReady || prev === j.status || !prev) continue;
-    if (j.status === "succeeded") { notify(`${j.title} finished.`, { kind: "ok", title: "Install complete" }); sfx("ok"); }
+    if (j.status === "succeeded") { notify(j.kind === "dependency" ? "Flycast preparation finished; game compatibility checks remain." : j.readiness === "setup-required" ? `${j.title} installed; manual setup is still required.` : `${j.title} finished.`, { kind: "ok", title: j.kind === "dependency" ? "Dependency prepared" : "Install complete" }); sfx("ok"); }
     else if (j.status === "failed") { notify(j.error || "A step failed.", { kind: "error", title: `${j.title} failed` }); sfx("err"); }
     else if (j.status === "interrupted") notify(j.error || "Stopped unexpectedly. You can retry it.", { kind: "warn", title: j.title });
     else if (j.status === "awaiting-approval") notify("Review the plan and approve it to continue.", { kind: "warn", title: j.title });
@@ -18,10 +18,9 @@ function handleJobs(list) {
   if ($("#idlg")?.open) renderJobs();
 }
 const jobPct = j => {
-  if (!j.total) return 0;
   if (j.status === "succeeded") return 100;
-  const p = j.progress, part = p && p.total ? Math.min(1, p.current / p.total) : 0;
-  return Math.round((j.done + part) / j.total * 100);
+  const p = j.progress;
+  return p?.total > 0 ? Math.round(Math.max(0, Math.min(1, p.current / p.total)) * 100) : 0;
 };
 const jobLabel = s => s.replace(/-/g, " ");
 function jobSub(j) {
@@ -29,6 +28,8 @@ function jobSub(j) {
   if (j.error) return j.error;
   if (j.status === "needs-action" && j.actions.length) return j.actions.map(a => a.message).join(" ");
   if (j.status === "awaiting-approval") return "Waiting for your approval.";
+  if (j.status === "succeeded" && j.kind === "dependency") return "Flycast prepared. No game installed; capability validation remains.";
+  if (j.installation === "installed" && j.readiness === "setup-required") return `Installed - setup required. ${(j.actions || []).map(a => a.message).join(" ")}`;
   const p = j.progress;
   if (jobActive(j) && p) return `${p.message}${p.total ? ` (${p.current}/${p.total}${p.unit ? " " + p.unit : ""})` : ""}`;
   return jobActive(j) && j.step ? `${j.step} (${j.done}/${j.total})` : `${j.done}/${j.total} steps`;
@@ -42,12 +43,12 @@ function renderJobs(force) {
   d.querySelector(".jlist").innerHTML = jobs.length ? jobs.map(j => {
     const acts = j.status === "cancel-requested" ? ""
       : jobActive(j) ? `<button type="button" data-a="cancel">Cancel</button>`
-      : j.status === "awaiting-approval" ? `<button type="button" data-a="approve">Approve</button><button type="button" data-a="cancel">Cancel</button>`
+      : j.status === "awaiting-approval" ? `<button type="button" data-a="review">Review plan</button><button type="button" data-a="cancel">Cancel</button>`
       : j.surviving ? ""
       : `${j.status === "succeeded" || j.manual ? "" : '<button type="button" data-a="retry">Retry</button>'}<button type="button" data-a="dismiss">Dismiss</button>`;
     return `<div class="job ${esc(j.status)}" data-id="${esc(j.id)}">
       <div class="jhead"><b>${esc(j.title)}</b><span class="jstat">${esc(jobLabel(j.status))}</span></div>
-      <div class="jbar"><i style="width:${jobPct(j)}%"></i></div>
+      <div class="jbar ${jobActive(j) && !(j.progress?.total > 0) ? "indeterminate" : ""}" aria-label="Current step progress"><i style="width:${jobPct(j)}%"></i></div>
       <div class="jsub">${esc(jobSub(j))}</div>
       <div class="jbtns"><button type="button" data-a="log">${openLog === j.id ? "Hide log" : "Log"}</button>${acts}</div>
       ${openLog === j.id ? '<pre class="jlog"></pre>' : ""}</div>`;
@@ -63,6 +64,8 @@ async function fetchLog() {
     if (openLog !== id || !pre.isConnected) return;
     const stick = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
     pre.textContent = j.log || "(no output yet)";
+    if (j.dependency_result) pre.textContent += "\n\nRecorded dependency outcome:\n" + JSON.stringify(j.dependency_result, null, 2);
+    if (j.dependency_error) pre.textContent += "\n\n" + j.dependency_error;
     if (stick) pre.scrollTop = pre.scrollHeight;
   } catch { /* transient */ }
 }
@@ -71,16 +74,31 @@ function openJobs() {
   openLog = null;
   d.innerHTML = `<h2>Installs &amp; jobs</h2><div class="jlist"></div>
     <div class="padhint pad-only"><kbd>A</kbd>Choose <kbd>B</kbd>Close</div>
-    <div class="btns"><button type="button" id="iclose" class="primary" autofocus>Close</button></div>`;
+    <div class="btns"><button type="button" id="ipackages">Install package...</button><button type="button" id="iprepare">Prepare Flycast...</button><button type="button" id="iclose" class="primary" autofocus>Close</button></div>`;
   d.onclick = async e => {
     if (e.target.id === "iclose") return d.close();
+    if (e.target.id === "ipackages") return openPackages();
+    if (e.target.id === "iprepare") {
+      const button = e.target; button.disabled = true;
+      try {
+        await packageResponse(await post("/api/dependencies/flycast/prepare"));
+        await refresh();
+        notify("Review the Flycast dependency plan before approving any changes.", { kind: "ok", title: "Flycast" });
+      } catch (error) { notify(error.message, { kind: "error", title: "Flycast" }); }
+      finally { button.disabled = false; }
+      return;
+    }
     const b = e.target.closest("[data-a]"); if (!b) return;
     const id = b.closest(".job").dataset.id, a = b.dataset.a;
     if (a === "log") { openLog = openLog === id ? null : id; return renderJobs(); }
-    const job = jobs.find(x => x.id === id);
-    const r = await post(`/api/jobs/${id}/${a}`, a === "approve" ? { plan_digest: job?.plan_digest } : undefined);
-    if (!r.ok) notify((await r.json().catch(() => ({}))).error || "That didn't work.", { kind: "error" });
-    sfx("tick"); refresh();
+    if (a === "review") return reviewPackagePlan(id);
+    b.disabled = true;
+    try {
+      const r = await post(`/api/jobs/${id}/${a}`);
+      if (!r.ok) throw new Error((await r.json()).error || "That didn't work.");
+      sfx("tick"); await refresh();
+    } catch (error) { notify(error.message, { kind: "error", title: "Jobs" }); }
+    finally { b.disabled = false; }
   };
   d.onkeydown = e => { if (e.key === "Escape") { e.preventDefault(); d.close(); } };
   d.onclose = () => { clearInterval(logPoll); openLog = null; };

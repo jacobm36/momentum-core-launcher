@@ -37,7 +37,25 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
 
 - Built-in notifications (N), background jobs (I) and backup/restore (B); see the user guide. Jobs keep running after the launcher closes.
 - Tests: `python3 -m unittest discover -s tests`.
+- Headless package UI tests (Chrome/Chromium): `MCL_BROWSER_TESTS=1 python3 -m unittest tests.test_package_ui_browser`.
 - Package check (Package Contract v1): `python3 packages.py check <folder-or-zip>`; nothing in the package is run.
+- Local package UI: open **Installs & jobs (I) → Install package...** to import a ZIP or local
+  package folder, review trust/test evidence, enter paths and run preflight. **Review plan** shows
+  exact changes, backups, dependencies and manual setup. Unsupported platforms are blocked.
+  Installation is enabled for the exact tested HOD2 0.1.1 package and user-scope Flycast v2.7
+  build recorded in [target evidence](docs/hod2-target-evidence.json). A different package digest
+  or emulator build stays gated. Detection alone is not capability evidence. Work is scoped to
+  this HOD2 flow, not a general-purpose package manager.
+  A remote download catalog is separate future work.
+- **Prepare Flycast...** creates a separate preflight/approval job for the user-scope dependency.
+  Detection is read-only. Approval can add the official user Flathub remote and install missing Flycast;
+  existing Flycast is reused without an automatic upgrade. Transactions have durable intent/outcome
+  records, do not elevate, and finish safely before acknowledging cancellation.
+- Receipts reconcile approved actions, durable intents, inventories and actual hashes. Catalog
+  publication is replayable after interruption without duplicating entries or overwriting later
+  personal edits; ambiguous filesystem evidence remains blocked for manual recovery.
+- Optional real-package/synthetic-media regression (no real emulator launches):
+  `MCL_HOD_PACKAGE=/absolute/HOD-package.zip python3 -m unittest tests.test_hod_receipts`.
 
 - The server binds to `127.0.0.1` only, validates the Host header and requires a per-session token
   for changes.

@@ -12,7 +12,7 @@ PY = sys.executable
 def script(body):
     """A fake package step: python code with helpers for events and results."""
     pre = textwrap.dedent("""\
-        import json, os, sys, time
+        import json, os, subprocess, sys, time
         def ev(t, msg, **k):
             print(json.dumps(dict(event_version=1, type=t, message=msg, **k)), flush=True)
         def result(outcome, msg="", **k):
@@ -74,11 +74,24 @@ class PlainJobs(Base):
 
     def test_cancel_waits_for_step_boundary_without_killing(self):
         marker = Path(self.tmp.name) / "finished"
-        jid = self.j.submit("c", [{"name": "slow", "argv": [PY, "-c", f"import time; time.sleep(1.5); open({str(marker)!r},'w')"]},
+        entered, release = Path(self.tmp.name) / "entered", Path(self.tmp.name) / "release"
+        slow = f"""import time
+from pathlib import Path
+Path({str(entered)!r}).write_text("running")
+end = time.monotonic() + 10
+while not Path({str(release)!r}).exists() and time.monotonic() < end:
+    time.sleep(.02)
+Path({str(marker)!r}).write_text("finished")
+"""
+        jid = self.j.submit("c", [{"name": "slow", "argv": [PY, "-c", slow]},
                                   {"name": "next", "argv": [PY, "-c", "raise SystemExit(9)"]}])
-        self.until(jid, "running")
-        self.assertIs(self.j.cancel(jid), True)
-        self.assertEqual(self.status(jid), "cancel-requested")
+        wait(entered.exists)
+        try:
+            self.assertIs(self.j.cancel(jid), True)
+            self.assertEqual(self.status(jid), "cancel-requested")
+            self.assertFalse(marker.exists())
+        finally:
+            release.write_text("finish current step")
         self.until(jid, "cancelled")
         self.assertTrue(marker.exists())  # the running step was allowed to finish
 
@@ -103,15 +116,46 @@ class PlainJobs(Base):
 
 
 class ProtocolJobs(Base):
-    def pkg(self, preflight, apply):
-        return [{"name": "Preflight", "argv": script(preflight), "protocol": True, "approve_after": True,
-                 "declared_steps": ["validate"]},
-                {"name": "Apply", "argv": script(apply), "protocol": True, "declared_steps": ["stage", "configure"]}]
+    def pkg(self, preflight, apply, context=None):
+        pre_argv = script(preflight) + (["{context_file}"] if context else [])
+        app_argv = script(apply) + (["{context_file}"] if context else [])
+        return [{"name": "Preflight", "argv": pre_argv, "protocol": True, "approve_after": True,
+                 "declared_steps": ["validate"], **({"context": context} if context else {})},
+                {"name": "Apply", "argv": app_argv, "protocol": True, "declared_steps": ["stage", "configure"],
+                 **({"context": dict(context, phase="apply")} if context else {})}]
 
     PRE = """
         ev("step_started", "Checking", step="validate")
         result("succeeded", "plan ok", phase="preflight", plan={"files": ["a"]})
         """
+
+    def test_context_template_and_approved_plan_file(self):
+        app = Path(self.tmp.name) / "approved"
+        ctx = {
+            "contract_version": "1.0.0", "package_id": "pkg", "package_version": "0.1.0",
+            "package_digest": "sha256:" + "a" * 64, "operation": "install", "phase": "preflight",
+            "inputs": {}, "paths": {}, "dependencies": {}, "previous_receipt": None, "catalog_entry_id": None
+        }
+        pre = """
+            c = json.load(open(sys.argv[1]))
+            assert c["approved_plan_digest"] is None and "approved_plan_file" not in c
+            result("succeeded", "pre", phase="preflight", plan={"ok": True})
+        """
+        apply = f"""
+            c = json.load(open(sys.argv[1]))
+            assert c["approved_plan_digest"].startswith("sha256:")
+            b = open(c["approved_plan_file"], "rb").read()
+            open({str(app)!r}, "wb").write(b)
+            result("succeeded", "ok", phase="apply")
+        """
+        jid = self.j.submit("pkg", self.pkg(pre, apply, context=ctx))
+        d = self.until(jid, "awaiting-approval")["plan_digest"]
+        p = self.root / jid / "approved-plan.json"
+        self.assertFalse(p.exists())
+        self.j.approve(jid, d)
+        self.until(jid, "succeeded")
+        self.assertTrue(p.exists())
+        self.assertEqual(p.read_bytes(), app.read_bytes())
 
     def test_preflight_approval_apply(self):
         out = Path(self.tmp.name) / "applied"
@@ -163,6 +207,22 @@ class ProtocolJobs(Base):
         plan.write_text("B")
         self.j.retry(jid2)
         self.assertNotEqual(self.until(jid2, "awaiting-approval")["plan_digest"], d1)  # changed plan asks again
+
+    def test_retry_is_blocked_once_intents_exist(self):
+        pre = 'result("succeeded", "plan", phase="preflight", plan={"ok": True})'
+        apply = """
+            rec = dict(intent_version=1, job_id=os.environ["MCL_JOB_ID"], seq=1, step="stage",
+                       op="mkdir", path=os.environ["MCL_JOB_DIR"] + "/x", ownership="managed",
+                       before={"kind": "absent", "sha256": None}, after={"kind": "directory", "sha256": None},
+                       backup=None)
+            subprocess.run([sys.executable, os.environ["MCL_INTENT_HELPER"], os.environ["MCL_INTENT_FILE"], json.dumps(rec)], check=True)
+            result("failed", "after intent")
+            sys.exit(40)
+        """
+        jid = self.j.submit("pkg", self.pkg(pre, apply))
+        self.j.approve(jid, self.until(jid, "awaiting-approval")["plan_digest"])
+        self.until(jid, "failed")
+        self.assertNotEqual(self.j.retry(jid), True)
 
     def test_exit_codes_and_results(self):
         cases = [

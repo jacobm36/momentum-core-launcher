@@ -95,6 +95,8 @@ momentum-core-launcher/
 ├── packages/             ← imported install packages (read-only copies, created automatically)
 ├── web/                  ← launcher look and feel (HTML/CSS, one small JS file per feature)
 ├── backup.py, jobs.py    ← backup/restore and background-job engines
+├── installs.py           ← package install orchestration: context, receipts, catalog merge
+├── dependencies.py       ← read-only Flycast detection and approved user-scope dependency preparation
 ├── packages.py           ← imports and checks install packages (folder or ZIP)
 ├── mcl_intent.py         ← helper install packages use to record changes before making them
 ├── tests/                ← automated tests (python3 -m unittest discover -s tests)
@@ -235,9 +237,25 @@ Only shortcuts whose launch command matches a game in `games.json` are moved. Th
 - **📥 Installs & jobs (I):** background jobs with progress, a live log, Cancel, Retry and Dismiss.
   - **Exiting never stops a running job.** The window closes but the job finishes in the background.
   - **Cancel is a request, not a kill.** The job shows "cancel requested" and stops at the next safe point.
-  - **Results:** *succeeded*, *needs action* (installed, but something must be finished by hand), *conflicted* (existing files are in the way), *failed*, *cancelled*, or *interrupted* (the computer restarted or the launcher crashed mid-job).
-  - **Awaiting approval:** some installs pause after checking your system and show what they plan to do. Approve to continue or Cancel to stop. If the plan changes on retry, it asks again.
+  - **Results:** *succeeded*, *needs action* (a prerequisite or manual setup needs attention; this does not necessarily mean installed), *conflicted* (existing files are in the way), *failed*, *cancelled*, or *interrupted* (the computer restarted or the launcher crashed mid-job).
+  - **Awaiting approval:** choose **Review plan** to see the saved plan's destination, changes, backups, dependency facts, preserved state and manual requirements. Approval requires a separate confirmation of those exact plan bytes. Closing the review does not cancel the job; **Cancel job** does.
   - **Leftover processes:** if a job's programs are still running after a crash, Retry and Dismiss stay unavailable until they exit.
-  - **Retry:** installs start again from the beginning and re-check everything. Simple jobs resume from the failed step.
-  - **Install packages:** installing from inside the launcher is still being built. To check a package folder or ZIP without installing anything, run `python3 packages.py check <folder-or-zip>`. Nothing in the package is run; it reports the package's ID, version and digest, or a list of problems.
+  - **Retry:** installs restart preflight; simple jobs resume from the failed step. If an install wrote mutation intents or its receipt/catalog commit was interrupted, automatic retry/new package jobs are blocked until those changes are reconciled. Recovery records cannot be dismissed.
+  - **Step progress:** bars show the current step's measurable progress, not an estimated overall installation percentage. Unknown totals display an indeterminate bar.
+  - **Install packages (local import):**
+    1. Download a ZIP from a publisher you trust. There is no in-app remote catalog yet.
+    2. Open **Install package...** and **Choose package ZIP...**, or enter an absolute local package-folder/ZIP path and choose **Import path**. ZIP uploads are limited to 1 GiB. Intake validates and copies the package; no package code runs.
+    3. Choose **Set up**. Review its fingerprint, declared actions and test evidence; enter the source directory and games root (defaults to your own `~/Games`). Optionally choose an existing library entry explicitly. This does not claim ownership of existing files.
+    4. Check the trust box and choose **Check installation plan**. Package scripts run with your user permissions; checksums establish integrity, not publisher trust or sandboxing. Unsupported platforms cannot proceed.
+    5. In **Installs & jobs**, choose **Review plan**. Reopening the launcher retrieves the same saved waiting plan. **Approve and install** is enabled for the exact HOD2 0.1.1 package and user-scope Flycast v2.7 build tested on October 5, 2026. Other package bytes or emulator builds remain gated. Approval rechecks this evidence, receipt state and whether Flycast is running. Package preflight does not install or upgrade an emulator.
+    - The isolated target test confirmed fullscreen, Start, aiming, firing, off-screen reload and clean exit, with the original Flycast config/data unchanged. This is one laptop's evidence, not fresh-machine certification. A new installation still reports **installed / setup required** until its own gameplay is confirmed.
+    - Successful HOD2 receipts are reconciled against approved actions, durable intents, publication inventories and file hashes. Repeat installs retain installation identity and personal library edits. An interrupted receipt/catalog commit retains a replayable journal; ambiguous or changed files stop recovery rather than claiming new ownership.
+    - For a command-line check without executing scripts: `python3 packages.py check <folder-or-zip>`.
+  - **Prepare Flycast (shared dependency):**
+    1. Choose **Prepare Flycast...** in **Installs & jobs**. This uses the launcher's resolver, not imported package code. First finish or cancel any waiting package/dependency job.
+    2. Read-only detection checks Flatpak availability, the user Flathub remote URL, installed user applications, and Flycast version/build commit. Missing Flatpak reports instructions for installing it with your Ubuntu system tools; no elevation is attempted.
+    3. Choose **Review plan** to inspect the exact command arrays. With your approval, a missing official user Flathub remote can be added and missing user-scope Flycast installed noninteractively. System remotes are untouched; an unexpected user Flathub URL stops for manual resolution.
+    4. Installed Flycast is reused, never automatically upgraded. Preparation success means only the dependency is present, not that a game is installed or gameplay-ready.
+    5. An active Flatpak transaction is not force-killed by cancellation or UI closure. Cancellation is acknowledged between transactions or after the current one finishes. Completed dependency work stays installed even if later work fails.
+    6. **Log** includes the recorded dependency outcome. Jobs retain a durable command-intent journal before each transaction and its observed exit/state afterward. An uncertain transaction after interruption blocks new jobs and dismissal until reconciled; retry never discards that evidence.
 - **💾 Backup & restore (B):** saves your game list, tags, favorites and playtime to `backups/` (optionally with artwork and videos). A config-only backup is made automatically about once a week. Restore from a snapshot or a downloaded `.zip`; the current library is saved first as a `pre-restore` snapshot. Browser settings (sound, sort order, panel style) are not included. Only restore backups you made yourself.

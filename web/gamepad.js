@@ -9,8 +9,8 @@ function pressed(key, on, fn, repeat = 180) {
   if (!on) { delete held[key]; return; }
   if (!held[key] || now - held[key].t > (held[key].n ? repeat : 400)) { held[key] = { t: now, n: true }; fn(); }
 }
-const topDlg = () => ["odlg", "qdlg", "gdlg", "bdlg", "idlg", "ndlg", "sdlg", "dlg"].map(i => $("#" + i)).find(d => d.open);
-const FOCUSABLE = 'button,input:not([type=file]):not([type=hidden]),textarea,a[href],[tabindex="0"]';
+const topDlg = () => ["odlg", "qdlg", "rdlg", "pdlg", "gdlg", "bdlg", "idlg", "ndlg", "sdlg", "dlg"].map(i => $("#" + i)).find(d => d.open);
+const FOCUSABLE = 'button,input:not([type=file]):not([type=hidden]),select,summary,textarea,a[href],[tabindex="0"]';
 const focusables = scope => [...scope.querySelectorAll(FOCUSABLE)].filter(e => !e.disabled && !e.hidden && e.getClientRects().length && !(e.closest("#odlg") && e.id === "oinp"));
 function moveFocus(dir) {
   const scope = topDlg() || document.body, items = focusables(scope), cur = document.activeElement;
@@ -44,7 +44,10 @@ function activate() {
   const el = document.activeElement;
   if (!focusables(topDlg() || document.body).includes(el)) { moveFocus("down"); return; }
   if (el.closest("#odlg") && isText(el)) return;
-  if (isText(el)) editField(el); else el.click();
+  if (el.tagName === "SELECT") {
+    el.selectedIndex = (el.selectedIndex + 1) % el.options.length;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  } else if (isText(el)) editField(el); else el.click();
   if (el.id === "play") leaveUi();
 }
 function enterUi() { uiMode = true; moveFocus("down"); }

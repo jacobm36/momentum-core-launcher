@@ -7,7 +7,10 @@ Steps marked "protocol" follow the Momentum Core Package Contract v1: stdout car
 stderr goes to the log, exit codes 0/20/30/40/130 map to job outcomes, every run writes a result
 file that must agree with its exit code, and cancellation is cooperative through a cancel file.
 A step marked "approve_after" pauses the job in "awaiting-approval" until its result (the plan)
-is approved by digest; a retry that produces the identical plan does not ask again.
+is approved by digest; a retry that produces the identical plan does not ask again. Approving saves
+the plan's exact bytes as approved-plan.json in the job directory. A step with a "context" template
+gets it written to context-<n>.json just before launch, with the runner's own paths filled in.
+Once a package has recorded an intent, its job can't be retried; a new job must check again.
 
 The runner never kills a step. Quitting the launcher leaves jobs running. Every launch is recorded
 before the process exists (boot ID and an execution token passed in the environment), then its
@@ -155,7 +158,9 @@ def validate_event(ev, declared=None):
 
 
 class Jobs:
-    def __init__(self, root, intent_helper=INTENT_HELPER, poll=2.0):
+    def __init__(self, root, intent_helper=INTENT_HELPER, poll=2.0, on_success=None):
+        """on_success(job) runs after a protocol job's last step succeeds and before the job is
+        marked succeeded; returning a string fails the job with that reason (e.g. receipt not committed)."""
         self.root = Path(root)
         self.root.mkdir(exist_ok=True)
         self._lockf = open(self.root / ".runner.lock", "w")
@@ -166,6 +171,7 @@ class Jobs:
             raise RunnerBusy(f"another launcher already owns {self.root}") from None
         self.intent_helper = str(intent_helper)
         self.poll = poll
+        self.on_success = on_success
         self.lock = threading.RLock()
         self.jobs = {}
         self._load()
@@ -194,9 +200,16 @@ class Jobs:
                 pids, _ = find_survivors(self._launches(j))
                 j["surviving"] = pids
                 self._save(j)
+            if self.dependency_uncertain(j["id"]):
+                j["manual"] = True
+                j["error"] = "An unfinished dependency transaction needs reconciliation; its journal is retained."
+                self._save(j)
             if j.get("surviving"):
                 watch.append(j["id"])
-        done = sorted((j for j in self.jobs.values() if j["status"] in FINISHED and not j.get("surviving")),
+        done = sorted((j for j in self.jobs.values() if j["status"] in FINISHED and not j.get("surviving")
+                       and not (self.paths(j["id"])["job_dir"] / "catalog-pending.json").exists()
+                       and not self.dependency_uncertain(j["id"])
+                       and not (j["status"] != "succeeded" and j["protocol"] and self._intents_recorded(j["id"]))),
                       key=lambda j: j["created"])
         for j in done[:-KEEP_FINISHED]:
             self._remove(j["id"])
@@ -227,7 +240,8 @@ class Jobs:
     def paths(self, jid):
         d = self.root / jid
         return {"job_dir": d, "cancel_file": d / "cancel", "intent_file": d / "intents.jsonl",
-                "result_file": d / "result.json", "events_file": d / "events.jsonl", "results_dir": d / "results"}
+                "result_file": d / "result.json", "events_file": d / "events.jsonl", "results_dir": d / "results",
+                "approved_plan_file": d / "approved-plan.json"}
 
     @staticmethod
     def _launches(j):
@@ -243,6 +257,8 @@ class Jobs:
         if cur is None and j["status"] not in ("succeeded", "queued"):
             cur = next((s["name"] for s in steps if s["status"] != "done"), None)
         return {"id": j["id"], "title": j["title"], "game": j.get("game"), "status": j["status"],
+                "kind": (j.get("meta") or {}).get("kind"),
+                "installation": j.get("installation"), "readiness": j.get("readiness"),
                 "done": done, "total": len(steps), "step": cur, "error": j.get("error"),
                 "progress": run.get("progress") if run else None, "actions": j.get("actions") or [],
                 "plan_digest": j.get("plan_digest") if j["status"] == "awaiting-approval" else None,
@@ -260,6 +276,29 @@ class Jobs:
             if not j:
                 return None
             out = self.summary(j)
+            if j["status"] == "awaiting-approval":
+                try:
+                    idx = next(i for i, s in enumerate(j["steps"]) if s.get("result_digest") == j["plan_digest"])
+                    data = (self.paths(jid)["results_dir"] / f"step-{idx}.json").read_bytes()
+                    if "sha256:" + hashlib.sha256(data).hexdigest() != j["plan_digest"]:
+                        raise ValueError("saved plan digest mismatch")
+                    out["plan"] = json.loads(data).get("plan")
+                    if out["plan"] is None:
+                        raise ValueError("no resolved plan was supplied")
+                except (OSError, ValueError, StopIteration) as e:
+                    out["plan_error"] = f"Cannot review this plan: {e}"
+            if (j.get("meta") or {}).get("kind") == "install" and not j["meta"].get("install_enabled"):
+                out["approval_blocked"] = ("This package/emulator build lacks matching target evidence. "
+                                           "Installation is currently enabled only for tested HOD2 0.1.1 "
+                                           "with the verified user-scope Flycast v2.7 build.")
+            if (j.get("meta") or {}).get("kind") == "dependency" and j["status"] in FINISHED:
+                try:
+                    out["dependency_result"] = json.loads((self.paths(jid)["results_dir"] /
+                                                          "step-1.json").read_text())
+                except FileNotFoundError:
+                    pass  # preflight failure has no apply result
+                except (OSError, ValueError) as e:
+                    out["dependency_error"] = f"Cannot read dependency outcome: {e}"
         out["log"] = self._tail(jid, max(0, min(int(tail), 65536)))
         return out
 
@@ -278,12 +317,14 @@ class Jobs:
             return sum(1 for j in self.jobs.values() if j["status"] in RUNNING)
 
     # -- control (each returns True, or a reason it can't) ------------------------------------
-    def submit(self, title, steps, game=None):
+    def submit(self, title, steps, game=None, meta=None):
         """steps: [{"name", "argv": [str, ...], "cwd"?, "env"?: {str: str}, "protocol"?: bool,
-        "approve_after"?: bool, "declared_steps"?: [str]}]"""
+        "approve_after"?: bool, "declared_steps"?: [str], "context"?: {...}}]
+        meta: JSON data kept with the job for whoever submitted it (e.g. what an install is for)."""
         def ok(s):
             return (isinstance(s.get("argv"), list) and s["argv"] and all(isinstance(a, str) for a in s["argv"])
-                    and all(isinstance(k, str) and isinstance(v, str) for k, v in (s.get("env") or {}).items()))
+                    and all(isinstance(k, str) and isinstance(v, str) for k, v in (s.get("env") or {}).items())
+                    and isinstance(s.get("context") or {}, dict))
         if not steps or not all(isinstance(s, dict) and ok(s) for s in steps):
             raise ValueError("a job needs steps with an argv list")
         jid = "j" + secrets.token_hex(4)
@@ -292,8 +333,11 @@ class Jobs:
              "steps": [{"name": str(s.get("name") or s["argv"][0])[:120], "argv": s["argv"], "cwd": s.get("cwd"),
                         "env": dict(s.get("env") or {}), "protocol": bool(s.get("protocol")),
                         "approve_after": bool(s.get("approve_after")),
-                        "declared_steps": [str(x) for x in s.get("declared_steps") or []], "status": "pending"}
+                        "declared_steps": [str(x) for x in s.get("declared_steps") or []], "status": "pending",
+                        **({"context": json.loads(json.dumps(s["context"]))} if s.get("context") else {})}
                        for s in steps]}
+        if meta is not None:
+            j["meta"] = json.loads(json.dumps(meta))
         p = self.paths(jid)
         p["job_dir"].mkdir()
         p["results_dir"].mkdir()
@@ -320,6 +364,16 @@ class Jobs:
                 return "this job isn't waiting for approval"
             if not digest or digest != j.get("plan_digest"):
                 return "the plan changed; review it again"
+            # Keep the exact approved bytes; the package checks its apply against them.
+            p = self.paths(jid)
+            i = next((i for i, s in enumerate(j["steps"]) if s.get("result_digest") == digest), None)
+            try:
+                data = (p["results_dir"] / f"step-{i}.json").read_bytes() if i is not None else b""
+            except OSError:
+                data = b""
+            if "sha256:" + hashlib.sha256(data).hexdigest() != digest:
+                return "the saved plan is missing or changed; retry to make a new one"
+            _write_durable(p["approved_plan_file"], data)
             j.update(status="queued", approved_plan_digest=digest, plan_digest=None, error=None)
             self._save(j)
         self._start(jid)
@@ -350,8 +404,12 @@ class Jobs:
             j = self.jobs.get(jid)
             if not j or j["status"] not in FINISHED or j["status"] == "succeeded":
                 return "this job can't be retried"
+            if self.dependency_uncertain(jid):
+                return "an unfinished dependency transaction needs reconciliation before retry"
             if j.get("manual"):
                 return "check this job's processes by hand, then dismiss it"
+            if j["protocol"] and self._intents_recorded(jid):
+                return "this job already started changing files; start a new one, which checks what's there first"
             if j.get("surviving"):
                 pids, _ = find_survivors(self._launches(j))
                 j["surviving"] = pids
@@ -368,6 +426,26 @@ class Jobs:
         self._start(jid)
         return True
 
+    def _intents_recorded(self, jid):
+        try:
+            return self.paths(jid)["intent_file"].stat().st_size > 0
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
+
+    def dependency_uncertain(self, jid):
+        path = self.paths(jid)["job_dir"] / "dependency-transactions.json"
+        try:
+            record = json.loads(path.read_text())
+        except FileNotFoundError:
+            return False
+        except (OSError, ValueError):
+            return True
+        return (not isinstance(record, dict) or record.get("job_id") != jid
+                or "active_command" not in record or not isinstance(record.get("completed"), list)
+                or bool(record.get("active_command")) or bool(record.get("detection_pending")))
+
     def dismiss(self, jid):
         with self.lock:
             j = self.jobs.get(jid)
@@ -375,6 +453,11 @@ class Jobs:
                 return "only finished jobs can be dismissed"
             if j.get("surviving"):
                 return "its processes are still running"
+            if self.dependency_uncertain(jid):
+                return "unfinished dependency evidence must be reconciled before dismissal"
+            if (self.paths(jid)["job_dir"] / "catalog-pending.json").exists() or (
+                    j["status"] != "succeeded" and j["protocol"] and self._intents_recorded(jid)):
+                return "recovery evidence must be reconciled before this job can be dismissed"
             self._remove(jid)
         return True
 
@@ -406,6 +489,8 @@ class Jobs:
 
     # -- runner -------------------------------------------------------------------------------
     def _finish(self, j, status, error=None):
+        if self.dependency_uncertain(j["id"]):
+            j["manual"] = True
         j.update(status=status, error=error, finished=time.time())
         self._save(j)
 
@@ -448,6 +533,15 @@ class Jobs:
                     self._save(j)
                     return
                 self._save(j)
+        if self.on_success and j["protocol"]:
+            try:
+                why = self.on_success(j)
+            except Exception as e:  # never leave a job running because the commit step broke
+                why = f"couldn't record the result: {e}"
+            if why:
+                self._note(jid, why)
+                with self.lock:
+                    return self._finish(j, "failed", str(why)[:500])
         with self.lock:
             self._finish(j, "succeeded")
 
@@ -464,9 +558,21 @@ class Jobs:
                    MCL_APPROVED_PLAN_DIGEST=j.get("approved_plan_digest") or "")
         return env
 
-    def _argv(self, j, step):
+    def _context(self, j, step):
+        """The step's context template plus the runner-owned fields (Package Contract v1 §5)."""
+        p = self.paths(j["id"])
+        approved = None if step.get("approve_after") else j.get("approved_plan_digest")
+        ctx = dict(step["context"], job_id=j["id"], cancel_file=str(p["cancel_file"]),
+                   intent_file=str(p["intent_file"]), result_file=str(p["result_file"]),
+                   intent_helper=self.intent_helper, approved_plan_digest=approved)
+        if approved:
+            ctx["approved_plan_file"] = str(p["approved_plan_file"])
+        return ctx
+
+    def _argv(self, j, i, step):
         p = self.paths(j["id"])
         sub = {"{job_dir}": str(p["job_dir"]), "{cancel_file}": str(p["cancel_file"]),
+               "{context_file}": str(p["job_dir"] / f"context-{i}.json"),
                "{intent_file}": str(p["intent_file"]), "{result_file}": str(p["result_file"]),
                "{intent_helper}": self.intent_helper, "{approved_plan_digest}": j.get("approved_plan_digest") or ""}
         out = []
@@ -482,6 +588,11 @@ class Jobs:
         protocol = step.get("protocol")
         if protocol:
             p["result_file"].unlink(missing_ok=True)
+        if step.get("context"):
+            try:
+                _write_durable(p["job_dir"] / f"context-{i}.json", json.dumps(self._context(j, step)).encode())
+            except OSError as e:
+                return "failed", f"could not write the context file: {e}"
         try:
             log = open(self.root / f"{jid}.log", "ab")
         except OSError:
@@ -491,7 +602,7 @@ class Jobs:
                 log.write(f"\n== {step['name']} ==\n".encode())
                 log.flush()
             try:
-                proc = subprocess.Popen(self._argv(j, step), cwd=step.get("cwd") or None, stdin=subprocess.DEVNULL,
+                proc = subprocess.Popen(self._argv(j, i, step), cwd=step.get("cwd") or None, stdin=subprocess.DEVNULL,
                                         stdout=subprocess.PIPE if protocol else (log or subprocess.DEVNULL),
                                         stderr=log or subprocess.DEVNULL, env=self._env(j, step, step["launch"]["token"]),
                                         start_new_session=True)
