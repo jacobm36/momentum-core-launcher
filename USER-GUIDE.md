@@ -92,8 +92,10 @@ momentum-core-launcher/
 ├── media/<game-id>/      ← art and video per game
 ├── backups/              ← backup snapshots (created automatically / on request)
 ├── jobs/                 ← background job records and logs
+├── packages/             ← imported install packages (read-only copies, created automatically)
 ├── web/                  ← launcher look and feel (HTML/CSS, one small JS file per feature)
 ├── backup.py, jobs.py    ← backup/restore and background-job engines
+├── packages.py           ← imports and checks install packages (folder or ZIP)
 ├── mcl_intent.py         ← helper install packages use to record changes before making them
 ├── tests/                ← automated tests (python3 -m unittest discover -s tests)
 ├── server.py             ← small local server that starts games
@@ -237,4 +239,5 @@ Only shortcuts whose launch command matches a game in `games.json` are moved. Th
   - **Awaiting approval:** some installs pause after checking your system and show what they plan to do. Approve to continue or Cancel to stop. If the plan changes on retry, it asks again.
   - **Leftover processes:** if a job's programs are still running after a crash, Retry and Dismiss stay unavailable until they exit.
   - **Retry:** installs start again from the beginning and re-check everything. Simple jobs resume from the failed step.
+  - **Install packages:** installing from inside the launcher is still being built. To check a package folder or ZIP without installing anything, run `python3 packages.py check <folder-or-zip>`. Nothing in the package is run; it reports the package's ID, version and digest, or a list of problems.
 - **💾 Backup & restore (B):** saves your game list, tags, favorites and playtime to `backups/` (optionally with artwork and videos). A config-only backup is made automatically about once a week. Restore from a snapshot or a downloaded `.zip`; the current library is saved first as a `pre-restore` snapshot. Browser settings (sound, sort order, panel style) are not included. Only restore backups you made yourself.

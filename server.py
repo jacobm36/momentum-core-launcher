@@ -7,6 +7,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import backup
+import packages
 from jobs import Jobs, RunnerBusy
 
 HERE = Path(__file__).resolve().parent
@@ -344,6 +345,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"app": "momentum-core-launcher"})
         if path == "/api/backups":
             return self._json({"backups": backup.list_backups(HERE)})
+        if path == "/api/packages":
+            return self._json({"packages": packages.list_packages(HERE)})
         m = re.fullmatch(r"/api/jobs/(j[0-9a-f]{8})", path)
         if m:
             tail = int((urllib.parse.parse_qs(self.path.partition("?")[2]).get("tail") or ["8000"])[0] or 8000)
@@ -395,7 +398,7 @@ class Handler(SimpleHTTPRequestHandler):
             # Installs keep running after the window closes; the watchdog stops the server once they finish.
             threading.Timer(0.3, lambda: (close_browser(), JOBS.active_count() or os._exit(0))).start()
             return
-        if self.path.startswith(("/api/jobs/", "/api/backups/")):
+        if self.path.startswith(("/api/jobs/", "/api/backups/", "/api/packages/")):
             return self._ops()
         if self.path.startswith("/api/upload/"):
             return self._upload()
@@ -530,6 +533,11 @@ class Handler(SimpleHTTPRequestHandler):
             if m:
                 r = JOBS.approve(m[1], str(data.get("plan_digest") or "")) if m[2] == "approve" else getattr(JOBS, m[2])(m[1])
                 return self._json({"status": m[2]}) if r is True else self._json({"error": r or f"cannot {m[2]} this job"}, 409)
+            if path == "/api/packages/import":
+                src = data.get("path")
+                if not isinstance(src, str) or not os.path.isabs(src):
+                    return self._json({"error": "an absolute folder or ZIP path is required"}, 400)
+                return self._json(packages.import_package(src, HERE))
             if path == "/api/backups/create":
                 name = backup.make_backup(HERE, "manual", bool(data.get("media")))
                 return self._json({"name": name})
@@ -552,6 +560,8 @@ class Handler(SimpleHTTPRequestHandler):
                     while chunk := src.read(1 << 20):
                         self.wfile.write(chunk)
                 return
+        except packages.PackageError as e:
+            return self._json({"error": "; ".join(e.problems[:5]), "problems": e.problems}, 400)
         except backup.BackupError as e:
             return self._json({"error": str(e)}, 400)
         except (ValueError, TypeError, OSError) as e:
