@@ -701,7 +701,8 @@ def watchdog():
 if __name__ == "__main__":
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     try:
-        JOBS = Jobs(HERE / "jobs", on_success=lambda j: INSTALLS.on_success(j) if INSTALLS else None)
+        JOBS = Jobs(HERE / "jobs", on_success=lambda j: INSTALLS.on_success(j) if INSTALLS else None,
+                    before_step=lambda j, i: INSTALLS.before_step(j, i) if INSTALLS else None)
     except RunnerBusy as e:
         sys.exit(f"Momentum Core Launcher: {e}")
     INSTALLS = installs.Installs(HERE, lock, read_raw, write_games, JOBS)

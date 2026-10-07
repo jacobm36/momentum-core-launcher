@@ -20,9 +20,27 @@ import packages
 @unittest.skipUnless(os.environ.get("MCL_HOD_PACKAGE"), "opt-in external HOD package integration")
 class HodReceipts(unittest.TestCase):
     def test_install_repeat_missing_file_repair_and_catalog_recovery(self):
+        self.exercise_install()
+
+    def test_missing_software_prepares_then_continues_same_game_job(self):
+        self.exercise_install(initially_missing=True)
+
+    def test_new_untested_build_stops_before_game_files(self):
+        self.exercise_install(initially_missing=True, installed_build_matches=False)
+
+    def test_cancel_software_review_changes_nothing(self):
+        self.exercise_install(initially_missing=True, cancel_at_approval=True)
+
+    def test_cancel_game_review_retains_prepared_software_without_installing_game(self):
+        self.exercise_install(initially_missing=True, cancel_after_preparation=True)
+
+    def exercise_install(self, initially_missing=False, installed_build_matches=True,
+                         cancel_at_approval=False, cancel_after_preparation=False):
         source_package = Path(os.environ["MCL_HOD_PACKAGE"]).resolve()
         evidence = json.loads((Path(installs.__file__).parent / "docs/hod2-target-evidence.json").read_text())
         metadata = f"    Version: {evidence['emulator_version']}\n    Commit: {evidence['emulator_commit']}"
+        if not installed_build_matches:
+            metadata = "    Version: new-untested-build\n    Commit: untested"
         with tempfile.TemporaryDirectory(prefix="mcl-hod-receipts-") as tmp:
             root = Path(tmp)
             home = root / "home with spaces"
@@ -32,13 +50,21 @@ class HodReceipts(unittest.TestCase):
             mockbin = root / "mockbin"
             mockbin.mkdir()
             flatpak = mockbin / "flatpak"
+            installed_marker = root / "software-installed"
+            if not initially_missing:
+                installed_marker.touch()
             flatpak.write_text(f"""#!{sys.executable}
-import sys
+import sys, pathlib
+installed = pathlib.Path({str(installed_marker)!r})
 command = sys.argv[1]
 if command == 'ps': pass
 elif command == 'remotes': print('flathub\\thttps://dl.flathub.org/repo/')
-elif command == 'list': print('org.flycast.Flycast')
+elif command == 'list':
+    if installed.exists(): print('org.flycast.Flycast')
 elif command == 'info': print({metadata!r})
+elif command == 'install':
+    assert sys.argv[2:] == ['--user', '--noninteractive', '-y', 'flathub', 'org.flycast.Flycast']
+    installed.touch()
 else: sys.exit('Unexpected emulator/dependency execution: ' + str(sys.argv))
 """)
             flatpak.chmod(0o755)
@@ -56,7 +82,9 @@ else: sys.exit('Unexpected emulator/dependency execution: ' + str(sys.argv))
                 inst = installs.Installs(app, threading.Lock(), lambda: json.loads(catalog_path.read_text()),
                                         lambda gs: installs._write_atomic(catalog_path, json.dumps(gs).encode()), runner)
                 runner.on_success = inst.on_success
+                runner.before_step = inst.before_step
                 def install():
+                    nonlocal runner
                     jid = inst.submit_install(info["id"], info["version"], str(source),
                                               trusted_digest=info["digest"])
                     deadline = time.monotonic() + 20
@@ -64,6 +92,46 @@ else: sys.exit('Unexpected emulator/dependency execution: ' + str(sys.argv))
                         time.sleep(.02)
                     detail = runner.get(jid)
                     self.assertEqual(detail["status"], "awaiting-approval", detail)
+                    if detail["plan"].get("operation") == "prepare-dependency":
+                        self.assertNotIn("approval_blocked", detail)
+                        self.assertFalse(installed_marker.exists())
+                        runner.close()
+                        runner = jobs.Jobs(app / "jobs", on_success=inst.on_success, before_step=inst.before_step)
+                        inst.jobs = runner
+                        self.assertEqual(runner.get(jid)["plan_digest"], detail["plan_digest"])
+                        if cancel_at_approval:
+                            self.assertIs(runner.cancel(jid), True)
+                            self.assertFalse(installed_marker.exists())
+                            self.assertFalse((home / "Games").exists())
+                            return jid
+                        self.assertIs(inst.approve(jid, detail["plan_digest"]), True)
+                        deadline = time.monotonic() + 20
+                        while time.monotonic() < deadline and runner.get(jid)["status"] in jobs.RUNNING:
+                            time.sleep(.02)
+                        detail = runner.get(jid)
+                        self.assertTrue(installed_marker.exists())
+                        if not installed_build_matches:
+                            self.assertEqual(detail["status"], "needs-action", detail)
+                            self.assertFalse((home / "Games").exists())
+                            self.assertEqual(json.loads(catalog_path.read_text()), [])
+                            self.assertIsNone(inst._load_receipt(info["id"]))
+                            return jid
+                        self.assertEqual(detail["status"], "awaiting-approval", detail)
+                        self.assertNotIn("approval_blocked", detail)
+                        self.assertEqual(len(runner.jobs[jid]["steps"]), 4)
+                        self.assertFalse((home / "Games").exists())
+                        self.assertNotEqual(detail["plan"].get("operation"), "prepare-dependency")
+                        runner.close()
+                        runner = jobs.Jobs(app / "jobs", on_success=inst.on_success, before_step=inst.before_step)
+                        inst.jobs = runner
+                        self.assertEqual(runner.get(jid)["plan_digest"], detail["plan_digest"])
+                        if cancel_after_preparation:
+                            self.assertIs(runner.cancel(jid), True)
+                            self.assertTrue(installed_marker.exists())
+                            self.assertFalse((home / "Games").exists())
+                            self.assertEqual(json.loads(catalog_path.read_text()), [])
+                            self.assertIsNone(inst._load_receipt(info["id"]))
+                            return jid
                     # Exercise production approval against the synthetic metadata, never a real emulator.
                     self.assertIs(inst.approve(jid, detail["plan_digest"]), True)
                     deadline = time.monotonic() + 20
@@ -75,6 +143,8 @@ else: sys.exit('Unexpected emulator/dependency execution: ' + str(sys.argv))
 
                 try:
                     first = install()
+                    if cancel_at_approval or cancel_after_preparation or not installed_build_matches:
+                        return
                     receipt = inst._load_receipt(info["id"])
                     identity = receipt["installation_id"]
                     games = json.loads(catalog_path.read_text())

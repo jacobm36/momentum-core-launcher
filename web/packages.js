@@ -71,8 +71,13 @@ function openPackages() {
   loadPackages();
 }
 
+function packageInputLabel(field) {
+  if (field.role === "source" || field.id === "source_dir") return "Where are your game files?";
+  if (field.role === "destination" || field.id === "games_root") return "Install games in";
+  return field.label || field.id.replace(/_/g, " ");
+}
 function packageInput(field, detail) {
-  const id = `pkg-input-${field.id}`, label = field.label || field.id.replace(/_/g, " ");
+  const id = `pkg-input-${field.id}`, label = packageInputLabel(field);
   const value = field.default === "home_games" ? detail.home_games : field.default;
   const required = field.required ? " required" : "";
   if (field.type === "boolean") return `<label class="pkg-check"><input id="${esc(id)}" type="checkbox" ${value === true ? "checked" : ""}>${esc(label)}</label>`;
@@ -80,7 +85,7 @@ function packageInput(field, detail) {
     ${field.choices.map(v => `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label>`;
   return `<label>${esc(label)}${field.required ? " (required)" : ""}
     <input id="${esc(id)}" value="${esc(value ?? "")}"${required} autocomplete="off"
-    ${field.type === "directory" ? 'placeholder="/absolute/folder/path"' : ""}></label>`;
+    ${field.type === "directory" ? 'placeholder="/home/you/your-game-folder"' : ""}></label>`;
 }
 
 async function selectPackage(id, version) {
@@ -91,32 +96,53 @@ async function selectPackage(id, version) {
     selectedPackage = detail;
     const m = detail.manifest;
     const flycast = detail.dependencies?.flycast;
+    const source = m.inputs.find(f => f.id === "source_dir");
+    const destination = m.inputs.find(f => f.id === "games_root");
     d.innerHTML = `<h2>${esc(detail.name)} <small>${esc(detail.version)}</small></h2>
       <p class="pkg-error" role="alert" hidden></p>
       <p class="bnote">Package fingerprint (integrity, not proof of trust)</p><code class="pkg-digest">${esc(detail.digest)}</code>
       ${detail.platform_issues.length ? `<p class="pkg-warning" role="alert">Installation blocked: ${esc(detail.platform_issues.join("; "))}</p>` : ""}
       <details><summary>Declared actions and test evidence</summary>
         ${packageJson({ platform: m.platform, actions: m.actions, dependencies: m.requires, testing: m.testing })}</details>
-      ${flycast ? `<h3>Flycast dependency</h3>
+      ${flycast ? `<h3>Required game software</h3>
         <p class="bnote">${!flycast.flatpak_available ? "Flatpak is missing. Install it through your Ubuntu system tools first."
-          : flycast.installed ? `User-scope Flycast is installed (${esc(flycast.version || "version unknown")}). It will not be automatically upgraded.`
-          : "User-scope Flycast is missing. Use Prepare Flycast in Installs & jobs to review its installation commands."}</p>
+          : flycast.installed ? `Required software is installed (${esc(flycast.version || "version unknown")}). It will not be automatically upgraded.`
+          : "Momentum will prepare the software this game needs. Review required downloads first; after compatibility checks, review the game files in the same setup job."}</p>
         <p class="pkg-warning">${detail.install_enabled
-          ? "This HOD2 package and Flycast build passed the target test. Installation still requires review and approval of this plan; confirm gameplay for your installation afterward."
-          : "Dependency preparation is separate from game installation. Only the tested HOD2 package and verified Flycast build are enabled."}</p>
-        <details><summary>Detected dependency facts</summary>${packageJson(flycast)}</details>` : ""}
+          ? "This game package and required software passed the target test. Installation still requires review and approval of this plan; confirm gameplay for your installation afterward."
+          : "Only the tested HOD2 package and verified software build are enabled. Momentum checks compatibility before changing game files."}</p>
+        <details><summary>Technical software details</summary>${packageJson(flycast)}</details>` : ""}
       <form id="pkg-setup">
-        <h3>Installation inputs</h3>${m.inputs.map(f => packageInput(f, detail)).join("")}
-        <label>Library association (optional; does not adopt existing files)
+        <h3>Your game files</h3>
+        ${source ? `${packageInput(source, detail)}
+          <p class="bnote">Leave your game files where they are. Enter the full path to their folder; Momentum copies them and leaves your originals untouched.
+          ${detail.id === "the-house-of-the-dead-2" ? "For HOD2, use the folder containing the CUE file and all matching BIN tracks together. The package ZIP does not contain the game." : ""}</p>` : ""}
+        ${m.inputs.filter(f => f !== source && f !== destination).map(f => packageInput(f, detail)).join("")}
+        ${destination ? `<p class="bnote">Momentum will install your game here:</p>
+          <output id="pkg-destination" class="pkg-path" aria-live="polite"></output>
+          <details><summary>Change installation folder</summary>${packageInput(destination, detail)}</details>` : ""}
+        <details><summary>Use an existing library entry</summary>
+        <label>Link to a library entry (does not take ownership of existing files)
           <select id="pkg-association"><option value="">Create a new library entry</option>
-            ${games.map(g => `<option value="${esc(g.id)}">${esc(g.name)}</option>`).join("")}</select></label>
-        <p class="bnote">Your source stays unchanged. Preflight shows the exact destination, files, backups and setup requirements before any installation changes.</p>
+            ${games.map(g => `<option value="${esc(g.id)}">${esc(g.name)}</option>`).join("")}</select></label></details>
+        <p class="bnote">Nothing is installed yet. Next, review the exact changes before approving installation.</p>
         <label class="pkg-check"><input type="checkbox" id="pkg-trust">I trust this package's publisher and permit its preflight code to run.</label>
         <p class="pkg-warning">Installer scripts run as your user and can access your files. Checksums and declared actions do not sandbox them.</p>
         <div class="btns"><button type="button" id="pkg-back">Back</button>
           <button type="submit" id="pkg-preflight" class="primary" disabled>Check installation plan</button></div>
       </form>`;
     const form = d.querySelector("#pkg-setup"), submit = d.querySelector("#pkg-preflight");
+    if (destination) {
+      const input = d.querySelector("#pkg-input-games_root"), preview = d.querySelector("#pkg-destination");
+      const updateDestination = () => {
+        const root = input.value;
+        preview.textContent = root.startsWith("/")
+          ? `${root.replace(/\/+$/, "")}/${m.destination_name}`
+          : "Enter a full folder path starting with /.";
+      };
+      input.oninput = updateDestination;
+      updateDestination();
+    }
     d.onclick = e => { if (e.target.id === "pkg-back") { d.close(); openPackages(); } };
     d.querySelector("#pkg-trust").onchange = e => { submit.disabled = !e.target.checked || detail.platform_issues.length > 0; };
     form.onsubmit = async e => {
@@ -129,7 +155,7 @@ async function selectPackage(id, version) {
           const input = d.querySelector(`#pkg-input-${f.id}`);
           if (!f.required && f.type !== "boolean" && input.value === "") continue;
           inputs[f.id] = f.type === "boolean" ? input.checked : input.value;
-          if (f.type === "directory" && !input.value.startsWith("/")) throw new Error(`${f.id} must be an absolute directory path.`);
+          if (f.type === "directory" && !input.value.startsWith("/")) throw new Error(`${packageInputLabel(f)} Enter a full folder path starting with /.`);
         }
         const data = await packageResponse(await post("/api/packages/install", {
           id, version, inputs, trusted_digest: detail.digest,
@@ -169,10 +195,13 @@ async function reviewPackagePlan(id) {
         <p class="pkg-path">${esc(a.path)}</p><p class="bnote">${esc(a.before?.kind || "unknown")} → ${esc(a.after?.kind || "unknown")}</p>
         ${a.backup ? `<p class="bnote">Backup: <span class="pkg-path">${esc(a.backup)}</span></p>` : ""}</article>`).join("")}</div>`
         : '<p class="bnote">No file changes listed.</p>'}
-      <details open><summary>Dependencies and network decisions</summary>${packageJson(plan.dependencies || {})}</details>
-      ${Array.isArray(plan.dependency_commands) ? `<h3>Exact dependency commands</h3>
-        ${plan.dependency_commands.length ? packageJson(plan.dependency_commands) : '<p class="bnote">No commands needed; reuse the installed dependency without upgrading it.</p>'}
-        <p class="pkg-warning">These user-scope changes are shared. Flycast and its runtime are retained if later game work fails. Cancellation waits for an active transaction to finish.</p>` : ""}
+      <details><summary>Technical software and network details</summary>${packageJson(plan.dependencies || {})}</details>
+      ${Array.isArray(plan.dependency_commands) ? `<h3>Software required for this game</h3>
+        <p class="bnote">${plan.dependency_commands.length
+          ? "Momentum will download the required software from Flathub for your account. No administrator access or automatic upgrade is requested."
+          : "No downloads needed; reuse the installed software without upgrading it."}</p>
+        <details><summary>Exact software setup commands</summary>${packageJson(plan.dependency_commands)}</details>
+        <p class="pkg-warning">Shared software remains installed if later game work fails. Cancellation waits for an active download/install transaction to finish. After preparation, Momentum checks compatibility and asks you to review the game files.</p>` : ""}
       <details><summary>Preserved files and state</summary>${packageJson({ preserve: plan.preserve || [], state: plan.state_destinations || [] })}</details>
       <h3>Manual setup after installation</h3>
       <ul>${(plan.manual_actions || []).map(a => `<li>${esc(a.message || a.action_id)}</li>`).join("") || "<li>No manual actions listed.</li>"}</ul>
@@ -180,7 +209,7 @@ async function reviewPackagePlan(id) {
       ${job.approval_blocked ? `<p class="pkg-warning">${esc(job.approval_blocked)}</p>` : ""}
       <label class="pkg-check"><input type="checkbox" id="plan-consent" ${job.approval_blocked ? "disabled" : ""}>I approve the listed changes.</label>
       <div class="btns"><button type="button" id="plan-close" autofocus>Close</button><button type="button" id="plan-cancel">Cancel job</button>
-        <button type="button" id="plan-approve" class="primary" disabled>${plan.operation === "prepare-dependency" ? "Approve dependency preparation" : "Approve and install"}</button></div>`;
+        <button type="button" id="plan-approve" class="primary" disabled>${plan.operation === "prepare-dependency" ? "Approve required software" : "Approve and install"}</button></div>`;
     const approve = d.querySelector("#plan-approve");
     d.querySelector("#plan-consent").onchange = e => { approve.disabled = !e.target.checked || Boolean(job.approval_blocked); };
     d.onclick = async e => {

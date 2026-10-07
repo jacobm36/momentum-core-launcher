@@ -158,7 +158,7 @@ def validate_event(ev, declared=None):
 
 
 class Jobs:
-    def __init__(self, root, intent_helper=INTENT_HELPER, poll=2.0, on_success=None):
+    def __init__(self, root, intent_helper=INTENT_HELPER, poll=2.0, on_success=None, before_step=None):
         """on_success(job) runs after a protocol job's last step succeeds and before the job is
         marked succeeded; returning a string fails the job with that reason (e.g. receipt not committed)."""
         self.root = Path(root)
@@ -172,6 +172,7 @@ class Jobs:
         self.intent_helper = str(intent_helper)
         self.poll = poll
         self.on_success = on_success
+        self.before_step = before_step
         self.lock = threading.RLock()
         self.jobs = {}
         self._load()
@@ -287,7 +288,8 @@ class Jobs:
                         raise ValueError("no resolved plan was supplied")
                 except (OSError, ValueError, StopIteration) as e:
                     out["plan_error"] = f"Cannot review this plan: {e}"
-            if (j.get("meta") or {}).get("kind") == "install" and not j["meta"].get("install_enabled"):
+            if ((j.get("meta") or {}).get("kind") == "install" and not j["meta"].get("install_enabled")
+                    and (out.get("plan") or {}).get("operation") != "prepare-dependency"):
                 out["approval_blocked"] = ("This package/emulator build lacks matching target evidence. "
                                            "Installation is currently enabled only for tested HOD2 0.1.1 "
                                            "with the verified user-scope Flycast v2.7 build.")
@@ -505,6 +507,17 @@ class Jobs:
         for i, step in enumerate(steps):
             if step["status"] == "done":
                 continue
+            with self.lock:
+                if j.get("cancel"):
+                    return self._finish(j, "cancelled")
+            if self.before_step:
+                try:
+                    problem = self.before_step(j, i)
+                except Exception as e:
+                    problem = ("failed", f"Could not prepare {step['name']}: {e}")
+                if problem:
+                    with self.lock:
+                        return self._finish(j, *problem)
             with self.lock:
                 if j.get("cancel"):
                     return self._finish(j, "cancelled")

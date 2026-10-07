@@ -199,19 +199,46 @@ class Installs:
             facts["flycast"] = self._flycast_facts(req)
         evidence = json.loads((Path(__file__).parent / "docs/hod2-target-evidence.json").read_text())
         flycast = facts.get("flycast", {})
-        enabled = (
+        supported = (
             package_id == evidence["package_id"] and version == evidence["package_version"]
             and summary["digest"] == evidence["package_digest"]
+            and not summary["platform_issues"])
+        enabled = (
+            supported
             and flycast.get("installed") is True
             and flycast.get("version") == evidence["emulator_version"]
-            and flycast.get("commit") == evidence["emulator_commit"]
-            and not summary["platform_issues"])
+            and flycast.get("commit") == evidence["emulator_commit"])
         if enabled:
             flycast["capabilities_checked"] = True
             flycast["capability_note"] = "This exact HOD2 package and Flycast build passed the isolated target test."
             flycast["capability_evidence"] = "docs/hod2-target-evidence.json"
         return dict(summary, manifest=man, home_games=str(Path.home() / "Games"), dependencies=facts,
-                    install_enabled=enabled)
+                    install_enabled=enabled, package_supported=supported)
+
+    @staticmethod
+    def _dependency_steps():
+        helper = str(Path(__file__).with_name("dependencies.py"))
+        return [{"name": name, "protocol": True, "approve_after": phase == "preflight",
+                 "declared_steps": ["resolve"],
+                 "argv": [sys.executable, helper, "--context", "{context_file}"],
+                 "context": {"operation": "prepare-dependency", "phase": phase}}
+                for name, phase in [("Check required game software", "preflight"),
+                                    ("Prepare required game software", "apply")]]
+
+    def before_step(self, job, index):
+        meta = job.get("meta") or {}
+        if not meta.get("prepare_required_software") or index != 2:
+            return None
+        detail = self.package_details(meta["package_id"], meta["package_version"])
+        if detail["digest"] != meta["package_digest"] or not detail["install_enabled"]:
+            return ("needs-action", "Required game software is not a validated build for this package. "
+                    "No game files were installed; Momentum needs updated compatibility evidence.")
+        with self.jobs.lock:
+            for step in job["steps"][2:]:
+                step["context"]["dependencies"] = _json_copy(detail["dependencies"])
+            meta["install_enabled"] = True
+            self.jobs._save(job)
+        return None
 
     def _check_active_operations(self):
         with self.jobs.lock:
@@ -229,13 +256,7 @@ class Installs:
         """A separately approved shared dependency job; no package code or game writes."""
         with self.submit_lock:
             self._check_active_operations()
-            context = {"operation": "prepare-dependency"}
-            helper = str(Path(__file__).with_name("dependencies.py"))
-            steps = [{"name": name, "protocol": True, "approve_after": phase == "preflight",
-                      "declared_steps": ["resolve"],
-                      "argv": [sys.executable, helper, "--context", "{context_file}"],
-                      "context": dict(context, phase=phase)}
-                     for name, phase in [("Check Flycast dependency", "preflight"), ("Prepare Flycast", "apply")]]
+            steps = self._dependency_steps()
             return self.jobs.submit("Prepare user-scope Flycast", steps, meta={"kind": "dependency"})
 
     def submit_install(self, package_id, version, source_dir=None, games_root=None, catalog_entry_id=None,
@@ -326,6 +347,9 @@ class Installs:
                 "game_directory": game_dir, "paths": paths, "manifest": {"name": man["name"]},
                 "install_enabled": detail["install_enabled"],
                 "catalog_defaults": {**man["catalog"], "name": man["name"], "icon": paths["icon"]}}
+        if detail["package_supported"] and not deps.get("flycast", {}).get("installed"):
+            steps = self._dependency_steps() + steps
+            meta["prepare_required_software"] = True
         return self.jobs.submit(f"Install {man['name']}", steps, game=package_id, meta=meta)
 
     def approve(self, jid, digest):
@@ -336,12 +360,18 @@ class Installs:
             if (job.get("meta") or {}).get("kind") == "install":
                 meta = _json_copy(job["meta"])
                 previous = _json_copy(job["steps"][-1]["context"].get("previous_receipt"))
+                preparing = bool(meta.get("prepare_required_software")
+                                 and job["steps"][1]["status"] == "pending")
             else:
                 meta = None
         if meta is not None:
             try:
                 detail = self.package_details(meta["package_id"], meta["package_version"])
-                if not meta.get("install_enabled") or not detail["install_enabled"]:
+                if detail["digest"] != meta["package_digest"]:
+                    return "Package changed since preflight; cancel and review a new job"
+                if preparing and not detail["package_supported"]:
+                    return "This game package lacks matching target evidence"
+                if not preparing and (not meta.get("install_enabled") or not detail["install_enabled"]):
                     return ("Game installation is enabled only for tested HOD2 0.1.1 with the verified user-scope "
                             "Flycast v2.7 build. Current package/build lacks matching capability evidence.")
                 if self._load_receipt(meta["package_id"]) != previous:

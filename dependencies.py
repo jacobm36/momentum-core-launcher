@@ -73,7 +73,7 @@ def make_plan(facts):
             "scope": "user", "dependencies": {"flycast": facts}, "actions": [],
             "dependency_commands": commands_for(facts),
             "manual_actions": [{"action_id": "flycast-capability-check",
-                                "message": "Flycast capability evidence is still required before game installation."}],
+                                "message": "Momentum must check software compatibility before installing game files."}],
             "notes": ["No system remotes, elevation or emulator upgrades.",
                       "Shared Flycast and its runtime remain installed if game installation later fails.",
                       "Cancellation waits for an active Flatpak transaction to finish."]}

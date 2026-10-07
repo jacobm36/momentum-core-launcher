@@ -374,17 +374,18 @@ class InstallsTests(unittest.TestCase):
         job, _ = self.fixture()
         job.update(status="awaiting-approval", plan_digest="test-digest")
         job["meta"]["install_enabled"] = True
-        with mock.patch.object(self.inst, "package_details", return_value={"install_enabled": True}), \
+        detail = {"install_enabled": True, "digest": job["meta"]["package_digest"]}
+        with mock.patch.object(self.inst, "package_details", return_value=detail), \
                 mock.patch.object(self.jobs, "approve", return_value=True, create=True) as approve, \
                 mock.patch("dependencies.probe", return_value=""):
             self.assertTrue(self.inst.approve(job["id"], "test-digest"))
             approve.assert_called_once()
-        with mock.patch.object(self.inst, "package_details", return_value={"install_enabled": False}):
+        with mock.patch.object(self.inst, "package_details", return_value=dict(detail, install_enabled=False)):
             self.assertIn("lacks matching", self.inst.approve(job["id"], "test-digest"))
-        with mock.patch.object(self.inst, "package_details", return_value={"install_enabled": True}), \
+        with mock.patch.object(self.inst, "package_details", return_value=detail), \
                 mock.patch("dependencies.probe", return_value="org.flycast.Flycast\n"):
             self.assertIn("Close Flycast", self.inst.approve(job["id"], "test-digest"))
-        with mock.patch.object(self.inst, "package_details", return_value={"install_enabled": True}), \
+        with mock.patch.object(self.inst, "package_details", return_value=detail), \
                 mock.patch.object(self.inst, "_load_receipt", return_value={"changed": True}):
             self.assertIn("receipt changed", self.inst.approve(job["id"], "test-digest"))
 

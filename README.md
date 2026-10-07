@@ -47,10 +47,13 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
   or emulator build stays gated. Detection alone is not capability evidence. Work is scoped to
   this HOD2 flow, not a general-purpose package manager.
   A remote download catalog is separate future work.
-- **Prepare Flycast...** creates a separate preflight/approval job for the user-scope dependency.
-  Detection is read-only. Approval can add the official user Flathub remote and install missing Flycast;
-  existing Flycast is reused without an automatic upgrade. Transactions have durable intent/outcome
-  records, do not elevate, and finish safely before acknowledging cancellation.
+- Game setup selects its required software automatically; users do not choose an emulator.
+  If software is missing, the same game job first requests approval for required downloads,
+  checks the installed build, then presents the game-file plan for approval. Detection is read-only.
+  Approval can add the official user Flathub remote and install missing user-scope Flycast;
+  existing software is reused without an automatic upgrade. Transactions have durable intent/outcome
+  records, do not elevate, and finish safely before acknowledging cancellation. An untested installed
+  build stops setup before game files change.
 - Receipts reconcile approved actions, durable intents, inventories and actual hashes. Catalog
   publication is replayable after interruption without duplicating entries or overwriting later
   personal edits; ambiguous filesystem evidence remains blocked for manual recovery.

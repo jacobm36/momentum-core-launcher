@@ -6,7 +6,7 @@ function handleJobs(list) {
   for (const j of jobs) {
     const prev = jobState[j.id]; jobState[j.id] = j.status;
     if (!jobsReady || prev === j.status || !prev) continue;
-    if (j.status === "succeeded") { notify(j.kind === "dependency" ? "Flycast preparation finished; game compatibility checks remain." : j.readiness === "setup-required" ? `${j.title} installed; manual setup is still required.` : `${j.title} finished.`, { kind: "ok", title: j.kind === "dependency" ? "Dependency prepared" : "Install complete" }); sfx("ok"); }
+    if (j.status === "succeeded") { notify(j.kind === "dependency" ? "Required software prepared. No game installed." : j.readiness === "setup-required" ? `${j.title} installed; manual setup is still required.` : `${j.title} finished.`, { kind: "ok", title: j.kind === "dependency" ? "Software prepared" : "Install complete" }); sfx("ok"); }
     else if (j.status === "failed") { notify(j.error || "A step failed.", { kind: "error", title: `${j.title} failed` }); sfx("err"); }
     else if (j.status === "interrupted") notify(j.error || "Stopped unexpectedly. You can retry it.", { kind: "warn", title: j.title });
     else if (j.status === "awaiting-approval") notify("Review the plan and approve it to continue.", { kind: "warn", title: j.title });
@@ -28,7 +28,7 @@ function jobSub(j) {
   if (j.error) return j.error;
   if (j.status === "needs-action" && j.actions.length) return j.actions.map(a => a.message).join(" ");
   if (j.status === "awaiting-approval") return "Waiting for your approval.";
-  if (j.status === "succeeded" && j.kind === "dependency") return "Flycast prepared. No game installed; capability validation remains.";
+  if (j.status === "succeeded" && j.kind === "dependency") return "Required software prepared. No game installed.";
   if (j.installation === "installed" && j.readiness === "setup-required") return `Installed - setup required. ${(j.actions || []).map(a => a.message).join(" ")}`;
   const p = j.progress;
   if (jobActive(j) && p) return `${p.message}${p.total ? ` (${p.current}/${p.total}${p.unit ? " " + p.unit : ""})` : ""}`;
@@ -74,20 +74,10 @@ function openJobs() {
   openLog = null;
   d.innerHTML = `<h2>Installs &amp; jobs</h2><div class="jlist"></div>
     <div class="padhint pad-only"><kbd>A</kbd>Choose <kbd>B</kbd>Close</div>
-    <div class="btns"><button type="button" id="ipackages">Install package...</button><button type="button" id="iprepare">Prepare Flycast...</button><button type="button" id="iclose" class="primary" autofocus>Close</button></div>`;
+    <div class="btns"><button type="button" id="ipackages">Install package...</button><button type="button" id="iclose" class="primary" autofocus>Close</button></div>`;
   d.onclick = async e => {
     if (e.target.id === "iclose") return d.close();
     if (e.target.id === "ipackages") return openPackages();
-    if (e.target.id === "iprepare") {
-      const button = e.target; button.disabled = true;
-      try {
-        await packageResponse(await post("/api/dependencies/flycast/prepare"));
-        await refresh();
-        notify("Review the Flycast dependency plan before approving any changes.", { kind: "ok", title: "Flycast" });
-      } catch (error) { notify(error.message, { kind: "error", title: "Flycast" }); }
-      finally { button.disabled = false; }
-      return;
-    }
     const b = e.target.closest("[data-a]"); if (!b) return;
     const id = b.closest(".job").dataset.id, a = b.dataset.a;
     if (a === "log") { openLog = openLog === id ? null : id; return renderJobs(); }

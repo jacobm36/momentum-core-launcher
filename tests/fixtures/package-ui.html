@@ -18,7 +18,7 @@ const detail = { ...summary, home_games: "/home/test/Games",
     { id: "games_root", type: "directory", required: true, default: "home_games" },
     { id: "mode", type: "choice", choices: ["fast", "careful"], default: "careful" },
     { id: "optional", type: "boolean", default: false }],
-  platform: {}, actions: { network: [], privileges: [] }, requires: [], testing: {}
+  destination_name: "Test", platform: {}, actions: { network: [], privileges: [] }, requires: [], testing: {}
 }};
 const job = { id: "j00000001", title: "Install Test", status: "awaiting-approval", done: 1, total: 2,
   plan_digest: jobDigest, actions: [], surviving: 0, manual: false };
@@ -59,6 +59,7 @@ async function until(fn) {
 (async () => {
   games = [{ id: "existing", name: "My existing entry" }];
   openJobs(); $("#ipackages").click(); await tick();
+  check(!$("#iprepare"), "no standalone emulator decision");
   check(topDlg().id === "pdlg", "package dialog has controller focus");
   check(!$("#pdlg img"), "package metadata is escaped");
   $("#pkg-path").value = "/home/test/package-folder"; $("#pkg-import-path").click();
@@ -76,6 +77,27 @@ async function until(fn) {
   await selectPackage("test-game", "1.0.0");
   check($("#pkg-preflight").disabled, "trust is mandatory");
   check($("#pkg-input-games_root").value === "/home/test/Games", "home_games resolved");
+  check($("#pkg-input-source_dir").closest("label").textContent.includes("Where are your game files?"), "plain-language game source");
+  check($("#pdlg").textContent.includes("leaves your originals untouched"), "original files reassurance");
+  check($("#pkg-destination").textContent === "/home/test/Games/Test", "complete default game destination");
+  check(!$("#pkg-input-games_root").closest("details").open, "destination customization starts collapsed");
+  $("#pkg-input-games_root").value = "/media/Game Library/";
+  $("#pkg-input-games_root").dispatchEvent(new Event("input"));
+  check($("#pkg-destination").textContent === "/media/Game Library/Test", "destination preview follows changes");
+  $("#pkg-input-games_root").value = "/";
+  $("#pkg-input-games_root").dispatchEvent(new Event("input"));
+  check($("#pkg-destination").textContent === "/Test", "root destination preview");
+  $("#pkg-input-games_root").value = "relative";
+  $("#pkg-input-games_root").dispatchEvent(new Event("input"));
+  check($("#pkg-destination").textContent.includes("full folder path"), "invalid path not shown as destination");
+  $("#pkg-input-games_root").value = "/home/test/Games";
+  $("#pkg-input-games_root").dispatchEvent(new Event("input"));
+  detail.id = "the-house-of-the-dead-2";
+  await selectPackage("test-game", "1.0.0");
+  check($("#pdlg").textContent.includes("CUE file and all matching BIN tracks together"), "HOD file requirements visible");
+  check($("#pdlg").textContent.includes("package ZIP does not contain the game"), "package versus game explained");
+  detail.id = "test-game";
+  await selectPackage("test-game", "1.0.0");
   check($("#pkg-input-mode").value === "careful", "choice default retained");
   check($("#pdlg").textContent.includes("v2.7"), "detected dependency version shown");
   check($("#pdlg").textContent.includes("not be automatically upgraded"), "dependency reuse promise shown");
@@ -93,6 +115,8 @@ async function until(fn) {
   check(install.body.inputs.optional === false, "boolean false stays typed");
   check(install.body.inputs.mode === "careful", "choice sent");
   check(install.body.catalog_entry_id === "existing", "explicit association sent");
+  check(install.body.inputs.source_dir === "/home/test/disc", "existing game folder sent unchanged");
+  check(install.body.inputs.games_root === "/home/test/Games", "default installation root sent");
   check(!$("#pdlg").open && $("#idlg").open, "returns to jobs");
   check(!$("#idlg [data-a=approve]"), "no unreviewed approve shortcut");
   $("#idlg [data-a=review]").click(); await until(() => $("#plan-approve"));
@@ -125,16 +149,15 @@ async function until(fn) {
   await selectPackage("test-game", "1.0.0"); $("#pkg-trust").click();
   check($("#pkg-preflight").disabled, "unsupported platform blocked");
   $("#pdlg").close();
-  openJobs(); $("#iprepare").click(); await until(() => !$("#iprepare").disabled);
-  check(submitted.some(s => s.path === "/api/dependencies/flycast/prepare"), "separate dependency preflight requested");
+  openJobs();
   plan.plan.operation = "prepare-dependency";
   plan.plan.dependency_commands = [["flatpak", "install", "--user", "--noninteractive", "-y", "flathub", "org.flycast.Flycast"]];
   await reviewPackagePlan(job.id);
   check($("#rdlg").textContent.includes("--noninteractive"), "exact dependency command shown");
-  check($("#plan-approve").textContent.includes("dependency preparation"), "dependency approval distinguished from game install");
+  check($("#plan-approve").textContent.includes("required software"), "game-focused software approval");
   check($("#plan-approve").disabled, "dependency approval also requires explicit consent");
   $("#plan-close").click(); $("#idlg").close();
   check(jobSub({ kind: "dependency", status: "succeeded" }).includes("No game installed"), "dependency success does not imply game success");
-  document.querySelector("#result").textContent = "PASS: imports, trust, plan, controller focus, platform, capability gates and separate Flycast preparation";
+  document.querySelector("#result").textContent = "PASS: imports, trust, plan, controller focus, platform, capability gates and game software review";
 })().catch(error => { document.querySelector("#result").textContent = "FAIL: " + error.stack; });
 </script></body></html>
