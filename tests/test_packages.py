@@ -112,6 +112,18 @@ class Digest(unittest.TestCase):
 
 
 class Intake(Base):
+    def test_appimage_support_is_scoped_to_the_pinned_official_vkquake(self):
+        requirement = {"id": "vkquake", "provider": "appimage", "scope": "user",
+                       "source": "github:Novum/vkQuake", "tested_version": "1.36.0"}
+        self.assertTrue(packages.check(write_tree(self.t / "vkquake",
+                        package_files(manifest(requires=[requirement]))))["digest"])
+        for key, value in (("id", "other-engine"), ("scope", "system"),
+                           ("source", "https://example.invalid"), ("tested_version", "new-untested")):
+            with self.subTest(key=key):
+                bad = {**requirement, key: value}
+                self.assertIn("only pinned user-scope vkQuake", self.problems(
+                    write_tree(self.t / key, package_files(manifest(requires=[bad])))))
+
     def test_folder_import(self):
         src = write_tree(self.t / "pkg", package_files(extra={"helpers/run.sh": b"echo\n"}))
         os.chmod(src / "helpers/run.sh", 0o755)

@@ -50,10 +50,11 @@ files. It downloads and checks the installer, helps set up compatible required s
 shows you the installation plan before making approved changes. Your original game files stay
 untouched. Local package ZIPs can also be imported through **Advanced**.
 
-**Bring your games; Momentum brings the setup.** Packages contain no game data, ROMs or BIOS
-files. The catalog includes *The House of the Dead 2*, *Virtua Cop 2*, *Star Wars Trilogy
-Arcade* and *L.A. Machineguns*. The three new arcade installers are verified, with gameplay
-confirmation still required. Updates are not installed automatically.
+**Bring your games; Momentum brings the setup.** Commercial base-game data, ROMs and BIOS
+files come from you. Mod packages can include their complete distributable mod.
+The catalog includes *The House of the Dead 2*, *Virtua Cop 2*, *Star Wars Trilogy
+Arcade*, *L.A. Machineguns* and *Episode Enyo*. Installer verification is separate
+from gameplay confirmation. Updates are not installed automatically.
 
 ## Your data stays local
 
@@ -66,7 +67,10 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
 - Built-in notifications (N), background jobs (I) and backup/restore (B); see the user guide. Jobs keep running after the launcher closes.
 - Tests: `python3 -m unittest discover -s tests`.
 - Headless package UI tests (Chrome/Chromium): `MCL_BROWSER_TESTS=1 python3 -m unittest tests.test_package_ui_browser`.
-- Live public catalog/download-to-install GUI tests: `MCL_CATALOG_TESTS=1 python3 -m unittest tests.test_catalog_live_browser` (Chrome/Chromium, internet access, temporary storage, synthetic media, fake Flycast and isolated copies of pinned Supermodel; no game launches or changes to your real installation).
+- Live public catalog/download-to-install GUI tests: `MCL_CATALOG_TESTS=1 python3 -m unittest tests.test_catalog_live_browser` (Chrome/Chromium, internet access, temporary storage, synthetic base media, fake Flycast and isolated copies of pinned native software; no game launches or changes to your real installation).
+- Episode Enyo runner/lifecycle tests: `MCL_QUAKE_TESTS=1 python3 -m unittest tests.test_quake_installs`
+  (complete bundled mod, synthetic Quake base PAKs, temporary storage, copied pinned AppImage;
+  missing-software case downloads the exact official runtime without executing it).
 - Arcade installer/receipt tests: `MCL_ARCADE_TESTS=1 python3 -m unittest tests.test_arcade_installs`
   (built packages in the sibling package repository, exact Supermodel installation, temporary storage,
   synthetic game files; native missing-software test downloads the pinned official runtime).
@@ -81,6 +85,9 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
   progress, cancellation and retry. After closing/reopening, choose **Continue setup** in
   **Installs & jobs**, or select the game again. Offline errors are explicit; existing local
   packages remain accessible under **Advanced**. No automatic updates.
+  Catalog ZIPs are bounded to 512 MiB with a ten-minute download deadline;
+  exact expected byte size and hashes still gate import. This supports bundled
+  mods without allowing unbounded downloads.
 - Local package UI: open **Add game → Advanced → Import a local package...** to import a ZIP or local
   package folder, review trust/test evidence, enter paths and run preflight. **Review plan** shows
   exact changes, backups, dependencies and manual setup. Unsupported platforms are blocked.
@@ -100,6 +107,11 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
   calibration and saves are isolated per game and retained on removal. L.A. Machineguns
   follows the guide's borderless 1920x1080 X11 layout, not the old fullscreen wrapper.
 - Game setup selects its required software automatically; users do not choose an emulator.
+  Episode Enyo includes the complete mod; select your Quake folder containing
+  both `id1` PAKs. It follows the guide's `enyo` layout and preserves existing CFG/SAV
+  files. Its exact official vkQuake 1.36.0 AppImage is reused read-only or separately
+  prepared after approval. FUSE2/Vulkan loaders are checked without engine execution;
+  actual mounting, GPU presentation and gameplay remain untested. No Snap fallback.
   If software is missing, the same game job first requests approval for required downloads,
   checks the installed build, then presents the game-file plan for approval. Detection is read-only.
   Approval can add the official user Flathub remote and install missing user-scope Flycast;

@@ -72,6 +72,15 @@ class CatalogTests(Base):
                                             "https://release-assets.githubusercontent.com/file?sig=abc")
         self.assertIsNotNone(accepted)
 
+    def test_bundled_mod_download_size_limit_is_explicit_and_bounded(self):
+        self.assertEqual(catalog.MAX_DOWNLOAD, 512 << 20)
+        for size in (140257501, catalog.MAX_DOWNLOAD):
+            entry = dict(self.entry, size=size)
+            catalog.validate({"catalog_version": 1, "games": [entry]})
+        with self.assertRaisesRegex(catalog.CatalogError, "download size"):
+            catalog.validate({"catalog_version": 1, "games": [dict(
+                self.entry, size=catalog.MAX_DOWNLOAD + 1)]})
+
     def test_catalog_offline_invalid_and_oversize_errors_are_explicit(self):
         with mock.patch("catalog._open", side_effect=urllib.error.URLError("offline")):
             with self.assertRaisesRegex(catalog.CatalogError, "Check your connection"):

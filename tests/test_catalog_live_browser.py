@@ -22,6 +22,8 @@ import jobs
 import packages
 import server
 import supermodel
+import vkquake
+from tests.test_quake_installs import write_pak
 
 HERE = Path(__file__).resolve().parents[1]
 
@@ -40,12 +42,16 @@ class CatalogLiveBrowser(unittest.TestCase):
     def test_la_machineguns_public_gui_install(self):
         self.exercise("l-a-machineguns", "L.A. Machineguns", "0.1.0")
 
+    def test_episode_enyo_public_gui_install(self):
+        self.exercise("quake-slave-zero-x", "Quake - Slave Zero X: Episode Enyo", "0.1.0")
+
     def exercise(self, game_id, name, version):
         chrome = shutil.which("google-chrome") or shutil.which("chromium")
         self.assertIsNotNone(chrome)
         evidence = json.loads((HERE / "docs/hod2-target-evidence.json").read_text())
         metadata = f"    Version: {evidence['emulator_version']}\n    Commit: {evidence['emulator_commit']}"
         native = supermodel.detect() if game_id in ("star-wars-trilogy-arcade", "l-a-machineguns") else None
+        quake = vkquake.detect() if game_id == "quake-slave-zero-x" else None
         with tempfile.TemporaryDirectory(prefix="mcl-catalog-live-") as tmp:
             root = Path(tmp)
             home, app, source, tools = (root / name for name in ("home", "launcher", "source", "tools"))
@@ -56,11 +62,20 @@ class CatalogLiveBrowser(unittest.TestCase):
             html = html.replace("SOURCE_DIRECTORY", json.dumps(str(source))).replace(
                 "GAMES_ROOT", json.dumps(str(home / "Games")))
             html = html.replace("the-house-of-the-dead-2", game_id).replace("The House of the Dead 2", name)
+            html = html.replace("SETUP_WAIT_ATTEMPTS", "6000" if quake else "1000")
             (app / "web/catalog-live.html").write_text(html)
             (app / "games.json").write_text("[]")
             (source / "House of the Dead 2, The (USA).cue").write_text(
                 'FILE "track 01.bin" BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00\n')
             (source / "track 01.bin").write_bytes(b"synthetic media, not a game" * 100)
+            if quake:
+                self.assertTrue(quake["installed"], "Pinned vkQuake is required for isolated live GUI verification")
+                engine = home / "Applications/vkquake.AppImage"
+                engine.parent.mkdir()
+                shutil.copyfile(quake["executable"], engine)
+                engine.chmod(0o755)
+                write_pak(source / "id1/pak0.pak", {"gfx/palette.lmp": b"synthetic palette"})
+                write_pak(source / "id1/pak1.pak", {"maps/e1m1.bsp": b"synthetic map"})
             if game_id == "virtua-cop-2":
                 lines = ["39"]
                 for n in range(1, 40):
@@ -125,7 +140,7 @@ else: sys.exit('Real emulator execution is prohibited in this test')
                             f"http://127.0.0.1:{http.server_port}/web/catalog-live.html",
                         ], stdout=subprocess.DEVNULL, stderr=browser_log)
                         try:
-                            finished = completed.wait(150)
+                            finished = completed.wait(600 if quake else 150)
                             browser_log.seek(0)
                             diagnostics = browser_log.read().decode(errors="replace")[-1500:]
                             self.assertTrue(finished, f"GUI did not finish; browser={browser.poll()}, "

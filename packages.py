@@ -27,7 +27,7 @@ REQUIRED_FILES = ("package.json", "install.sh", "verify.sh", "repair.sh", "unins
 OPERATIONS = ("install", "verify", "repair", "uninstall")
 INPUT_TYPES = ("directory", "string", "boolean", "choice")
 DIR_DEFAULTS = ("home_games",)
-PROVIDERS = ("flatpak", "native")
+PROVIDERS = ("flatpak", "native", "appimage")
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 INPUT_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -406,6 +406,10 @@ def check_manifest(m, files, root):
             s("app_id", r, w)
             if r.get("scope") != "user":
                 P.append(f"{w}scope must be 'user' (v1 does not elevate privileges)")
+        elif prov == "appimage":
+            if (rid, r.get("source"), r.get("scope"), r.get("tested_version")) != (
+                    "vkquake", "github:Novum/vkQuake", "user", "1.36.0"):
+                P.append(f"{w}appimage provider supports only pinned user-scope vkQuake 1.36.0 from its official GitHub release")
         elif (rid, r.get("source"), r.get("scope")) != ("supermodel", "github:trzy/Supermodel", "user"):
             P.append(f"{w}native provider supports only pinned user-scope Supermodel from its official GitHub release")
 

@@ -18,9 +18,9 @@ from jobs import _write_durable
 REPOSITORY = "jacobm36/momentum-distribution"
 CATALOG_URL = f"https://raw.githubusercontent.com/{REPOSITORY}/main/catalog.json"
 MAX_CATALOG = 256 << 10
-MAX_DOWNLOAD = 64 << 20
+MAX_DOWNLOAD = 512 << 20
 TIMEOUT = 20
-MAX_SECONDS = 180
+MAX_SECONDS = 600
 
 
 class CatalogError(ValueError):

@@ -18,6 +18,7 @@ from pathlib import Path
 import packages
 import dependencies
 import supermodel
+import vkquake
 import ownership
 
 DESC_FIELDS = ("name", "description", "tagline", "category", "tags")
@@ -203,6 +204,14 @@ class Installs:
                     facts["supermodel"] = supermodel.detect()
                 except dependencies.DependencyError as e:
                     raise InstallError(str(e)) from e
+            elif req["id"] == "vkquake":
+                if (req.get("provider"), req.get("scope"), req.get("source"), req.get("tested_version")) != (
+                        "appimage", "user", "github:Novum/vkQuake", vkquake.VERSION):
+                    raise InstallError("Only the pinned official user-scope vkQuake AppImage is supported")
+                try:
+                    facts["vkquake"] = vkquake.detect()
+                except dependencies.DependencyError as e:
+                    raise InstallError(str(e)) from e
             elif req["id"] == "flycast":
                 facts["flycast"] = self._flycast_facts(req)
             else:
@@ -226,7 +235,9 @@ class Installs:
                 "inherit unchanged executable-code evidence; confirm gameplay for each installation.")
             flycast["capability_evidence"] = "docs/hod2-target-evidence.json"
         if package_id != evidence["package_id"]:
-            path = Path(__file__).parent / "docs/arcade-installer-evidence.json"
+            path = Path(__file__).parent / (
+                "docs/quake-installer-evidence.json" if package_id == "quake-slave-zero-x"
+                else "docs/arcade-installer-evidence.json")
             records = json.loads(path.read_text()) if path.exists() else {"packages": []}
             record = next((r for r in records["packages"] if r["id"] == package_id
                            and r["version"] == version and r["digest"] == summary["digest"]), None)
@@ -239,20 +250,23 @@ class Installs:
                 enabled = (len(facts) == 1 and current.get("installed") is True
                            and all(current.get(k) == v for k, v in expected.items()))
                 if enabled:
-                    if runtime == "supermodel":
+                    if runtime in ("supermodel", "vkquake"):
                         try:
-                            current["host_checks"] = supermodel.check_host(current)
+                            resolver = supermodel if runtime == "supermodel" else vkquake
+                            current["host_checks"] = resolver.check_host(current)
                         except dependencies.DependencyError as e:
                             raise InstallError(str(e)) from e
                     current["capabilities_checked"] = True
                     current["capability_note"] = record["limits"]
-                    current["capability_evidence"] = "docs/arcade-installer-evidence.json"
+                    current["capability_evidence"] = str(path.relative_to(Path(__file__).parent))
         return dict(summary, manifest=man, home_games=str(Path.home() / "Games"), dependencies=facts,
                     install_enabled=enabled, package_supported=supported)
 
     @staticmethod
     def _dependency_steps(runtime="flycast"):
-        helper = str(Path(__file__).with_name("supermodel.py" if runtime == "supermodel" else "dependencies.py"))
+        helper = str(Path(__file__).with_name({
+            "flycast": "dependencies.py", "supermodel": "supermodel.py", "vkquake": "vkquake.py"
+        }[runtime]))
         return [{"name": name, "protocol": True, "approve_after": phase == "preflight",
                  "declared_steps": ["resolve"],
                  "argv": [sys.executable, helper, "--context", "{context_file}"],
@@ -415,6 +429,8 @@ class Installs:
                     return "Close Flycast before approving this installation"
                 if "supermodel" in detail["dependencies"] and not preparing and supermodel.running(detail["dependencies"]["supermodel"]):
                     return "Close Supermodel before approving this installation"
+                if "vkquake" in detail["dependencies"] and not preparing and vkquake.running(detail["dependencies"]["vkquake"]):
+                    return "Close vkQuake before approving this installation"
             except (InstallError, ownership.OwnershipError, dependencies.DependencyError, OSError, ValueError) as e:
                 return f"Installation approval checks failed: {e}"
         return self.jobs.approve(jid, digest)

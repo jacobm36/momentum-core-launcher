@@ -1,0 +1,21 @@
+{
+  "evidence_version": 1,
+  "scope": "Installer/lifecycle and non-graphical AppImage prerequisite checks only. No gameplay evidence is inherited.",
+  "packages": [
+    {
+      "id": "quake-slave-zero-x",
+      "version": "0.1.0",
+      "digest": "sha256:000da2a285b0f818a09fba426ee78c45d82d90eae4e7a200b2e3063d4080c21b",
+      "runtime": "vkquake",
+      "software": {
+        "provider": "appimage",
+        "scope": "user",
+        "version": "1.36.0",
+        "sha256": "f1824b12744b6b343c6155cf5f775df225b9e6c9ee606c95c9363f63f124992a"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "Complete Episode Enyo mod bundled; guide-defined enyo layout, base PAK structure, source/state preservation and exact installer lifecycle checked in isolated storage. Exact official AppImage bytes, architecture, FUSE2 and Vulkan loaders checked without executing it. This does not test FUSE mounting, GPU presentation, title/start, controls, sound or real save/relaunch. Confirm these before relying on the installation."
+    }
+  ]
+}

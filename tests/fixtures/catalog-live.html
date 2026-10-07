@@ -16,7 +16,7 @@ async function refresh() {
 }
 function check(value, message) { if (!value) throw new Error(message); }
 async function until(fn) {
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < SETUP_WAIT_ATTEMPTS; i++) {
     if (fn()) return;
     await refresh();
     const error = document.querySelector("#pdlg .pkg-error:not([hidden]), #rdlg .pkg-error:not([hidden])");

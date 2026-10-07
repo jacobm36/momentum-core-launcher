@@ -137,7 +137,8 @@ function openImportedPackages() {
   selectedPackage = null;
   d.innerHTML = `<h2>Install packages</h2>
     <p class="bnote">Download a package ZIP from a publisher you trust, then import it here.
-    Packages contain installers, not game files. Use Add game for automatic downloads.</p>
+    Packages contain installers and may include a bundled mod; required base-game files come from you.
+    Use Add game for automatic downloads.</p>
     <p class="pkg-warning">Import only checks and copies the package. No scripts run until you approve trust and request preflight.</p>
     <p class="pkg-error" role="alert" hidden></p>
     <div class="pkg-import"><button type="button" id="pkg-zip">Choose package ZIP...</button>
@@ -206,7 +207,7 @@ async function selectPackage(id, version) {
     selectedPackage = detail;
     const m = detail.manifest;
     const flycast = detail.dependencies?.flycast;
-    const native = detail.dependencies?.supermodel;
+    const native = detail.dependencies?.supermodel || detail.dependencies?.vkquake;
     const source = m.inputs.find(f => f.id === "source_dir");
     const destination = m.inputs.find(f => f.id === "games_root");
     d.innerHTML = `<h2>${esc(detail.name)} <small>${esc(detail.version)}</small></h2>

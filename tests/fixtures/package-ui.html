@@ -236,6 +236,13 @@ async function until(fn) {
   check($("#pdlg").textContent.includes("pinned official release after your approval"), "native dependency setup explained");
   check($("#pkg-preflight").disabled, "native packages retain publisher trust gate");
   $("#pdlg").close();
+  detail.dependencies = { vkquake: { installed: false, provider: "appimage", scope: "user" } };
+  detail.manifest.inputs[0].help = "Choose your Quake folder with id1/pak0.pak and id1/pak1.pak. Episode Enyo is already bundled.";
+  openPackages(); await selectPackage("test-game", "1.0.0");
+  check($("#pdlg").textContent.includes("Episode Enyo is already bundled"), "bundled mod and base-file requirements shown");
+  check($("#pdlg").textContent.includes("pinned official release after your approval"), "AppImage preparation is game-focused");
+  check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "AppImage setup still requires package trust");
+  $("#pdlg").close();
   check(jobSub({ kind: "dependency", status: "succeeded" }).includes("No game installed"), "dependency success does not imply game success");
   document.querySelector("#result").textContent = "PASS: imports, trust, plan, controller focus, platform, capability gates and game software review";
 })().catch(error => { document.querySelector("#result").textContent = "FAIL: " + error.stack; });
