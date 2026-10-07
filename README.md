@@ -42,11 +42,12 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
 - Local package UI: open **Installs & jobs (I) → Install package...** to import a ZIP or local
   package folder, review trust/test evidence, enter paths and run preflight. **Review plan** shows
   exact changes, backups, dependencies and manual setup. Unsupported platforms are blocked.
-  Installation is enabled for the tested HOD2 0.1.1 package, its approved original-artwork 0.1.2 revision, and user-scope Flycast v2.7
+  Installation is enabled for the tested HOD2 0.1.1 package, its approved artwork revisions 0.1.2 and 0.1.3, and user-scope Flycast v2.7
   build recorded in [target evidence](docs/hod2-target-evidence.json). A different package digest
   or emulator build stays gated. Detection alone is not capability evidence. Work is scoped to
   this HOD2 flow, not a general-purpose package manager.
-  Version 0.1.2 inherits gameplay evidence from byte-identical installer code; it is not a new gameplay test.
+  Versions 0.1.2 and 0.1.3 inherit gameplay evidence from byte-identical installer code; these are not new gameplay tests.
+  Version 0.1.3 restores the original t00ny HOD2 icon with attribution; custom artwork and Steam lookup remain available.
   A remote download catalog is separate future work.
 - Game setup selects its required software automatically; users do not choose an emulator.
   If software is missing, the same game job first requests approval for required downloads,

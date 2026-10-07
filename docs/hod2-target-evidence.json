@@ -8,6 +8,11 @@
       "version": "0.1.2",
       "digest": "sha256:ee75c953277283f8a9d38662b13900f3ea5a6a66ed14dc6e00cfd5db6700675a",
       "basis": "Original Momentum icon, documentation and version-bound schema/test fixtures only. lifecycle.py and all four shell entrypoints are byte-identical to the tested 0.1.1 tag. Separate synthetic runner integration validates these bytes; no new gameplay run is claimed."
+    },
+    {
+      "version": "0.1.3",
+      "digest": "sha256:46b358c89cc6ed2d40c58fd283229678ed05859ec5e5dde9a0ee851efbe7f9fc",
+      "basis": "Restores the original t00ny HOD2 icon with attribution and owner-approved distribution basis. Documentation and version-bound schema/test fixtures updated. lifecycle.py and all four shell entrypoints remain byte-identical to the tested 0.1.1 tag. Separate synthetic runner integration validates these bytes; no new gameplay run is claimed."
     }
   ],
   "provider": "flatpak",
