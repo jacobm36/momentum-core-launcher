@@ -11,7 +11,7 @@
     },
     {
       "version": "0.1.3",
-      "digest": "sha256:46b358c89cc6ed2d40c58fd283229678ed05859ec5e5dde9a0ee851efbe7f9fc",
+      "digest": "sha256:2dcab2d2c2f99ddcfdcb67d589636459902139948d2562905cc3295cea94b641",
       "basis": "Restores the original t00ny HOD2 icon with attribution and owner-approved distribution basis. Documentation and version-bound schema/test fixtures updated. lifecycle.py and all four shell entrypoints remain byte-identical to the tested 0.1.1 tag. Separate synthetic runner integration validates these bytes; no new gameplay run is claimed."
     }
   ],
