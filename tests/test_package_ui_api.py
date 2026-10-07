@@ -169,9 +169,14 @@ class PackageUiApi(Base):
                     self.assertFalse(detail["dependencies"]["flycast"]["capabilities_checked"])
                     flycast[key] = previous
             for package_id, version in (("untested-game", evidence["package_version"]),
-                                        (evidence["package_id"], "0.1.2")):
+                                        (evidence["package_id"], "99.0.0")):
                 with self.subTest(package_id=package_id, version=version):
                     self.assertFalse(self.inst.package_details(package_id, version)["install_enabled"])
+            for revision in evidence["derived_packages"]:
+                summary["digest"] = revision["digest"]
+                self.assertTrue(self.inst.package_details(evidence["package_id"], revision["version"])["install_enabled"])
+                self.assertFalse(self.inst.package_details(evidence["package_id"], evidence["package_version"])["install_enabled"])
+            summary["digest"] = evidence["package_digest"]
             summary["platform_issues"] = ["Unsupported platform"]
             self.assertFalse(self.inst.package_details(evidence["package_id"], evidence["package_version"])["install_enabled"])
             summary["platform_issues"] = []

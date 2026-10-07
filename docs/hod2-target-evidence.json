@@ -3,6 +3,13 @@
   "package_id": "the-house-of-the-dead-2",
   "package_version": "0.1.1",
   "package_digest": "sha256:1b6d80a851b550d03861863864f0aa87fe0886a126f470942441aa17415fe309",
+  "derived_packages": [
+    {
+      "version": "0.1.2",
+      "digest": "sha256:ee75c953277283f8a9d38662b13900f3ea5a6a66ed14dc6e00cfd5db6700675a",
+      "basis": "Original Momentum icon, documentation and version-bound schema/test fixtures only. lifecycle.py and all four shell entrypoints are byte-identical to the tested 0.1.1 tag. Separate synthetic runner integration validates these bytes; no new gameplay run is claimed."
+    }
+  ],
   "provider": "flatpak",
   "scope": "user",
   "app_id": "org.flycast.Flycast",

@@ -143,7 +143,7 @@ async function until(fn) {
   $("#idlg").close(); openPackages(); await tick();
   detail.install_enabled = true;
   await selectPackage("test-game", "1.0.0");
-  check($("#pdlg").textContent.includes("passed the target test"), "enabled target evidence explained");
+  check($("#pdlg").textContent.includes("supported by compatibility evidence"), "enabled target evidence explained");
   check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "enabled target still requires trust");
   detail.platform_issues = ["Wrong architecture"];
   await selectPackage("test-game", "1.0.0"); $("#pkg-trust").click();

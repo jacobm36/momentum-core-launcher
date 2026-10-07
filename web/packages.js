@@ -109,7 +109,7 @@ async function selectPackage(id, version) {
           : flycast.installed ? `Required software is installed (${esc(flycast.version || "version unknown")}). It will not be automatically upgraded.`
           : "Momentum will prepare the software this game needs. Review required downloads first; after compatibility checks, review the game files in the same setup job."}</p>
         <p class="pkg-warning">${detail.install_enabled
-          ? "This game package and required software passed the target test. Installation still requires review and approval of this plan; confirm gameplay for your installation afterward."
+          ? "This game setup is supported by compatibility evidence. Installation still requires review and approval of this plan; confirm gameplay for your installation afterward."
           : "Only the tested HOD2 package and verified software build are enabled. Momentum checks compatibility before changing game files."}</p>
         <details><summary>Technical software details</summary>${packageJson(flycast)}</details>` : ""}
       <form id="pkg-setup">

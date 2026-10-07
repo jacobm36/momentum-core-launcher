@@ -291,7 +291,7 @@ class Jobs:
             if ((j.get("meta") or {}).get("kind") == "install" and not j["meta"].get("install_enabled")
                     and (out.get("plan") or {}).get("operation") != "prepare-dependency"):
                 out["approval_blocked"] = ("This package/emulator build lacks matching target evidence. "
-                                           "Installation is currently enabled only for tested HOD2 0.1.1 "
+                                           "Installation is currently enabled only for approved HOD2 packages "
                                            "with the verified user-scope Flycast v2.7 build.")
             if (j.get("meta") or {}).get("kind") == "dependency" and j["status"] in FINISHED:
                 try:

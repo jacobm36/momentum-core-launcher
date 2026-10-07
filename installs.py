@@ -199,9 +199,10 @@ class Installs:
             facts["flycast"] = self._flycast_facts(req)
         evidence = json.loads((Path(__file__).parent / "docs/hod2-target-evidence.json").read_text())
         flycast = facts.get("flycast", {})
+        approved_packages = [(evidence["package_version"], evidence["package_digest"])]
+        approved_packages.extend((p["version"], p["digest"]) for p in evidence.get("derived_packages", []))
         supported = (
-            package_id == evidence["package_id"] and version == evidence["package_version"]
-            and summary["digest"] == evidence["package_digest"]
+            package_id == evidence["package_id"] and (version, summary["digest"]) in approved_packages
             and not summary["platform_issues"])
         enabled = (
             supported
@@ -210,7 +211,9 @@ class Installs:
             and flycast.get("commit") == evidence["emulator_commit"])
         if enabled:
             flycast["capabilities_checked"] = True
-            flycast["capability_note"] = "This exact HOD2 package and Flycast build passed the isolated target test."
+            flycast["capability_note"] = (
+                "HOD2 gameplay was validated on this Flycast build. Approved artwork-only package revisions "
+                "inherit unchanged executable-code evidence; confirm gameplay for each installation.")
             flycast["capability_evidence"] = "docs/hod2-target-evidence.json"
         return dict(summary, manifest=man, home_games=str(Path.home() / "Games"), dependencies=facts,
                     install_enabled=enabled, package_supported=supported)
@@ -372,7 +375,7 @@ class Installs:
                 if preparing and not detail["package_supported"]:
                     return "This game package lacks matching target evidence"
                 if not preparing and (not meta.get("install_enabled") or not detail["install_enabled"]):
-                    return ("Game installation is enabled only for tested HOD2 0.1.1 with the verified user-scope "
+                    return ("Game installation is enabled only for approved HOD2 packages with the verified user-scope "
                             "Flycast v2.7 build. Current package/build lacks matching capability evidence.")
                 if self._load_receipt(meta["package_id"]) != previous:
                     return "Installation receipt changed since preflight; cancel and review a new job"
