@@ -51,9 +51,9 @@ shows you the installation plan before making approved changes. Your original ga
 untouched. Local package ZIPs can also be imported through **Advanced**.
 
 **Bring your games; Momentum brings the setup.** Packages contain no game data, ROMs or BIOS
-files. The catalog currently starts with *The House of the Dead 2*—mouse aiming, zombie chaos
-and plenty of clicking. More titles can join as their packages are built and tested; updates
-are not installed automatically.
+files. The catalog includes *The House of the Dead 2*, *Virtua Cop 2*, *Star Wars Trilogy
+Arcade* and *L.A. Machineguns*. The three new arcade installers are verified, with gameplay
+confirmation still required. Updates are not installed automatically.
 
 ## Your data stays local
 
@@ -66,13 +66,13 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
 - Built-in notifications (N), background jobs (I) and backup/restore (B); see the user guide. Jobs keep running after the launcher closes.
 - Tests: `python3 -m unittest discover -s tests`.
 - Headless package UI tests (Chrome/Chromium): `MCL_BROWSER_TESTS=1 python3 -m unittest tests.test_package_ui_browser`.
-- Live public catalog/download-to-install GUI test: `MCL_CATALOG_TESTS=1 python3 -m unittest tests.test_catalog_live_browser` (Chrome/Chromium, internet access, temporary storage, synthetic media and a fake emulator; never touches your real game installation).
+- Live public catalog/download-to-install GUI tests: `MCL_CATALOG_TESTS=1 python3 -m unittest tests.test_catalog_live_browser` (Chrome/Chromium, internet access, temporary storage, synthetic media, fake Flycast and isolated copies of pinned Supermodel; no game launches or changes to your real installation).
 - Arcade installer/receipt tests: `MCL_ARCADE_TESTS=1 python3 -m unittest tests.test_arcade_installs`
   (built packages in the sibling package repository, exact Supermodel installation, temporary storage,
   synthetic game files; native missing-software test downloads the pinned official runtime).
 - Package check (Package Contract v1): `python3 packages.py check <folder-or-zip>`; nothing in the package is run.
 - **Add game** loads the small public catalog from
-  [momentum-distribution](https://github.com/jacobm36/momentum-distribution). Choose HOD2 to download
+  [momentum-distribution](https://github.com/jacobm36/momentum-distribution). Choose a game to download
   a fixed installer release, then locate your own game files, review and install.
   **Choose folder...** opens a native Zenity/KDialog folder picker for source and destination
   directories; typed/pasted paths remain available, and cancellation preserves the current path.
@@ -86,8 +86,8 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
   exact changes, backups, dependencies and manual setup. Unsupported platforms are blocked.
   Installation is enabled for the tested HOD2 0.1.1 package, its approved artwork revisions 0.1.2 and 0.1.3, and user-scope Flycast v2.7
   build recorded in [target evidence](docs/hod2-target-evidence.json). A different package digest
-  or emulator build stays gated. Detection alone is not capability evidence. Work is scoped to
-  this HOD2 flow, not a general-purpose package manager.
+  or emulator build stays gated. Detection alone is not capability evidence. Support is scoped
+  to the explicitly verified game installers, not a general-purpose package manager.
   Versions 0.1.2 and 0.1.3 inherit gameplay evidence from byte-identical installer code; these are not new gameplay tests.
   Version 0.1.3 restores the original t00ny HOD2 icon with attribution; custom artwork and Steam lookup remain available.
   **Advanced → Add an existing game manually...** retains the original library editor.
