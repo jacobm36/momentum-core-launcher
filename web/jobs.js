@@ -6,7 +6,7 @@ function handleJobs(list) {
   for (const j of jobs) {
     const prev = jobState[j.id]; jobState[j.id] = j.status;
     if (!jobsReady || prev === j.status || !prev) continue;
-    if (j.status === "succeeded") { notify(j.kind === "dependency" ? "Required software prepared. No game installed." : j.readiness === "setup-required" ? `${j.title} installed; manual setup is still required.` : `${j.title} finished.`, { kind: "ok", title: j.kind === "dependency" ? "Software prepared" : "Install complete" }); sfx("ok"); }
+    if (j.status === "succeeded") { notify(j.kind === "download" ? "Installer ready. Continue setup to choose your game files." : j.kind === "dependency" ? "Required software prepared. No game installed." : j.readiness === "setup-required" ? `${j.title} installed; manual setup is still required.` : `${j.title} finished.`, { kind: "ok", title: j.kind === "download" ? "Ready to set up" : j.kind === "dependency" ? "Software prepared" : "Install complete" }); sfx("ok"); }
     else if (j.status === "failed") { notify(j.error || "A step failed.", { kind: "error", title: `${j.title} failed` }); sfx("err"); }
     else if (j.status === "interrupted") notify(j.error || "Stopped unexpectedly. You can retry it.", { kind: "warn", title: j.title });
     else if (j.status === "awaiting-approval") notify("Review the plan and approve it to continue.", { kind: "warn", title: j.title });
@@ -28,6 +28,7 @@ function jobSub(j) {
   if (j.error) return j.error;
   if (j.status === "needs-action" && j.actions.length) return j.actions.map(a => a.message).join(" ");
   if (j.status === "awaiting-approval") return "Waiting for your approval.";
+  if (j.status === "succeeded" && j.kind === "download") return "Installer ready. No game installed yet.";
   if (j.status === "succeeded" && j.kind === "dependency") return "Required software prepared. No game installed.";
   if (j.installation === "installed" && j.readiness === "setup-required") return `Installed - setup required. ${(j.actions || []).map(a => a.message).join(" ")}`;
   const p = j.progress;
@@ -45,7 +46,7 @@ function renderJobs(force) {
       : jobActive(j) ? `<button type="button" data-a="cancel">Cancel</button>`
       : j.status === "awaiting-approval" ? `<button type="button" data-a="review">Review plan</button><button type="button" data-a="cancel">Cancel</button>`
       : j.surviving ? ""
-      : `${j.status === "succeeded" || j.manual ? "" : '<button type="button" data-a="retry">Retry</button>'}<button type="button" data-a="dismiss">Dismiss</button>`;
+      : `${j.kind === "download" && j.status === "succeeded" ? '<button type="button" data-a="setup">Continue setup</button>' : ""}${j.status === "succeeded" || j.manual ? "" : '<button type="button" data-a="retry">Retry</button>'}<button type="button" data-a="dismiss">Dismiss</button>`;
     return `<div class="job ${esc(j.status)}" data-id="${esc(j.id)}">
       <div class="jhead"><b>${esc(j.title)}</b><span class="jstat">${esc(jobLabel(j.status))}</span></div>
       <div class="jbar ${jobActive(j) && !(j.progress?.total > 0) ? "indeterminate" : ""}" aria-label="Current step progress"><i style="width:${jobPct(j)}%"></i></div>
@@ -74,7 +75,7 @@ function openJobs() {
   openLog = null;
   d.innerHTML = `<h2>Installs &amp; jobs</h2><div class="jlist"></div>
     <div class="padhint pad-only"><kbd>A</kbd>Choose <kbd>B</kbd>Close</div>
-    <div class="btns"><button type="button" id="ipackages">Install package...</button><button type="button" id="iclose" class="primary" autofocus>Close</button></div>`;
+    <div class="btns"><button type="button" id="ipackages">Add game...</button><button type="button" id="iclose" class="primary" autofocus>Close</button></div>`;
   d.onclick = async e => {
     if (e.target.id === "iclose") return d.close();
     if (e.target.id === "ipackages") return openPackages();
@@ -82,6 +83,11 @@ function openJobs() {
     const id = b.closest(".job").dataset.id, a = b.dataset.a;
     if (a === "log") { openLog = openLog === id ? null : id; return renderJobs(); }
     if (a === "review") return reviewPackagePlan(id);
+    if (a === "setup") {
+      const job = jobs.find(j => j.id === id);
+      openPackages();
+      return selectPackage(job.package_id, job.package_version);
+    }
     b.disabled = true;
     try {
       const r = await post(`/api/jobs/${id}/${a}`);

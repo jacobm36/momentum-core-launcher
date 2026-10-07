@@ -15,6 +15,7 @@ from unittest import mock
 
 from tests.test_packages import Base, manifest, package_files
 import installs
+import catalog
 import jobs
 import server
 
@@ -94,6 +95,22 @@ class PackageUiApi(Base):
         self.assertEqual(detail["manifest"]["inputs"], manifest()["inputs"])
         self.assertFalse(self.runner.list())
         self.assertEqual(self.request("/api/packages/import-upload", b"not a zip", raw=True)[0], 400)
+
+    def test_catalog_and_download_routes_are_game_focused_and_token_protected(self):
+        with mock.patch("catalog.load", return_value={"catalog_version": 1, "games": []}):
+            self.assertEqual(self.request("/api/catalog"), (200, {"catalog_version": 1, "games": []}))
+        with mock.patch("catalog.load", side_effect=catalog.CatalogError("offline")):
+            self.assertEqual(self.request("/api/catalog"), (502, {"error": "offline"}))
+        with mock.patch("catalog.submit", return_value="j00000001") as submit:
+            status, data = self.request("/api/packages/download", {"id": "the-house-of-the-dead-2"})
+            self.assertEqual((status, data), (200, {"id": "j00000001"}))
+            submit.assert_called_once_with(self.app, self.runner, "the-house-of-the-dead-2")
+            req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/packages/download",
+                                         json.dumps({"id": "the-house-of-the-dead-2"}).encode())
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(req)
+            self.assertEqual(error.exception.code, 403)
+            self.assertEqual(submit.call_count, 1)
 
     def test_trust_and_platform_are_enforced_before_scripts(self):
         data = self.upload()

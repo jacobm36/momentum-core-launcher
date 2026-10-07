@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Isolated catalog installation test</title>
+<link rel="stylesheet" href="/web/style.css"></head><body>
+<button id="jobsbtn">Jobs</button>
+<dialog id="dlg"></dialog><dialog id="odlg"></dialog><dialog id="qdlg"></dialog>
+<dialog id="gdlg"></dialog><dialog id="bdlg"></dialog><dialog id="idlg"></dialog>
+<dialog id="ndlg"></dialog><dialog id="sdlg"></dialog><dialog id="pdlg"></dialog><dialog id="rdlg"></dialog>
+<pre id="result">RUNNING</pre>
+<script>function sfx() {} function notify() {} function renderList() {} function renderDetail() {}</script>
+<script src="/web/core.js"></script><script src="/web/gamepad.js"></script>
+<script src="/web/actions.js"></script><script src="/web/jobs.js"></script><script src="/web/packages.js"></script>
+<script>
+async function refresh() {
+  const data = await packageResponse(await fetch("/api/games"));
+  token = data.token; games = data.games; handleJobs(data.jobs);
+}
+function check(value, message) { if (!value) throw new Error(message); }
+async function until(fn) {
+  for (let i = 0; i < 1000; i++) {
+    if (fn()) return;
+    await refresh();
+    const error = document.querySelector("#pdlg .pkg-error:not([hidden]), #rdlg .pkg-error:not([hidden])");
+    if (error) throw new Error(error.textContent);
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw new Error("Timed out waiting for game setup");
+}
+(async () => {
+  await refresh(); editor();
+  await until(() => document.querySelector("[data-game=the-house-of-the-dead-2]"));
+  check(!$("#catalog-advanced").open, "advanced options collapsed");
+  $("[data-game=the-house-of-the-dead-2]").click();
+  await until(() => $("#pkg-setup"));
+  check(!$("#pkg-trust").checked && $("#pkg-preflight").disabled, "download cannot authorize installer scripts");
+  check(jobs.some(j => j.kind === "download" && j.status === "succeeded"), "actual download job finished");
+  check(games.length === 0, "download did not install a game");
+  $("#pkg-input-source_dir").value = SOURCE_DIRECTORY;
+  check($("#pkg-destination").textContent.startsWith(GAMES_ROOT), "isolated destination shown");
+  $("#pkg-trust").click(); $("#pkg-setup").requestSubmit();
+  await until(() => jobs.some(j => j.kind === "install" && j.status === "awaiting-approval"));
+  const job = jobs.find(j => j.kind === "install");
+  await reviewPackagePlan(job.id);
+  check($("#plan-approve").disabled, "exact plan requires separate consent");
+  $("#plan-consent").click(); $("#plan-approve").click();
+  await until(() => jobs.find(j => j.id === job.id)?.status === "succeeded");
+  await refresh();
+  check(games.length === 1 && games[0].name === "The House of the Dead 2", "game added to real temporary catalog");
+  check(jobSub(jobs.find(j => j.id === job.id)).includes("setup required"), "gameplay confirmation still required");
+  $("#idlg").close();
+  document.querySelector("#result").textContent = "PASS: public catalog, anonymous download, validated intake, GUI setup, exact approval and receipt/catalog publication";
+})().catch(error => { document.querySelector("#result").textContent = "FAIL: " + error.stack; });
+</script></body></html>

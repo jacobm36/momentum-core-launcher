@@ -7,6 +7,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import backup
+import catalog
 import installs
 import packages
 from jobs import Jobs, RunnerBusy
@@ -356,6 +357,11 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"backups": backup.list_backups(HERE)})
         if path == "/api/packages":
             return self._json({"packages": packages.list_packages(HERE)})
+        if path == "/api/catalog":
+            try:
+                return self._json(catalog.load())
+            except catalog.CatalogError as e:
+                return self._json({"error": str(e)}, 502)
         m = re.fullmatch(r"/api/packages/([a-z0-9-]+)/([^/]+)", path)
         if m:
             try:
@@ -573,6 +579,11 @@ class Handler(SimpleHTTPRequestHandler):
                 if not isinstance(src, str) or not os.path.isabs(src):
                     return self._json({"error": "an absolute folder or ZIP path is required"}, 400)
                 return self._json(packages.import_package(src, HERE))
+            if path == "/api/packages/download":
+                try:
+                    return self._json({"id": catalog.submit(HERE, JOBS, data.get("id"))})
+                except catalog.CatalogError as e:
+                    return self._json({"error": str(e)}, 400)
             if path == "/api/packages/install":
                 if not INSTALLS:
                     return self._json({"error": "install support is unavailable"}, 503)

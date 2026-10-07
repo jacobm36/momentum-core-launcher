@@ -10,6 +10,7 @@
 function sfx() {}
 function notify() {}
 let submitted = [], failApprove = false, blockApproval = true, importFailed = false;
+let catalogOffline = false, installerReady = true, downloadStatus = "succeeded";
 const digest = "sha256:" + "a".repeat(64), jobDigest = "sha256:" + "b".repeat(64);
 const summary = { id: "test-game", version: "1.0.0", name: "<img src=x onerror='throw 1'> Test", digest, platform_issues: [] };
 const detail = { ...summary, home_games: "/home/test/Games",
@@ -29,7 +30,14 @@ const plan = { ...job, plan: { game_directory: "/home/test/Games/Test",
   state_destinations: ["/home/test/state"], manual_actions: [{ message: "Confirm aiming and fullscreen" }] }};
 function reply(data, status = 200) { return Promise.resolve(new Response(JSON.stringify(data), { status })); }
 fetch = async path => {
-  if (path === "/api/packages") return reply({ packages: [summary] });
+  if (path === "/api/packages") return reply({ packages: installerReady ? [summary] : [] });
+  if (path === "/api/catalog") return catalogOffline ? reply({ error: "Cannot load available games: offline" }, 502)
+    : reply({ catalog_version: 1, games: [{
+      ...summary, description: "Bring your own game files.", icon_url: "/web/icon.svg"
+    }] });
+  if (path === "/api/jobs/j00000002") return reply({ id: "j00000002", kind: "download", status: downloadStatus,
+    package_id: "test-game", package_version: "1.0.0", progress: { current: 50, total: 100 },
+    error: downloadStatus === "failed" ? "Checksum mismatch" : null });
   if (path === "/api/packages/test-game/1.0.0") return reply(detail);
   if (path.startsWith("/api/jobs/")) return reply({ ...plan,
     ...(blockApproval ? { approval_blocked: "Session 5 capability checks required" } : {}) });
@@ -40,9 +48,10 @@ async function post(path, body, raw) {
   if (path === "/api/packages/import-upload") return importFailed ? reply({ error: "Invalid ZIP" }, 400) : reply(summary);
   if (path === "/api/packages/import") return reply(summary);
   if (path === "/api/packages/install") return reply({ id: job.id });
+  if (path === "/api/packages/download") return reply({ id: "j00000002" });
   if (path === "/api/dependencies/flycast/prepare") return reply({ id: job.id });
   if (path.endsWith("/approve")) return failApprove ? reply({ error: "The plan changed; review it again" }, 409) : reply({ status: "approve" });
-  if (path.endsWith("/cancel")) return reply({ status: "cancel" });
+  if (path.endsWith("/cancel")) { if (path === "/api/jobs/j00000002/cancel") downloadStatus = "cancelled"; return reply({ status: "cancel" }); }
   throw new Error("Unexpected POST " + path);
 }
 async function refresh() { handleJobs([job]); }
@@ -61,6 +70,48 @@ async function until(fn) {
   openJobs(); $("#ipackages").click(); await tick();
   check(!$("#iprepare"), "no standalone emulator decision");
   check(topDlg().id === "pdlg", "package dialog has controller focus");
+  await until(() => $("[data-game]"));
+  check(!$("#catalog-advanced").open, "manual import and existing-game editor are advanced options");
+  check($("#catalog-games h3").textContent === summary.name, "catalog metadata escaped");
+  check($("#catalog-games img").getAttribute("src") === "/web/icon.svg", "catalog card artwork only");
+  check($("[data-game]").textContent.includes("Continue setup"), "validated imported installer reuses setup");
+  $("[data-game]").click(); await until(() => $("#pkg-setup"));
+  check($("#pkg-preflight").disabled, "catalog selection never skips trust");
+  $("#pkg-back").click(); await until(() => $("[data-game]"));
+  installerReady = false;
+  $("#catalog-retry").click(); await until(() => !$("#catalog-retry").disabled);
+  downloadStatus = "failed"; $("[data-game]").click();
+  await until(() => !$("#pdlg .pkg-error").hidden);
+  check($("#pdlg .pkg-error").textContent.includes("Checksum mismatch"), "download error visible");
+  downloadStatus = "running"; $("[data-game]").click();
+  await until(() => $("#catalog-progress").value === 50);
+  check($("#pdlg .pkg-error").hidden, "retry clears previous download error");
+  $("#catalog-cancel").click(); await until(() => downloadStatus === "cancelled");
+  followDownload("j00000002");
+  await until(() => !$("#pdlg .pkg-error").hidden);
+  check($("#pdlg .pkg-error").textContent.includes("cancelled"), "cancellation allows retry");
+  downloadStatus = "running"; $("[data-game]").click();
+  await until(() => !$("#catalog-download").hidden);
+  check(!$("#catalog-cancel").disabled, "a retried download can also be cancelled");
+  $("#pkg-close").click();
+  check(downloadStatus === "running", "closing dialog leaves background download running");
+  openPackages(); await until(() => $("[data-game]"));
+  $("[data-game]").click(); await until(() => !$("#catalog-download").hidden);
+  check($("#catalog-progress").value === 50, "reopening can follow the existing download");
+  $("#pkg-close").click(); openPackages(); await until(() => $("[data-game]"));
+  downloadStatus = "succeeded"; $("[data-game]").click();
+  await until(() => $("#pkg-setup"));
+  check(submitted.some(s => s.path === "/api/packages/download" && s.body.id === "test-game"), "game choice requests pinned backend download");
+  check(!submitted.some(s => s.path === "/api/packages/install"), "download never runs install");
+  $("#pkg-back").click(); await until(() => $("[data-game]"));
+  catalogOffline = true; $("#catalog-retry").click();
+  await until(() => !$("#catalog-retry").disabled);
+  check($("#pdlg .pkg-error").textContent.includes("offline"), "offline catalog error visible");
+  check($("#catalog-import"), "offline retains manual import");
+  catalogOffline = false; installerReady = true;
+  await until(() => $("#catalog-import"));
+  $("#catalog-advanced").open = true;
+  $("#catalog-import").click(); await tick();
   check(!$("#pdlg img"), "package metadata is escaped");
   $("#pkg-path").value = "/home/test/package-folder"; $("#pkg-import-path").click();
   await until(() => !$("#pkg-import-path").disabled);

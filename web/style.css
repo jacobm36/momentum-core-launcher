@@ -302,6 +302,11 @@ body.noanim #flash{display:none}
 #pdlg button:disabled,#rdlg button:disabled{opacity:.45;cursor:not-allowed}
 #pdlg .pkg-check,#rdlg .pkg-check{display:flex;align-items:flex-start;gap:10px;margin:16px 0;color:var(--fg);font-size:14px}
 .pkg-check input{flex-shrink:0}
+.catalog-card{display:flex;gap:20px;align-items:center;padding:20px 0}
+.catalog-card img{width:96px;height:96px;object-fit:contain;border-radius:12px;flex-shrink:0}
+.catalog-card h3{margin:0 0 8px}
+.catalog-card .bnote{margin:0 0 16px}
+#catalog-progress{display:block;width:100%;margin:16px 0;accent-color:var(--blue)}
 .pkg-row{display:flex;justify-content:space-between;gap:12px;align-items:center;border-bottom:1px solid var(--line);padding:12px 0}
 .pkg-row .bsub{display:block;margin-top:5px}
 .pkg-error{color:#ff8096}

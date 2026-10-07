@@ -259,6 +259,8 @@ class Jobs:
             cur = next((s["name"] for s in steps if s["status"] != "done"), None)
         return {"id": j["id"], "title": j["title"], "game": j.get("game"), "status": j["status"],
                 "kind": (j.get("meta") or {}).get("kind"),
+                **({k: j["meta"][k] for k in ("package_id", "package_version")}
+                   if (j.get("meta") or {}).get("kind") == "download" else {}),
                 "installation": j.get("installation"), "readiness": j.get("readiness"),
                 "done": done, "total": len(steps), "step": cur, "error": j.get("error"),
                 "progress": run.get("progress") if run else None, "actions": j.get("actions") or [],

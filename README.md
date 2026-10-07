@@ -38,8 +38,17 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
 - Built-in notifications (N), background jobs (I) and backup/restore (B); see the user guide. Jobs keep running after the launcher closes.
 - Tests: `python3 -m unittest discover -s tests`.
 - Headless package UI tests (Chrome/Chromium): `MCL_BROWSER_TESTS=1 python3 -m unittest tests.test_package_ui_browser`.
+- Live public catalog/download-to-install GUI test: `MCL_CATALOG_TESTS=1 python3 -m unittest tests.test_catalog_live_browser` (Chrome/Chromium, internet access, temporary storage, synthetic media and a fake emulator; never touches your real game installation).
 - Package check (Package Contract v1): `python3 packages.py check <folder-or-zip>`; nothing in the package is run.
-- Local package UI: open **Installs & jobs (I) → Install package...** to import a ZIP or local
+- **Add game** loads the small public catalog from
+  [momentum-distribution](https://github.com/jacobm36/momentum-distribution). Choose HOD2 to download
+  its fixed installer release, then locate your own game files, review and install.
+  No GitHub sign-in is needed. ZIP size/SHA-256, package identity/digest and platform are checked
+  before import; downloading never runs installer code. Downloads are background jobs with
+  progress, cancellation and retry. After closing/reopening, choose **Continue setup** in
+  **Installs & jobs**, or select the game again. Offline errors are explicit; existing local
+  packages remain accessible under **Advanced**. No automatic updates.
+- Local package UI: open **Add game → Advanced → Import a local package...** to import a ZIP or local
   package folder, review trust/test evidence, enter paths and run preflight. **Review plan** shows
   exact changes, backups, dependencies and manual setup. Unsupported platforms are blocked.
   Installation is enabled for the tested HOD2 0.1.1 package, its approved artwork revisions 0.1.2 and 0.1.3, and user-scope Flycast v2.7
@@ -48,7 +57,7 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
   this HOD2 flow, not a general-purpose package manager.
   Versions 0.1.2 and 0.1.3 inherit gameplay evidence from byte-identical installer code; these are not new gameplay tests.
   Version 0.1.3 restores the original t00ny HOD2 icon with attribution; custom artwork and Steam lookup remain available.
-  A remote download catalog is separate future work.
+  **Advanced → Add an existing game manually...** retains the original library editor.
 - Game setup selects its required software automatically; users do not choose an emulator.
   If software is missing, the same game job first requests approval for required downloads,
   checks the installed build, then presents the game-file plan for approval. Detection is read-only.

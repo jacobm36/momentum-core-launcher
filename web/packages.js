@@ -1,4 +1,4 @@
-// Local package intake, trust, input collection and exact-plan review.
+// Game catalog, validated downloads, local intake and exact-plan review.
 async function packageResponse(response) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "The package request failed.");
@@ -11,6 +11,113 @@ function packageError(d, error) {
 }
 const packageJson = value => `<pre class="pkg-json">${esc(JSON.stringify(value, null, 2))}</pre>`;
 let selectedPackage = null;
+let downloadPoll = null;
+
+function openPackages() {
+  const d = $("#pdlg");
+  if (d.open) return;
+  selectedPackage = null;
+  d.innerHTML = `<h2>Add game</h2>
+    <p class="bnote">Choose a game. Momentum gets its installer; you provide your game files.</p>
+    <p class="pkg-error" role="alert" hidden></p>
+    <div id="catalog-games"><p class="bnote">Loading available games...</p></div>
+    <div id="catalog-download" hidden><p id="catalog-status" role="status"></p>
+      <progress id="catalog-progress" aria-label="Installer download progress"></progress>
+      <button type="button" id="catalog-cancel">Cancel download</button></div>
+    <details id="catalog-advanced"><summary>Advanced</summary><div class="btns">
+      <button type="button" id="catalog-import">Import a local package...</button>
+      <button type="button" id="catalog-manual">Add an existing game manually...</button></div></details>
+    <div class="btns"><button type="button" id="catalog-retry">Refresh games</button>
+      <button type="button" id="pkg-close" autofocus>Close</button></div>`;
+  d.onclick = e => {
+    if (e.target.id === "pkg-close") d.close();
+    if (e.target.id === "catalog-retry") loadGameCatalog();
+    if (e.target.id === "catalog-import") { d.close(); openImportedPackages(); }
+    if (e.target.id === "catalog-manual") { d.close(); editor(null, true); }
+  };
+  d.onclose = () => { clearTimeout(downloadPoll); selectedPackage = null; };
+  d.showModal(); sfx("open");
+  loadGameCatalog();
+}
+
+async function loadGameCatalog() {
+  const d = $("#pdlg"), list = d.querySelector("#catalog-games");
+  if (!list) return;
+  const retry = d.querySelector("#catalog-retry");
+  retry.disabled = true;
+  d.querySelector(".pkg-error").hidden = true;
+  try {
+    const [catalog, imported] = await Promise.all([
+      fetch("/api/catalog").then(packageResponse), fetch("/api/packages").then(packageResponse)
+    ]);
+    if (!d.open || !list.isConnected) return;
+    list.innerHTML = catalog.games.length ? catalog.games.map(g => {
+      const ready = imported.packages.some(p => p.id === g.id && p.version === g.version && p.digest === g.digest);
+      return `<article class="catalog-card"><img src="${esc(g.icon_url)}" alt="" referrerpolicy="no-referrer">
+        <div><h3>${esc(g.name)}</h3><p class="bnote">${esc(g.description)}</p>
+        ${g.platform_issues.length ? `<p class="pkg-warning">${esc(g.platform_issues.join("; "))}</p>` : ""}
+        <button type="button" class="primary" data-game="${esc(g.id)}" ${g.platform_issues.length ? "disabled" : ""}>
+          ${ready ? "Continue setup" : "Set up game"}</button></div></article>`;
+    }).join("") : '<p class="sempty">No games available yet.</p>';
+    list.onclick = async e => {
+      const button = e.target.closest("[data-game]"); if (!button || button.disabled) return;
+      const game = catalog.games.find(g => g.id === button.dataset.game);
+      const ready = imported.packages.some(p => p.id === game.id && p.version === game.version && p.digest === game.digest);
+      if (ready) return selectPackage(game.id, game.version);
+      button.disabled = true;
+      try {
+        const job = await packageResponse(await post("/api/packages/download", { id: game.id }));
+        if (d.open && list.isConnected) followDownload(job.id);
+      } catch (error) { packageError(d, error); }
+      finally { if (button.isConnected) button.disabled = false; }
+    };
+  } catch (error) {
+    if (list.isConnected) { list.innerHTML = ""; packageError(d, error); }
+  } finally { if (retry.isConnected) retry.disabled = false; }
+}
+
+function followDownload(id) {
+  const d = $("#pdlg"), panel = d.querySelector("#catalog-download");
+  if (!panel) return;
+  clearTimeout(downloadPoll);
+  panel.hidden = false;
+  d.querySelector(".pkg-error").hidden = true;
+  d.querySelector("#catalog-games").hidden = true;
+  d.querySelector("#catalog-advanced").hidden = true;
+  d.querySelector("#catalog-retry").hidden = true;
+  const cancel = d.querySelector("#catalog-cancel");
+  cancel.disabled = false;
+  cancel.onclick = async () => {
+    cancel.disabled = true;
+    try { await packageResponse(await post(`/api/jobs/${id}/cancel`)); }
+    catch (error) { packageError(d, error); cancel.disabled = false; }
+  };
+  const poll = async () => {
+    if (!d.open || !panel.isConnected) return;
+    try {
+      const job = await packageResponse(await fetch(`/api/jobs/${id}`));
+      if (!d.open || !panel.isConnected) return;
+      if (job.status === "succeeded") return selectPackage(job.package_id, job.package_version);
+      if (["failed", "interrupted", "cancelled"].includes(job.status)) {
+        throw new Error(job.error || (job.status === "cancelled" ? "Download cancelled. You can try again." : "Download stopped. You can retry in Installs & jobs."));
+      }
+      d.querySelector("#catalog-status").textContent = job.status === "cancel-requested"
+        ? "Cancelling download..." : "Getting your game installer. No installation changes are being made.";
+      const progress = d.querySelector("#catalog-progress");
+      if (job.progress?.total > 0) { progress.max = job.progress.total; progress.value = job.progress.current; }
+      else progress.removeAttribute("value");
+      downloadPoll = setTimeout(poll, 500);
+    } catch (error) {
+      if (!panel.isConnected) return;
+      panel.hidden = true;
+      d.querySelector("#catalog-games").hidden = false;
+      d.querySelector("#catalog-advanced").hidden = false;
+      d.querySelector("#catalog-retry").hidden = false;
+      packageError(d, error);
+    }
+  };
+  poll();
+}
 
 async function loadPackages() {
   const d = $("#pdlg");
@@ -24,13 +131,13 @@ async function loadPackages() {
     ).join("") : '<p class="sempty">No packages imported. Choose a ZIP or enter a local package folder.</p>';
   } catch (error) { packageError(d, error); }
 }
-function openPackages() {
+function openImportedPackages() {
   const d = $("#pdlg");
   if (d.open) return;
   selectedPackage = null;
   d.innerHTML = `<h2>Install packages</h2>
     <p class="bnote">Download a package ZIP from a publisher you trust, then import it here.
-    Packages contain installers, not game files. A built-in download catalog is planned separately.</p>
+    Packages contain installers, not game files. Use Add game for automatic downloads.</p>
     <p class="pkg-warning">Import only checks and copies the package. No scripts run until you approve trust and request preflight.</p>
     <p class="pkg-error" role="alert" hidden></p>
     <div class="pkg-import"><button type="button" id="pkg-zip">Choose package ZIP...</button>
@@ -38,10 +145,11 @@ function openPackages() {
       <label>Or an absolute local folder / ZIP path<input id="pkg-path" placeholder="/home/you/Downloads/package" autocomplete="off"></label>
       <button type="button" id="pkg-import-path">Import path</button></div>
     <h3>Imported packages</h3><div class="pkg-list"><p class="bnote">Loading...</p></div>
-    <div class="btns"><button type="button" id="pkg-close" autofocus>Close</button></div>`;
+    <div class="btns"><button type="button" id="pkg-catalog">Back to games</button><button type="button" id="pkg-close" autofocus>Close</button></div>`;
   d.onclick = async e => {
     const b = e.target.closest("button"); if (!b) return;
     if (b.id === "pkg-close") return d.close();
+    if (b.id === "pkg-catalog") { d.close(); return openPackages(); }
     if (b.id === "pkg-zip") return d.querySelector("#pkg-file").click();
     if (b.dataset.package) return selectPackage(b.dataset.package, b.dataset.version);
     if (b.id !== "pkg-import-path") return;
