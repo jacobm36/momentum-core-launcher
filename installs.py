@@ -27,6 +27,9 @@ ART_FIELDS = ("icon", "cover", "video", "screenshots")
 OWNERSHIP = {"managed", "borrowed", "user-state", "shared-dependency"}
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
+RUNTIME_RESOLVERS = {
+    "flycast": dependencies, "supermodel": supermodel, "vkquake": vkquake, "uzdoom": uzdoom,
+}
 
 
 class InstallError(ValueError):
@@ -197,35 +200,29 @@ class Installs:
         man = json.loads((snap / "package.json").read_text())
         facts = {}
         for req in man["requires"]:
-            if req["id"] == "supermodel":
+            runtime = req["id"]
+            if runtime == "flycast":
+                facts[runtime] = self._flycast_facts(req)
+                continue
+            if runtime == "supermodel":
                 if (req.get("provider"), req.get("scope"), req.get("source"), req.get("tested_version")) != (
                         "native", "user", "github:trzy/Supermodel", supermodel.VERSION):
                     raise InstallError("Only the pinned official user-scope Supermodel build is supported")
-                try:
-                    facts["supermodel"] = supermodel.detect()
-                except dependencies.DependencyError as e:
-                    raise InstallError(str(e)) from e
-            elif req["id"] == "vkquake":
+            elif runtime == "vkquake":
                 if (req.get("provider"), req.get("scope"), req.get("source"), req.get("tested_version")) != (
                         "appimage", "user", "github:Novum/vkQuake", vkquake.VERSION):
                     raise InstallError("Only the pinned official user-scope vkQuake AppImage is supported")
-                try:
-                    facts["vkquake"] = vkquake.detect()
-                except dependencies.DependencyError as e:
-                    raise InstallError(str(e)) from e
-            elif req["id"] == "uzdoom":
+            elif runtime == "uzdoom":
                 if (req.get("provider"), req.get("scope"), req.get("source"), req.get("app_id"),
                         req.get("tested_version")) != (
                         "flatpak", "user", "flathub", uzdoom.APP, "5.0.1"):
                     raise InstallError("Only the approved Flathub UZDoom setup is supported")
-                try:
-                    facts["uzdoom"] = uzdoom.detect()
-                except dependencies.DependencyError as e:
-                    raise InstallError(str(e)) from e
-            elif req["id"] == "flycast":
-                facts["flycast"] = self._flycast_facts(req)
             else:
-                raise InstallError(f"Unsupported dependency resolver: {req['id']}")
+                raise InstallError(f"Unsupported dependency resolver: {runtime}")
+            try:
+                facts[runtime] = RUNTIME_RESOLVERS[runtime].detect()
+            except dependencies.DependencyError as e:
+                raise InstallError(str(e)) from e
         evidence = json.loads((Path(__file__).parent / "docs/hod2-target-evidence.json").read_text())
         flycast = facts.get("flycast", {})
         approved_packages = [(evidence["package_version"], evidence["package_digest"])]
@@ -264,8 +261,7 @@ class Installs:
                 if enabled:
                     if runtime in ("supermodel", "vkquake", "uzdoom"):
                         try:
-                            resolver = {"supermodel": supermodel, "vkquake": vkquake, "uzdoom": uzdoom}[runtime]
-                            current["host_checks"] = resolver.check_host(current)
+                            current["host_checks"] = RUNTIME_RESOLVERS[runtime].check_host(current)
                         except dependencies.DependencyError as e:
                             raise InstallError(str(e)) from e
                     current["capabilities_checked"] = True
@@ -276,10 +272,9 @@ class Installs:
 
     @staticmethod
     def _dependency_steps(runtime="flycast"):
-        helper = str(Path(__file__).with_name({
-            "flycast": "dependencies.py", "supermodel": "supermodel.py",
-            "vkquake": "vkquake.py", "uzdoom": "uzdoom.py"
-        }[runtime]))
+        if runtime not in RUNTIME_RESOLVERS:
+            raise InstallError(f"Unsupported dependency resolver: {runtime}")
+        helper = str(Path(__file__).with_name(RUNTIME_RESOLVERS[runtime].__name__ + ".py"))
         return [{"name": name, "protocol": True, "approve_after": phase == "preflight",
                  "declared_steps": ["resolve"],
                  "argv": [sys.executable, helper, "--context", "{context_file}"],

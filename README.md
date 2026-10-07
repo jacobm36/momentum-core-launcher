@@ -62,78 +62,45 @@ from gameplay confirmation. Updates are not installed automatically.
 play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|png|webp`,
 `video.mp4|webm`) or add it from the in-app editor.
 
-## Notes
+## Setup and safety
 
-- Built-in notifications (N), background jobs (I) and backup/restore (B); see the user guide. Jobs keep running after the launcher closes.
-- Tests: `python3 -m unittest discover -s tests`.
-- Headless package UI tests (Chrome/Chromium): `MCL_BROWSER_TESTS=1 python3 -m unittest tests.test_package_ui_browser`.
-- Live public catalog/download-to-install GUI tests: `MCL_CATALOG_TESTS=1 python3 -m unittest tests.test_catalog_live_browser` (Chrome/Chromium, internet access, temporary storage, synthetic base media, fake Flycast and isolated copies of pinned native software; no game launches or changes to your real installation).
-- Episode Enyo runner/lifecycle tests: `MCL_QUAKE_TESTS=1 python3 -m unittest tests.test_quake_installs`
-  (complete bundled mod, synthetic Quake base PAKs, temporary storage, copied pinned AppImage;
-  missing-software case downloads the exact official runtime without executing it).
-- Brutal Doom 64 runner/lifecycle tests: `MCL_DOOM_TESTS=1 python3 -m unittest tests.test_doom_installs`
-  (complete four-file mod, synthetic IWAD, mocked Flatpak and isolated home/settings).
-- Arcade installer/receipt tests: `MCL_ARCADE_TESTS=1 python3 -m unittest tests.test_arcade_installs`
-  (built packages in the sibling package repository, exact Supermodel installation, temporary storage,
-  synthetic game files; native missing-software test downloads the pinned official runtime).
-- Package check (Package Contract v1): `python3 packages.py check <folder-or-zip>`; nothing in the package is run.
-- **Add game** loads the small public catalog from
-  [momentum-distribution](https://github.com/jacobm36/momentum-distribution). Choose a game to download
-  a fixed installer release, then locate your own game files, review and install.
-  **Choose folder...** opens a native Zenity/KDialog folder picker for source and destination
-  directories; typed/pasted paths remain available, and cancellation preserves the current path.
-  No GitHub sign-in is needed. ZIP size/SHA-256, package identity/digest and platform are checked
-  before import; downloading never runs installer code. Downloads are background jobs with
-  progress, cancellation and retry. After closing/reopening, choose **Continue setup** in
-  **Installs & jobs**, or select the game again. Offline errors are explicit; existing local
-  packages remain accessible under **Advanced**. No automatic updates.
-  Catalog ZIPs are bounded to 512 MiB with a ten-minute download deadline;
-  exact expected byte size and hashes still gate import. This supports bundled
-  mods without allowing unbounded downloads.
-- Local package UI: open **Add game → Advanced → Import a local package...** to import a ZIP or local
-  package folder, review trust/test evidence, enter paths and run preflight. **Review plan** shows
-  exact changes, backups, dependencies and manual setup. Unsupported platforms are blocked.
-  Installation is enabled for the tested HOD2 0.1.1 package, its approved artwork revisions 0.1.2 and 0.1.3, and user-scope Flycast v2.7
-  build recorded in [target evidence](docs/hod2-target-evidence.json). A different package digest
-  or emulator build stays gated. Detection alone is not capability evidence. Support is scoped
-  to the explicitly verified game installers, not a general-purpose package manager.
-  Versions 0.1.2 and 0.1.3 inherit gameplay evidence from byte-identical installer code; these are not new gameplay tests.
-  Version 0.1.3 restores the original t00ny HOD2 icon with attribution; custom artwork and Steam lookup remain available.
-  **Advanced → Add an existing game manually...** retains the original library editor.
-- The arcade catalog adds **Virtua Cop 2**, **Star Wars Trilogy Arcade** and **L.A. Machineguns**.
-  Virtua Cop 2 uses standalone Flycast, not RetroArch. The other two use a pinned native
-  Supermodel release, reused read-only or downloaded into user-scope storage after approval.
-  Every new package is tied to its own exact digest/runtime evidence; HOD2 gameplay evidence
-  is not transferred. Installer/lifecycle and software prerequisite checks are separate from
-  gameplay: all three remain **setup required** until the user confirms play. Settings,
-  calibration and saves are isolated per game and retained on removal. L.A. Machineguns
-  follows the guide's borderless 1920x1080 X11 layout, not the old fullscreen wrapper.
-- Game setup selects its required software automatically; users do not choose an emulator.
-  Episode Enyo includes the complete mod; select your Quake folder containing
-  both `id1` PAKs. It follows the guide's `enyo` layout and preserves existing CFG/SAV
-  files. Its exact official vkQuake 1.36.0 AppImage is reused read-only or separately
-  prepared after approval. FUSE2/Vulkan loaders are checked without engine execution;
-  actual mounting, GPU presentation and gameplay remain untested. No Snap fallback.
-  Brutal Doom 64 bundles all four mod files; select the folder containing `DOOM2.WAD`.
-  Compatible UZDoom 5.0.1 is reused in user/default-system scope; missing software
-  is prepared for the user only, with no engine fallback or settings overrides.
-  [UZDoom preparation](docs/uzdoom-preparation.md) documents exact installer
-  evidence and the outstanding sandbox/graphics/gameplay checks.
-  If software is missing, the same game job first requests approval for required downloads,
-  checks the installed build, then presents the game-file plan for approval. Detection is read-only.
-  Approval can add the official user Flathub remote and install missing user-scope Flycast;
-  existing software is reused without an automatic upgrade. Transactions have durable intent/outcome
-  records, do not elevate, and finish safely before acknowledging cancellation. An untested installed
-  build stops setup before game files change.
-- Receipts reconcile approved actions, durable intents, inventories and actual hashes. Catalog
-  publication is replayable after interruption without duplicating entries or overwriting later
-  personal edits; ambiguous filesystem evidence remains blocked for manual recovery.
-- Optional real-package/synthetic-media regression (no real emulator launches):
-  `MCL_HOD_PACKAGE=/absolute/HOD-package.zip python3 -m unittest tests.test_hod_receipts`.
+See the [user guide](USER-GUIDE.md#notifications-installs-and-backups) for folder
+selection, separate software/game approvals, local import, cancellation and recovery.
+**Advanced → Add an existing game manually...** keeps the original library editor.
 
-- The server binds to `127.0.0.1` only, validates the Host header and requires a per-session token
-  for changes.
-- Linux only for now (`.desktop` files, `xdg-*` tools).
+Only exact package/runtime evidence enables installation; unknown builds remain gated.
+Installer checks are not gameplay certification. All new installations report **setup required**.
+HOD2's approved artwork revisions inherit unchanged installer-code evidence, not new gameplay runs.
+Technical evidence: [HOD2](docs/hod2-target-evidence.json),
+[arcade](docs/arcade-installer-evidence.json), [Episode Enyo](docs/quake-installer-evidence.json),
+and [Brutal Doom 64](docs/doom-installer-evidence.json).
+[UZDoom preparation](docs/uzdoom-preparation.md) explains its scope and limits.
+
+No automatic upgrades, elevation or RetroArch. Originals, personal settings and saves
+are preserved; ambiguous interrupted changes require reconciliation.
+Package scripts run as your user, not in a sandbox: trust the publisher before approval.
+Catalog downloads are bounded to 512 MiB and ten minutes, with exact size/hash checks.
+The server binds to `127.0.0.1`, validates the Host header and requires a session token for changes.
+
+## Validation
+
+Default tests: `python3 -m unittest discover -s tests`.
+Package check without executing scripts: `python3 packages.py check <folder-or-zip>`.
+
+| Optional check | Command |
+|---|---|
+| Headless package UI | `MCL_BROWSER_TESTS=1 python3 -m unittest tests.test_package_ui_browser` |
+| Actual public downloads and GUI installs | `MCL_CATALOG_TESTS=1 python3 -m unittest tests.test_catalog_live_browser` |
+| Arcade runner/lifecycle | `MCL_ARCADE_TESTS=1 python3 -m unittest tests.test_arcade_installs` |
+| Episode Enyo runner/lifecycle | `MCL_QUAKE_TESTS=1 python3 -m unittest tests.test_quake_installs` |
+| Brutal Doom 64 runner/lifecycle | `MCL_DOOM_TESTS=1 python3 -m unittest tests.test_doom_installs` |
+| HOD2 runner/lifecycle | `MCL_HOD_PACKAGE=/absolute/HOD-package.zip python3 -m unittest tests.test_hod_receipts` |
+
+Browser checks need Chrome/Chromium; public checks need internet access.
+Runner checks need built packages in the sibling package repository and temporary storage.
+Native software is copied from exact pinned installations or downloaded from official releases.
+Flatpak is mocked; game media is synthetic and homes/settings are isolated.
+These tests never launch games or engines and do not modify working installations.
 
 ## License
 

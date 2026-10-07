@@ -390,6 +390,65 @@ class InstallsTests(unittest.TestCase):
                 mock.patch.object(self.inst, "_load_receipt", return_value={"changed": True}):
             self.assertIn("receipt changed", self.inst.approve(job["id"], "test-digest"))
 
+    def test_runtime_routing_keeps_exact_dependency_policies(self):
+        snapshot = self.root / "snapshot"
+        snapshot.mkdir()
+        summary = {"digest": "sha256:" + "0" * 64, "platform_issues": []}
+        requirements = (
+            {"id": "supermodel", "provider": "native", "scope": "user",
+             "source": "github:trzy/Supermodel", "tested_version": installs.supermodel.VERSION},
+            {"id": "vkquake", "provider": "appimage", "scope": "user",
+             "source": "github:Novum/vkQuake", "tested_version": installs.vkquake.VERSION},
+            {"id": "uzdoom", "provider": "flatpak", "scope": "user", "source": "flathub",
+             "app_id": installs.uzdoom.APP, "tested_version": "5.0.1"},
+        )
+        for requirement in requirements:
+            runtime = requirement["id"]
+            resolver = installs.RUNTIME_RESOLVERS[runtime]
+            with self.subTest(runtime=runtime), \
+                    mock.patch("packages.snapshot_path", return_value=snapshot), \
+                    mock.patch("packages.check", return_value=summary), \
+                    mock.patch.object(resolver, "detect", return_value={"installed": False}) as detect:
+                (snapshot / "package.json").write_text(json.dumps({"requires": [requirement]}))
+                detail = self.inst.package_details("untested-game", "0.1.0")
+                self.assertEqual(detail["dependencies"], {runtime: {"installed": False}})
+                self.assertFalse(detail["package_supported"])
+                self.assertFalse(detail["install_enabled"])
+                detect.assert_called_once_with()
+                for field in requirement.keys() - {"id"}:
+                    detect.reset_mock()
+                    invalid = dict(requirement, **{field: "unapproved"})
+                    (snapshot / "package.json").write_text(json.dumps({"requires": [invalid]}))
+                    with self.subTest(field=field), self.assertRaises(installs.InstallError):
+                        self.inst.package_details("untested-game", "0.1.0")
+                    detect.assert_not_called()
+                (snapshot / "package.json").write_text(json.dumps({"requires": [requirement]}))
+                detect.side_effect = installs.dependencies.DependencyError("Detection failed")
+                with self.assertRaisesRegex(installs.InstallError, "Detection failed"):
+                    self.inst.package_details("untested-game", "0.1.0")
+        with mock.patch("packages.snapshot_path", return_value=snapshot), \
+                mock.patch("packages.check", return_value=summary):
+            (snapshot / "package.json").write_text(json.dumps({"requires": [{"id": "unknown"}]}))
+            with self.assertRaisesRegex(installs.InstallError, "Unsupported dependency resolver"):
+                self.inst.package_details("untested-game", "0.1.0")
+
+    def test_runtime_helpers_preserve_approval_steps_and_reject_unknown_runtime(self):
+        for runtime, filename in (("flycast", "dependencies.py"), ("supermodel", "supermodel.py"),
+                                  ("vkquake", "vkquake.py"), ("uzdoom", "uzdoom.py")):
+            with self.subTest(runtime=runtime):
+                steps = self.inst._dependency_steps(runtime)
+                self.assertEqual(len(steps), 2)
+                for phase, step in zip(("preflight", "apply"), steps):
+                    self.assertEqual(step["argv"], [
+                        sys.executable, str(Path(installs.__file__).with_name(filename)),
+                        "--context", "{context_file}"])
+                    self.assertEqual(step["context"], {"operation": "prepare-dependency", "phase": phase})
+                    self.assertEqual(step["declared_steps"], ["resolve"])
+                    self.assertTrue(step["protocol"])
+                    self.assertEqual(step["approve_after"], phase == "preflight")
+        with self.assertRaisesRegex(installs.InstallError, "Unsupported dependency resolver"):
+            self.inst._dependency_steps("unknown")
+
 
 if __name__ == "__main__":
     unittest.main()
