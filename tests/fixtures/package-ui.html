@@ -11,6 +11,7 @@ function sfx() {}
 function notify() {}
 let submitted = [], failApprove = false, blockApproval = true, importFailed = false;
 let catalogOffline = false, installerReady = true, downloadStatus = "succeeded";
+let pickerPath = "/home/test/Game Files", pickerFailed = false;
 const digest = "sha256:" + "a".repeat(64), jobDigest = "sha256:" + "b".repeat(64);
 const summary = { id: "test-game", version: "1.0.0", name: "<img src=x onerror='throw 1'> Test", digest, platform_issues: [] };
 const detail = { ...summary, home_games: "/home/test/Games",
@@ -45,6 +46,7 @@ fetch = async path => {
 };
 async function post(path, body, raw) {
   submitted.push({ path, body, raw });
+  if (path === "/api/picker/directory") return pickerFailed ? reply({ error: "Cannot open folder picker" }, 400) : reply({ path: pickerPath });
   if (path === "/api/packages/import-upload") return importFailed ? reply({ error: "Invalid ZIP" }, 400) : reply(summary);
   if (path === "/api/packages/import") return reply(summary);
   if (path === "/api/packages/install") return reply({ id: job.id });
@@ -132,6 +134,17 @@ async function until(fn) {
   check($("#pdlg").textContent.includes("leaves your originals untouched"), "original files reassurance");
   check($("#pkg-destination").textContent === "/home/test/Games/Test", "complete default game destination");
   check(!$("#pkg-input-games_root").closest("details").open, "destination customization starts collapsed");
+  const sourceBrowse = $('[data-input="pkg-input-source_dir"]');
+  sourceBrowse.click(); await until(() => !sourceBrowse.disabled);
+  check($("#pkg-input-source_dir").value === "/home/test/Game Files", "native source selection fills full path");
+  pickerPath = null; sourceBrowse.click(); await until(() => !sourceBrowse.disabled);
+  check($("#pkg-input-source_dir").value === "/home/test/Game Files", "cancel preserves typed or selected path");
+  pickerFailed = true; sourceBrowse.click(); await until(() => !sourceBrowse.disabled);
+  check($("#pdlg .pkg-error").textContent.includes("folder picker"), "desktop picker failure visible");
+  pickerFailed = false; pickerPath = "/media/Game Library";
+  const destinationBrowse = $('[data-input="pkg-input-games_root"]');
+  destinationBrowse.click(); await until(() => !destinationBrowse.disabled);
+  check($("#pkg-destination").textContent === "/media/Game Library/Test", "folder picker refreshes destination preview");
   $("#pkg-input-games_root").value = "/media/Game Library/";
   $("#pkg-input-games_root").dispatchEvent(new Event("input"));
   check($("#pkg-destination").textContent === "/media/Game Library/Test", "destination preview follows changes");
@@ -152,7 +165,7 @@ async function until(fn) {
   check($("#pkg-input-mode").value === "careful", "choice default retained");
   check($("#pdlg").textContent.includes("v2.7"), "detected dependency version shown");
   check($("#pdlg").textContent.includes("not be automatically upgraded"), "dependency reuse promise shown");
-  check($("#pdlg").textContent.includes("Only the tested HOD2 package"), "untested package gate explained");
+  check($("#pdlg").textContent.includes("need matching compatibility evidence"), "untested package gate explained");
   $("#pkg-input-mode").focus(); activate();
   check($("#pkg-input-mode").value === "fast", "controller cycles choice");
   $("#pkg-input-mode").value = "careful";
@@ -207,7 +220,22 @@ async function until(fn) {
   check($("#rdlg").textContent.includes("--noninteractive"), "exact dependency command shown");
   check($("#plan-approve").textContent.includes("required software"), "game-focused software approval");
   check($("#plan-approve").disabled, "dependency approval also requires explicit consent");
+  $("#plan-close").click();
+  plan.plan.dependency_commands = [];
+  plan.plan.dependency_download = { url: "https://github.com/trzy/Supermodel/releases/download/pinned/runtime.tar.gz", sha256: "a".repeat(64) };
+  await reviewPackagePlan(job.id);
+  check($("#rdlg").textContent.includes("pinned official GitHub release"), "native software download is clearly explained");
+  check($("#rdlg").textContent.includes("runtime.tar.gz"), "exact native software asset shown");
+  check($("#plan-approve").disabled, "native software still requires explicit consent");
   $("#plan-close").click(); $("#idlg").close();
+  detail.platform_issues = [];
+  detail.dependencies = { supermodel: { installed: false, provider: "native", scope: "user" } };
+  detail.manifest.inputs[0].help = "Keep your compatible lamachin.zip zipped in one folder.";
+  openPackages(); await selectPackage("test-game", "1.0.0");
+  check($("#pdlg").textContent.includes("lamachin.zip"), "game-specific source requirements visible");
+  check($("#pdlg").textContent.includes("pinned official release after your approval"), "native dependency setup explained");
+  check($("#pkg-preflight").disabled, "native packages retain publisher trust gate");
+  $("#pdlg").close();
   check(jobSub({ kind: "dependency", status: "succeeded" }).includes("No game installed"), "dependency success does not imply game success");
   document.querySelector("#result").textContent = "PASS: imports, trust, plan, controller focus, platform, capability gates and game software review";
 })().catch(error => { document.querySelector("#result").textContent = "FAIL: " + error.stack; });

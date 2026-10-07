@@ -374,7 +374,8 @@ class InstallsTests(unittest.TestCase):
         job, _ = self.fixture()
         job.update(status="awaiting-approval", plan_digest="test-digest")
         job["meta"]["install_enabled"] = True
-        detail = {"install_enabled": True, "digest": job["meta"]["package_digest"]}
+        detail = {"install_enabled": True, "digest": job["meta"]["package_digest"],
+                  "dependencies": {"flycast": {"installed": True}}}
         with mock.patch.object(self.inst, "package_details", return_value=detail), \
                 mock.patch.object(self.jobs, "approve", return_value=True, create=True) as approve, \
                 mock.patch("dependencies.probe", return_value=""):

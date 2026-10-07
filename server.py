@@ -10,6 +10,7 @@ import backup
 import catalog
 import installs
 import packages
+import picker
 from jobs import Jobs, RunnerBusy
 
 HERE = Path(__file__).resolve().parent
@@ -423,7 +424,7 @@ class Handler(SimpleHTTPRequestHandler):
             # Installs keep running after the window closes; the watchdog stops the server once they finish.
             threading.Timer(0.3, lambda: (close_browser(), JOBS.active_count() or os._exit(0))).start()
             return
-        if self.path.startswith(("/api/jobs/", "/api/backups/", "/api/packages/", "/api/dependencies/")):
+        if self.path.startswith(("/api/jobs/", "/api/backups/", "/api/packages/", "/api/dependencies/", "/api/picker/")):
             return self._ops()
         if self.path.startswith("/api/upload/"):
             return self._upload()
@@ -565,6 +566,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"status": "restored", "games": count, "snapshot": snap})
             n = int(self.headers.get("Content-Length") or 0)
             data = json.loads(self.rfile.read(n) or b"{}") if n < 1 << 20 else {}
+            if path == "/api/picker/directory":
+                return self._json({"path": picker.choose_directory(data.get("initial", ""))})
             if path == "/api/jobs/demo" and DEV:
                 step = lambda name, secs, code=0: {"name": name, "argv": [sys.executable, "-u", "-c",
                     f"import time,sys\nfor i in range({int(secs * 4)}):\n    print('{name}', i, flush=True); time.sleep(.25)\nsys.exit({code})"]}

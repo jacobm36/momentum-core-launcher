@@ -27,7 +27,7 @@ REQUIRED_FILES = ("package.json", "install.sh", "verify.sh", "repair.sh", "unins
 OPERATIONS = ("install", "verify", "repair", "uninstall")
 INPUT_TYPES = ("directory", "string", "boolean", "choice")
 DIR_DEFAULTS = ("home_games",)
-PROVIDERS = ("flatpak",)
+PROVIDERS = ("flatpak", "native")
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 INPUT_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -406,6 +406,8 @@ def check_manifest(m, files, root):
             s("app_id", r, w)
             if r.get("scope") != "user":
                 P.append(f"{w}scope must be 'user' (v1 does not elevate privileges)")
+        elif (rid, r.get("source"), r.get("scope")) != ("supermodel", "github:trzy/Supermodel", "user"):
+            P.append(f"{w}native provider supports only pinned user-scope Supermodel from its official GitHub release")
 
     ops = obj("operations")
     for op in OPERATIONS if ops else ():

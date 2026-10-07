@@ -1,0 +1,54 @@
+{
+  "evidence_version": 1,
+  "scope": "Installer and software prerequisite checks only. Game-specific gameplay remains required; no HOD2 gameplay evidence is transferred.",
+  "packages": [
+    {
+      "id": "virtua-cop-2",
+      "version": "0.1.0",
+      "digest": "sha256:e5f63fd17d5680609073880f2e14a0fa9fce1aba3c16d3ef5f6636de43f0113a",
+      "runtime": "flycast",
+      "software": {
+        "provider": "flatpak",
+        "scope": "user",
+        "app_id": "org.flycast.Flycast",
+        "version": "v2.7",
+        "commit": "86ec4d845a66ff07cdba8e003d8549e93cd7a814b519766e1f744e530c5d3e5b"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "Standalone Flycast adaptation authorized by the owner. Exact build, GDI containment, isolated paths, source preservation and installer lifecycle verified separately. Enter/Start and mouse defaults and CLI options checked against v2.7 source. This is not target gameplay evidence; confirm all controls, reload, display, sound and state persistence."
+    },
+    {
+      "id": "star-wars-trilogy-arcade",
+      "version": "0.1.0",
+      "digest": "sha256:a0e57a8ceac9f505bd183deddff574533d9f8ea82dc632e0ae0511e50662ec48",
+      "runtime": "supermodel",
+      "software": {
+        "provider": "native",
+        "scope": "user",
+        "version": "v0.3a-20260928-git-8b4de23",
+        "sha256": "4497b72c682d22f29b45d33607e07651240c2222a1e95e4b3f77846c9a7c1311",
+        "games_xml_sha256": "48c56b24ea720fb66188c0b2d94579a110be24971ac215ea808c563c665cf655"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "Guide-defined 992x768 fullscreen and force-feedback startup flag. Exact pinned runtime assets and host CLI checked separately from synthetic installer lifecycle and isolated-state checks. The guide reports historical gameplay; no new isolated-package gameplay or bonus-stage certification. Confirm controls, display, sound and saved progress."
+    },
+    {
+      "id": "l-a-machineguns",
+      "version": "0.1.0",
+      "digest": "sha256:9ee6ef75ce86dba98ec02f2a78e4b7278d3cbcaeb7c1fdb34d9e42b87ce74e95",
+      "runtime": "supermodel",
+      "software": {
+        "provider": "native",
+        "scope": "user",
+        "version": "v0.3a-20260928-git-8b4de23",
+        "sha256": "4497b72c682d22f29b45d33607e07651240c2222a1e95e4b3f77846c9a7c1311",
+        "games_xml_sha256": "48c56b24ea720fb66188c0b2d94579a110be24971ac215ea808c563c665cf655"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "Guide-defined borderless 1920x1080 at 0,0 with mouse-only gun axes and two triggers. Exact pinned runtime assets/host CLI and isolated installer lifecycle checked separately. Fresh cabinet calibration and gameplay of this package are not certified. Confirm edge aiming, both triggers, display and state persistence; X11 reference layout only."
+    }
+  ]
+}

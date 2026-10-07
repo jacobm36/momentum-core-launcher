@@ -17,6 +17,7 @@ from pathlib import Path
 
 import packages
 import dependencies
+import supermodel
 import ownership
 
 DESC_FIELDS = ("name", "description", "tagline", "category", "tags")
@@ -194,9 +195,18 @@ class Installs:
         man = json.loads((snap / "package.json").read_text())
         facts = {}
         for req in man["requires"]:
-            if req["id"] != "flycast":
+            if req["id"] == "supermodel":
+                if (req.get("provider"), req.get("scope"), req.get("source"), req.get("tested_version")) != (
+                        "native", "user", "github:trzy/Supermodel", supermodel.VERSION):
+                    raise InstallError("Only the pinned official user-scope Supermodel build is supported")
+                try:
+                    facts["supermodel"] = supermodel.detect()
+                except dependencies.DependencyError as e:
+                    raise InstallError(str(e)) from e
+            elif req["id"] == "flycast":
+                facts["flycast"] = self._flycast_facts(req)
+            else:
                 raise InstallError(f"Unsupported dependency resolver: {req['id']}")
-            facts["flycast"] = self._flycast_facts(req)
         evidence = json.loads((Path(__file__).parent / "docs/hod2-target-evidence.json").read_text())
         flycast = facts.get("flycast", {})
         approved_packages = [(evidence["package_version"], evidence["package_digest"])]
@@ -215,12 +225,34 @@ class Installs:
                 "HOD2 gameplay was validated on this Flycast build. Approved artwork-only package revisions "
                 "inherit unchanged executable-code evidence; confirm gameplay for each installation.")
             flycast["capability_evidence"] = "docs/hod2-target-evidence.json"
+        if package_id != evidence["package_id"]:
+            path = Path(__file__).parent / "docs/arcade-installer-evidence.json"
+            records = json.loads(path.read_text()) if path.exists() else {"packages": []}
+            record = next((r for r in records["packages"] if r["id"] == package_id
+                           and r["version"] == version and r["digest"] == summary["digest"]), None)
+            supported = bool(record and record.get("installer_validated") is True and not summary["platform_issues"])
+            enabled = False
+            if supported:
+                runtime = record["runtime"]
+                current = facts.get(runtime, {})
+                expected = record["software"]
+                enabled = (len(facts) == 1 and current.get("installed") is True
+                           and all(current.get(k) == v for k, v in expected.items()))
+                if enabled:
+                    if runtime == "supermodel":
+                        try:
+                            current["host_checks"] = supermodel.check_host(current)
+                        except dependencies.DependencyError as e:
+                            raise InstallError(str(e)) from e
+                    current["capabilities_checked"] = True
+                    current["capability_note"] = record["limits"]
+                    current["capability_evidence"] = "docs/arcade-installer-evidence.json"
         return dict(summary, manifest=man, home_games=str(Path.home() / "Games"), dependencies=facts,
                     install_enabled=enabled, package_supported=supported)
 
     @staticmethod
-    def _dependency_steps():
-        helper = str(Path(__file__).with_name("dependencies.py"))
+    def _dependency_steps(runtime="flycast"):
+        helper = str(Path(__file__).with_name("supermodel.py" if runtime == "supermodel" else "dependencies.py"))
         return [{"name": name, "protocol": True, "approve_after": phase == "preflight",
                  "declared_steps": ["resolve"],
                  "argv": [sys.executable, helper, "--context", "{context_file}"],
@@ -350,8 +382,9 @@ class Installs:
                 "game_directory": game_dir, "paths": paths, "manifest": {"name": man["name"]},
                 "install_enabled": detail["install_enabled"],
                 "catalog_defaults": {**man["catalog"], "name": man["name"], "icon": paths["icon"]}}
-        if detail["package_supported"] and not deps.get("flycast", {}).get("installed"):
-            steps = self._dependency_steps() + steps
+        runtime = next(iter(deps), None)
+        if detail["package_supported"] and runtime and not deps[runtime].get("installed"):
+            steps = self._dependency_steps(runtime) + steps
             meta["prepare_required_software"] = True
         return self.jobs.submit(f"Install {man['name']}", steps, game=package_id, meta=meta)
 
@@ -375,12 +408,13 @@ class Installs:
                 if preparing and not detail["package_supported"]:
                     return "This game package lacks matching target evidence"
                 if not preparing and (not meta.get("install_enabled") or not detail["install_enabled"]):
-                    return ("Game installation is enabled only for approved HOD2 packages with the verified user-scope "
-                            "Flycast v2.7 build. Current package/build lacks matching capability evidence.")
+                    return "This exact game package/software build lacks matching installer capability evidence"
                 if self._load_receipt(meta["package_id"]) != previous:
                     return "Installation receipt changed since preflight; cancel and review a new job"
-                if dependencies.APP in dependencies.probe("ps", "--columns=application").splitlines():
+                if "flycast" in detail["dependencies"] and dependencies.APP in dependencies.probe("ps", "--columns=application").splitlines():
                     return "Close Flycast before approving this installation"
+                if "supermodel" in detail["dependencies"] and not preparing and supermodel.running(detail["dependencies"]["supermodel"]):
+                    return "Close Supermodel before approving this installation"
             except (InstallError, ownership.OwnershipError, dependencies.DependencyError, OSError, ValueError) as e:
                 return f"Installation approval checks failed: {e}"
         return self.jobs.approve(jid, digest)

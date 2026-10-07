@@ -86,6 +86,21 @@ class PackageUiApi(Base):
         self.assertEqual(status, 200, data)
         return data
 
+    def test_folder_picker_route_requires_token_and_returns_cancel_or_error(self):
+        with mock.patch("picker.choose_directory", return_value=str(self.t)) as choose:
+            self.assertEqual(self.request("/api/picker/directory", {"initial": str(self.t)}),
+                             (200, {"path": str(self.t)}))
+            choose.assert_called_once_with(str(self.t))
+            req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/picker/directory", b"{}")
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(req)
+            self.assertEqual(error.exception.code, 403)
+            self.assertEqual(choose.call_count, 1)
+        with mock.patch("picker.choose_directory", return_value=None):
+            self.assertEqual(self.request("/api/picker/directory", {}), (200, {"path": None}))
+        with mock.patch("picker.choose_directory", side_effect=server.picker.PickerError("No desktop picker")):
+            self.assertEqual(self.request("/api/picker/directory", {}), (400, {"error": "No desktop picker"}))
+
     def test_zip_import_details_no_execution_and_corrupt_upload(self):
         data = self.upload()
         self.assertEqual(data["id"], "test-game")
@@ -141,7 +156,7 @@ class PackageUiApi(Base):
         server.JOBS = self.runner
         status, detail = self.request(f"/api/jobs/{jid}")
         self.assertEqual(detail["plan"]["game_directory"], str(self.t / "Games" / "Test Game (USA)"))
-        self.assertIn("matching target evidence", detail["approval_blocked"])
+        self.assertIn("matching installer compatibility evidence", detail["approval_blocked"])
         status, failure = self.request(f"/api/jobs/{jid}/approve", {"plan_digest": detail["plan_digest"]})
         self.assertEqual(status, 409)
         self.assertIn("capability", failure["error"])

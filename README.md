@@ -39,10 +39,15 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
 - Tests: `python3 -m unittest discover -s tests`.
 - Headless package UI tests (Chrome/Chromium): `MCL_BROWSER_TESTS=1 python3 -m unittest tests.test_package_ui_browser`.
 - Live public catalog/download-to-install GUI test: `MCL_CATALOG_TESTS=1 python3 -m unittest tests.test_catalog_live_browser` (Chrome/Chromium, internet access, temporary storage, synthetic media and a fake emulator; never touches your real game installation).
+- Arcade installer/receipt tests: `MCL_ARCADE_TESTS=1 python3 -m unittest tests.test_arcade_installs`
+  (built packages in the sibling package repository, exact Supermodel installation, temporary storage,
+  synthetic game files; native missing-software test downloads the pinned official runtime).
 - Package check (Package Contract v1): `python3 packages.py check <folder-or-zip>`; nothing in the package is run.
 - **Add game** loads the small public catalog from
   [momentum-distribution](https://github.com/jacobm36/momentum-distribution). Choose HOD2 to download
-  its fixed installer release, then locate your own game files, review and install.
+  a fixed installer release, then locate your own game files, review and install.
+  **Choose folder...** opens a native Zenity/KDialog folder picker for source and destination
+  directories; typed/pasted paths remain available, and cancellation preserves the current path.
   No GitHub sign-in is needed. ZIP size/SHA-256, package identity/digest and platform are checked
   before import; downloading never runs installer code. Downloads are background jobs with
   progress, cancellation and retry. After closing/reopening, choose **Continue setup** in
@@ -58,6 +63,14 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
   Versions 0.1.2 and 0.1.3 inherit gameplay evidence from byte-identical installer code; these are not new gameplay tests.
   Version 0.1.3 restores the original t00ny HOD2 icon with attribution; custom artwork and Steam lookup remain available.
   **Advanced → Add an existing game manually...** retains the original library editor.
+- The arcade catalog adds **Virtua Cop 2**, **Star Wars Trilogy Arcade** and **L.A. Machineguns**.
+  Virtua Cop 2 uses standalone Flycast, not RetroArch. The other two use a pinned native
+  Supermodel release, reused read-only or downloaded into user-scope storage after approval.
+  Every new package is tied to its own exact digest/runtime evidence; HOD2 gameplay evidence
+  is not transferred. Installer/lifecycle and software prerequisite checks are separate from
+  gameplay: all three remain **setup required** until the user confirms play. Settings,
+  calibration and saves are isolated per game and retained on removal. L.A. Machineguns
+  follows the guide's borderless 1920x1080 X11 layout, not the old fullscreen wrapper.
 - Game setup selects its required software automatically; users do not choose an emulator.
   If software is missing, the same game job first requests approval for required downloads,
   checks the installed build, then presents the game-file plan for approval. Detection is read-only.

@@ -193,7 +193,9 @@ function packageInput(field, detail) {
     ${field.choices.map(v => `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label>`;
   return `<label>${esc(label)}${field.required ? " (required)" : ""}
     <input id="${esc(id)}" value="${esc(value ?? "")}"${required} autocomplete="off"
-    ${field.type === "directory" ? 'placeholder="/home/you/your-game-folder"' : ""}></label>`;
+    ${field.type === "directory" ? 'placeholder="/home/you/your-game-folder"' : ""}></label>
+    ${field.type === "directory" ? `<button type="button" class="pkg-browse" data-input="${esc(id)}"
+      aria-label="${esc(label)}: choose folder">Choose folder...</button>` : ""}`;
 }
 
 async function selectPackage(id, version) {
@@ -204,6 +206,7 @@ async function selectPackage(id, version) {
     selectedPackage = detail;
     const m = detail.manifest;
     const flycast = detail.dependencies?.flycast;
+    const native = detail.dependencies?.supermodel;
     const source = m.inputs.find(f => f.id === "source_dir");
     const destination = m.inputs.find(f => f.id === "games_root");
     d.innerHTML = `<h2>${esc(detail.name)} <small>${esc(detail.version)}</small></h2>
@@ -218,13 +221,18 @@ async function selectPackage(id, version) {
           : "Momentum will prepare the software this game needs. Review required downloads first; after compatibility checks, review the game files in the same setup job."}</p>
         <p class="pkg-warning">${detail.install_enabled
           ? "This game setup is supported by compatibility evidence. Installation still requires review and approval of this plan; confirm gameplay for your installation afterward."
-          : "Only the tested HOD2 package and verified software build are enabled. Momentum checks compatibility before changing game files."}</p>
+          : "This package and software build need matching compatibility evidence. Momentum checks before changing game files."}</p>
         <details><summary>Technical software details</summary>${packageJson(flycast)}</details>` : ""}
+      ${native ? `<h3>Required game software</h3>
+        <p class="bnote">${native.installed ? "Required software is installed. Momentum will reuse it without upgrading or changing its settings."
+          : "Momentum will get the required software from its pinned official release after your approval. Then review the game installation plan."}</p>
+        <p class="pkg-warning">Installer checks do not certify gameplay. Confirm controls, display and saved progress for this installation.</p>
+        <details><summary>Technical software details</summary>${packageJson(native)}</details>` : ""}
       <form id="pkg-setup">
         <h3>Your game files</h3>
         ${source ? `${packageInput(source, detail)}
-          <p class="bnote">Leave your game files where they are. Enter the full path to their folder; Momentum copies them and leaves your originals untouched.
-          ${detail.id === "the-house-of-the-dead-2" ? "For HOD2, use the folder containing the CUE file and all matching BIN tracks together. The package ZIP does not contain the game." : ""}</p>` : ""}
+          <p class="bnote">Leave your game files where they are. Choose their folder, or type/paste its full path; Momentum copies them and leaves your originals untouched.
+          ${source.help ? esc(source.help) : detail.id === "the-house-of-the-dead-2" ? "For HOD2, use the folder containing the CUE file and all matching BIN tracks together. The package ZIP does not contain the game." : ""}</p>` : ""}
         ${m.inputs.filter(f => f !== source && f !== destination).map(f => packageInput(f, detail)).join("")}
         ${destination ? `<p class="bnote">Momentum will install your game here:</p>
           <output id="pkg-destination" class="pkg-path" aria-live="polite"></output>
@@ -251,7 +259,24 @@ async function selectPackage(id, version) {
       input.oninput = updateDestination;
       updateDestination();
     }
-    d.onclick = e => { if (e.target.id === "pkg-back") { d.close(); openPackages(); } };
+    d.onclick = async e => {
+      if (e.target.id === "pkg-back") { d.close(); openPackages(); }
+      const button = e.target.closest(".pkg-browse");
+      if (!button || button.disabled) return;
+      const input = document.getElementById(button.dataset.input);
+      button.disabled = true;
+      d.querySelector(".pkg-error").hidden = true;
+      try {
+        const result = await packageResponse(await post("/api/picker/directory", {
+          initial: input.value.startsWith("/") ? input.value : ""
+        }));
+        if (d.open && input.isConnected && result.path !== null) {
+          input.value = result.path;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      } catch (error) { if (d.open && input.isConnected) packageError(d, error); }
+      finally { if (button.isConnected) button.disabled = false; }
+    };
     d.querySelector("#pkg-trust").onchange = e => { submit.disabled = !e.target.checked || detail.platform_issues.length > 0; };
     form.onsubmit = async e => {
       e.preventDefault();
@@ -305,10 +330,11 @@ async function reviewPackagePlan(id) {
         : '<p class="bnote">No file changes listed.</p>'}
       <details><summary>Technical software and network details</summary>${packageJson(plan.dependencies || {})}</details>
       ${Array.isArray(plan.dependency_commands) ? `<h3>Software required for this game</h3>
-        <p class="bnote">${plan.dependency_commands.length
-          ? "Momentum will download the required software from Flathub for your account. No administrator access or automatic upgrade is requested."
+        <p class="bnote">${plan.dependency_download
+          ? "Momentum will download the required software from its pinned official GitHub release for your account. No administrator access or automatic upgrade is requested."
+          : plan.dependency_commands.length ? "Momentum will download the required software from Flathub for your account. No administrator access or automatic upgrade is requested."
           : "No downloads needed; reuse the installed software without upgrading it."}</p>
-        <details><summary>Exact software setup commands</summary>${packageJson(plan.dependency_commands)}</details>
+        <details><summary>Exact software preparation</summary>${packageJson(plan.dependency_download || plan.dependency_commands)}</details>
         <p class="pkg-warning">Shared software remains installed if later game work fails. Cancellation waits for an active download/install transaction to finish. After preparation, Momentum checks compatibility and asks you to review the game files.</p>` : ""}
       <details><summary>Preserved files and state</summary>${packageJson({ preserve: plan.preserve || [], state: plan.state_destinations || [] })}</details>
       <h3>Manual setup after installation</h3>
