@@ -4,8 +4,9 @@
 
 ![Playtime summary with streaks and a weekly chart](docs/stats.png)
 
-A local, controller-friendly game launcher with a cyberpunk / retro-arcade look. A tiny Python
-(stdlib-only) server plus a vanilla HTML/CSS/JS front end, shown in a Chrome kiosk or app window.
+A lightweight local game launcher with an arcade-inspired interface and guided game setup.
+Controller-friendly, with a cyberpunk / retro-arcade look, a Python standard-library backend
+and a vanilla HTML/CSS/JS front end, shown in a Chrome kiosk or app window.
 
 Features: categories and drag-to-reorder, search, favorites, per-game accent colors, a Classic or
 Featured detail panel, synthesized sound effects and intro, gamepad support, play statistics,
