@@ -48,5 +48,7 @@ async function until(fn) {
   check(jobSub(jobs.find(j => j.id === job.id)).includes("setup required"), "gameplay confirmation still required");
   $("#idlg").close();
   document.querySelector("#result").textContent = "PASS: public catalog, anonymous download, validated intake, GUI setup, exact approval and receipt/catalog publication";
-})().catch(error => { document.querySelector("#result").textContent = "FAIL: " + error.stack; });
+})().catch(error => { document.querySelector("#result").textContent = "FAIL: " + error.stack; })
+  .then(() => fetch("/catalog-live-result?status=" +
+    encodeURIComponent(document.querySelector("#result").textContent)));
 </script></body></html>

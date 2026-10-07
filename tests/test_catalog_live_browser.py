@@ -14,6 +14,7 @@ import zipfile
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
+from urllib.parse import parse_qs, urlsplit
 
 import catalog
 import installs
@@ -90,7 +91,19 @@ else: sys.exit('Real emulator execution is prohibited in this test')
 """)
             flatpak.chmod(0o755)
             runner = jobs.Jobs(app / "jobs")
-            http = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+            completed = threading.Event()
+            outcome = {}
+
+            class LiveHandler(server.Handler):
+                def do_GET(self):
+                    parsed = urlsplit(self.path)
+                    if parsed.path != "/catalog-live-result":
+                        return super().do_GET()
+                    outcome["status"] = parse_qs(parsed.query).get("status", [""])[0]
+                    self._json({"received": True})
+                    completed.set()
+
+            http = ThreadingHTTPServer(("127.0.0.1", 0), LiveHandler)
             lock = threading.RLock()
             inst = installs.Installs(app, lock, lambda: json.loads((app / "games.json").read_text()),
                                     lambda games: installs._write_atomic(app / "games.json", json.dumps(games).encode()),
@@ -104,16 +117,28 @@ else: sys.exit('Real emulator execution is prohibited in this test')
                     # Fetch the real public catalog before launching Chrome, not a mocked endpoint.
                     self.assertIn(game_id, [game["id"] for game in catalog.load()["games"]])
                     worker.start()
-                    result = subprocess.run([
-                        chrome, "--headless=new", "--disable-gpu", "--disable-background-networking",
-                        "--disable-extensions", "--no-first-run", f"--user-data-dir={root / 'browser'}",
-                        "--virtual-time-budget=120000", "--dump-dom",
-                        f"http://127.0.0.1:{http.server_port}/web/catalog-live.html",
-                    ], capture_output=True, text=True, timeout=150)
-                    start = result.stdout.find('<pre id="result">')
-                    status = result.stdout[start:result.stdout.find("</pre>", start)]
-                    self.assertEqual(result.returncode, 0, result.stderr[-1500:])
-                    self.assertIn("PASS:", status, status)
+                    # Real downloads and worker processes need wall time, not Chrome's virtual clock.
+                    with tempfile.TemporaryFile() as browser_log:
+                        browser = subprocess.Popen([
+                            chrome, "--headless=new", "--disable-gpu", "--disable-background-networking",
+                            "--disable-extensions", "--no-first-run", f"--user-data-dir={root / 'browser'}",
+                            f"http://127.0.0.1:{http.server_port}/web/catalog-live.html",
+                        ], stdout=subprocess.DEVNULL, stderr=browser_log)
+                        try:
+                            finished = completed.wait(150)
+                            browser_log.seek(0)
+                            diagnostics = browser_log.read().decode(errors="replace")[-1500:]
+                            self.assertTrue(finished, f"GUI did not finish; browser={browser.poll()}, "
+                                            f"jobs={runner.list()}, stderr={diagnostics}")
+                            self.assertTrue(outcome["status"].startswith("PASS:"), outcome["status"])
+                        finally:
+                            if browser.poll() is None:
+                                browser.terminate()
+                            try:
+                                browser.wait(timeout=10)
+                            except subprocess.TimeoutExpired:
+                                browser.kill()
+                                browser.wait(timeout=10)
                     receipt = inst._load_receipt(game_id)
                     self.assertEqual(receipt["package_version"], version)
                     self.assertEqual(receipt["readiness"], "setup-required")
