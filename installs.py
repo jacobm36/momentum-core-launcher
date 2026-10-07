@@ -19,6 +19,7 @@ import packages
 import dependencies
 import supermodel
 import vkquake
+import uzdoom
 import ownership
 
 DESC_FIELDS = ("name", "description", "tagline", "category", "tags")
@@ -212,6 +213,15 @@ class Installs:
                     facts["vkquake"] = vkquake.detect()
                 except dependencies.DependencyError as e:
                     raise InstallError(str(e)) from e
+            elif req["id"] == "uzdoom":
+                if (req.get("provider"), req.get("scope"), req.get("source"), req.get("app_id"),
+                        req.get("tested_version")) != (
+                        "flatpak", "user", "flathub", uzdoom.APP, "5.0.1"):
+                    raise InstallError("Only the approved Flathub UZDoom setup is supported")
+                try:
+                    facts["uzdoom"] = uzdoom.detect()
+                except dependencies.DependencyError as e:
+                    raise InstallError(str(e)) from e
             elif req["id"] == "flycast":
                 facts["flycast"] = self._flycast_facts(req)
             else:
@@ -235,9 +245,11 @@ class Installs:
                 "inherit unchanged executable-code evidence; confirm gameplay for each installation.")
             flycast["capability_evidence"] = "docs/hod2-target-evidence.json"
         if package_id != evidence["package_id"]:
-            path = Path(__file__).parent / (
-                "docs/quake-installer-evidence.json" if package_id == "quake-slave-zero-x"
-                else "docs/arcade-installer-evidence.json")
+            evidence_file = {
+                "quake-slave-zero-x": "docs/quake-installer-evidence.json",
+                "brutal-doom-64": "docs/doom-installer-evidence.json"
+            }.get(package_id, "docs/arcade-installer-evidence.json")
+            path = Path(__file__).parent / evidence_file
             records = json.loads(path.read_text()) if path.exists() else {"packages": []}
             record = next((r for r in records["packages"] if r["id"] == package_id
                            and r["version"] == version and r["digest"] == summary["digest"]), None)
@@ -250,9 +262,9 @@ class Installs:
                 enabled = (len(facts) == 1 and current.get("installed") is True
                            and all(current.get(k) == v for k, v in expected.items()))
                 if enabled:
-                    if runtime in ("supermodel", "vkquake"):
+                    if runtime in ("supermodel", "vkquake", "uzdoom"):
                         try:
-                            resolver = supermodel if runtime == "supermodel" else vkquake
+                            resolver = {"supermodel": supermodel, "vkquake": vkquake, "uzdoom": uzdoom}[runtime]
                             current["host_checks"] = resolver.check_host(current)
                         except dependencies.DependencyError as e:
                             raise InstallError(str(e)) from e
@@ -265,7 +277,8 @@ class Installs:
     @staticmethod
     def _dependency_steps(runtime="flycast"):
         helper = str(Path(__file__).with_name({
-            "flycast": "dependencies.py", "supermodel": "supermodel.py", "vkquake": "vkquake.py"
+            "flycast": "dependencies.py", "supermodel": "supermodel.py",
+            "vkquake": "vkquake.py", "uzdoom": "uzdoom.py"
         }[runtime]))
         return [{"name": name, "protocol": True, "approve_after": phase == "preflight",
                  "declared_steps": ["resolve"],
@@ -431,6 +444,8 @@ class Installs:
                     return "Close Supermodel before approving this installation"
                 if "vkquake" in detail["dependencies"] and not preparing and vkquake.running(detail["dependencies"]["vkquake"]):
                     return "Close vkQuake before approving this installation"
+                if "uzdoom" in detail["dependencies"] and uzdoom.running(detail["dependencies"]["uzdoom"]):
+                    return "Close UZDoom before approving this installation"
             except (InstallError, ownership.OwnershipError, dependencies.DependencyError, OSError, ValueError) as e:
                 return f"Installation approval checks failed: {e}"
         return self.jobs.approve(jid, digest)

@@ -53,7 +53,7 @@ untouched. Local package ZIPs can also be imported through **Advanced**.
 **Bring your games; Momentum brings the setup.** Commercial base-game data, ROMs and BIOS
 files come from you. Mod packages can include their complete distributable mod.
 The catalog includes *The House of the Dead 2*, *Virtua Cop 2*, *Star Wars Trilogy
-Arcade*, *L.A. Machineguns* and *Episode Enyo*. Installer verification is separate
+Arcade*, *L.A. Machineguns*, *Episode Enyo* and *Brutal Doom 64*. Installer verification is separate
 from gameplay confirmation. Updates are not installed automatically.
 
 ## Your data stays local
@@ -71,6 +71,8 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
 - Episode Enyo runner/lifecycle tests: `MCL_QUAKE_TESTS=1 python3 -m unittest tests.test_quake_installs`
   (complete bundled mod, synthetic Quake base PAKs, temporary storage, copied pinned AppImage;
   missing-software case downloads the exact official runtime without executing it).
+- Brutal Doom 64 runner/lifecycle tests: `MCL_DOOM_TESTS=1 python3 -m unittest tests.test_doom_installs`
+  (complete four-file mod, synthetic IWAD, mocked Flatpak and isolated home/settings).
 - Arcade installer/receipt tests: `MCL_ARCADE_TESTS=1 python3 -m unittest tests.test_arcade_installs`
   (built packages in the sibling package repository, exact Supermodel installation, temporary storage,
   synthetic game files; native missing-software test downloads the pinned official runtime).
@@ -112,6 +114,11 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
   files. Its exact official vkQuake 1.36.0 AppImage is reused read-only or separately
   prepared after approval. FUSE2/Vulkan loaders are checked without engine execution;
   actual mounting, GPU presentation and gameplay remain untested. No Snap fallback.
+  Brutal Doom 64 bundles all four mod files; select the folder containing `DOOM2.WAD`.
+  Compatible UZDoom 5.0.1 is reused in user/default-system scope; missing software
+  is prepared for the user only, with no engine fallback or settings overrides.
+  [UZDoom preparation](docs/uzdoom-preparation.md) documents exact installer
+  evidence and the outstanding sandbox/graphics/gameplay checks.
   If software is missing, the same game job first requests approval for required downloads,
   checks the installed build, then presents the game-file plan for approval. Detection is read-only.
   Approval can add the official user Flathub remote and install missing user-scope Flycast;

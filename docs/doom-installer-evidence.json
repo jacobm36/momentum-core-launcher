@@ -1,0 +1,24 @@
+{
+  "evidence_version": 1,
+  "scope": "Exact installer/lifecycle evidence plus non-graphical Flatpak metadata/runtime prerequisites. No gameplay evidence is inherited.",
+  "packages": [
+    {
+      "id": "brutal-doom-64",
+      "version": "0.1.0",
+      "digest": "sha256:56b890f11e4a040e560db9aa90c927172b24f5a367674e36922c500fb2db1d32",
+      "runtime": "uzdoom",
+      "software": {
+        "provider": "flatpak",
+        "app_id": "org.zdoom.UZDoom",
+        "version": "5.0.1",
+        "commit": "d7b8ce76e5480a28d1e07400093a20d47f56c201fd974b0a5dbfa3b26bbd587e",
+        "arch": "x86_64",
+        "branch": "stable",
+        "origin": "flathub"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "Guide-defined four-file mod order, explicit user/default-system scope, per-launch read-only game access and isolated lifecycle checked. User-only software preparation tested with mocked Flatpak, not a real fresh-machine install. Exact installed system UZDoom metadata/runtime checked read-only. No engine invocation, graphics/audio, input, real IWAD gameplay or save/relaunch confirmation. Readiness remains setup-required."
+    }
+  ]
+}

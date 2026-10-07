@@ -24,6 +24,7 @@ import server
 import supermodel
 import vkquake
 from tests.test_quake_installs import write_pak
+from tests.test_doom_installs import write_iwad, fake_flatpak
 
 HERE = Path(__file__).resolve().parents[1]
 
@@ -45,6 +46,9 @@ class CatalogLiveBrowser(unittest.TestCase):
     def test_episode_enyo_public_gui_install(self):
         self.exercise("quake-slave-zero-x", "Quake - Slave Zero X: Episode Enyo", "0.1.0")
 
+    def test_brutal_doom_64_public_gui_install(self):
+        self.exercise("brutal-doom-64", "Brutal Doom 64", "0.1.0")
+
     def exercise(self, game_id, name, version):
         chrome = shutil.which("google-chrome") or shutil.which("chromium")
         self.assertIsNotNone(chrome)
@@ -52,6 +56,7 @@ class CatalogLiveBrowser(unittest.TestCase):
         metadata = f"    Version: {evidence['emulator_version']}\n    Commit: {evidence['emulator_commit']}"
         native = supermodel.detect() if game_id in ("star-wars-trilogy-arcade", "l-a-machineguns") else None
         quake = vkquake.detect() if game_id == "quake-slave-zero-x" else None
+        doom = game_id == "brutal-doom-64"
         with tempfile.TemporaryDirectory(prefix="mcl-catalog-live-") as tmp:
             root = Path(tmp)
             home, app, source, tools = (root / name for name in ("home", "launcher", "source", "tools"))
@@ -62,7 +67,7 @@ class CatalogLiveBrowser(unittest.TestCase):
             html = html.replace("SOURCE_DIRECTORY", json.dumps(str(source))).replace(
                 "GAMES_ROOT", json.dumps(str(home / "Games")))
             html = html.replace("the-house-of-the-dead-2", game_id).replace("The House of the Dead 2", name)
-            html = html.replace("SETUP_WAIT_ATTEMPTS", "6000" if quake else "1000")
+            html = html.replace("SETUP_WAIT_ATTEMPTS", "6000" if quake or doom else "1000")
             (app / "web/catalog-live.html").write_text(html)
             (app / "games.json").write_text("[]")
             (source / "House of the Dead 2, The (USA).cue").write_text(
@@ -105,6 +110,11 @@ elif command == 'info': print({metadata!r})
 else: sys.exit('Real emulator execution is prohibited in this test')
 """)
             flatpak.chmod(0o755)
+            if doom:
+                write_iwad(source / "DOOM2.WAD")
+                marker = root / "software-ready"
+                marker.touch()
+                fake_flatpak(flatpak, marker, scope="system")
             runner = jobs.Jobs(app / "jobs")
             completed = threading.Event()
             outcome = {}
@@ -140,7 +150,7 @@ else: sys.exit('Real emulator execution is prohibited in this test')
                             f"http://127.0.0.1:{http.server_port}/web/catalog-live.html",
                         ], stdout=subprocess.DEVNULL, stderr=browser_log)
                         try:
-                            finished = completed.wait(600 if quake else 150)
+                            finished = completed.wait(600 if quake or doom else 150)
                             browser_log.seek(0)
                             diagnostics = browser_log.read().decode(errors="replace")[-1500:]
                             self.assertTrue(finished, f"GUI did not finish; browser={browser.poll()}, "

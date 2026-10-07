@@ -206,7 +206,7 @@ async function selectPackage(id, version) {
     if (!d.open) return;
     selectedPackage = detail;
     const m = detail.manifest;
-    const flycast = detail.dependencies?.flycast;
+    const flatpak = detail.dependencies?.flycast || detail.dependencies?.uzdoom;
     const native = detail.dependencies?.supermodel || detail.dependencies?.vkquake;
     const source = m.inputs.find(f => f.id === "source_dir");
     const destination = m.inputs.find(f => f.id === "games_root");
@@ -216,14 +216,14 @@ async function selectPackage(id, version) {
       ${detail.platform_issues.length ? `<p class="pkg-warning" role="alert">Installation blocked: ${esc(detail.platform_issues.join("; "))}</p>` : ""}
       <details><summary>Declared actions and test evidence</summary>
         ${packageJson({ platform: m.platform, actions: m.actions, dependencies: m.requires, testing: m.testing })}</details>
-      ${flycast ? `<h3>Required game software</h3>
-        <p class="bnote">${!flycast.flatpak_available ? "Flatpak is missing. Install it through your Ubuntu system tools first."
-          : flycast.installed ? `Required software is installed (${esc(flycast.version || "version unknown")}). It will not be automatically upgraded.`
+      ${flatpak ? `<h3>Required game software</h3>
+        <p class="bnote">${!flatpak.flatpak_available ? "Flatpak is missing. Install it through your Ubuntu system tools first."
+          : flatpak.installed ? `Required software is installed (${esc(flatpak.version || "version unknown")}). It will not be automatically upgraded.`
           : "Momentum will prepare the software this game needs. Review required downloads first; after compatibility checks, review the game files in the same setup job."}</p>
         <p class="pkg-warning">${detail.install_enabled
           ? "This game setup is supported by compatibility evidence. Installation still requires review and approval of this plan; confirm gameplay for your installation afterward."
           : "This package and software build need matching compatibility evidence. Momentum checks before changing game files."}</p>
-        <details><summary>Technical software details</summary>${packageJson(flycast)}</details>` : ""}
+        <details><summary>Technical software details</summary>${packageJson(flatpak)}</details>` : ""}
       ${native ? `<h3>Required game software</h3>
         <p class="bnote">${native.installed ? "Required software is installed. Momentum will reuse it without upgrading or changing its settings."
           : "Momentum will get the required software from its pinned official release after your approval. Then review the game installation plan."}</p>

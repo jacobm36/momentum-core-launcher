@@ -243,6 +243,13 @@ async function until(fn) {
   check($("#pdlg").textContent.includes("pinned official release after your approval"), "AppImage preparation is game-focused");
   check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "AppImage setup still requires package trust");
   $("#pdlg").close();
+  detail.dependencies = { uzdoom: { flatpak_available: true, installed: false, provider: "flatpak", scope: "user", capabilities_checked: false } };
+  detail.manifest.inputs[0].help = "Choose the folder containing DOOM2.WAD. All four Brutal Doom 64 mod files are already bundled.";
+  openPackages(); await selectPackage("test-game", "1.0.0");
+  check($("#pdlg").textContent.includes("DOOM2.WAD"), "Doom IWAD folder requirements shown");
+  check($("#pdlg").textContent.includes("All four Brutal Doom 64 mod files"), "complete Doom mod bundle explained");
+  check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "UZDoom retains separate package trust");
+  $("#pdlg").close();
   check(jobSub({ kind: "dependency", status: "succeeded" }).includes("No game installed"), "dependency success does not imply game success");
   document.querySelector("#result").textContent = "PASS: imports, trust, plan, controller focus, platform, capability gates and game software review";
 })().catch(error => { document.querySelector("#result").textContent = "FAIL: " + error.stack; });
