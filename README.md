@@ -4,8 +4,9 @@
 
 ![Playtime summary with streaks and a weekly chart](docs/stats.png)
 
-A local, controller-friendly game launcher with a cyberpunk / retro-arcade look. A tiny Python
-(stdlib-only) server plus a vanilla HTML/CSS/JS front end, shown in a Chrome kiosk or app window.
+A lightweight local game launcher with an arcade-inspired interface and guided game setup.
+Controller-friendly, with a cyberpunk / retro-arcade look, a Python standard-library backend
+and a vanilla HTML/CSS/JS front end, shown in a Chrome kiosk or app window.
 
 Features: categories and drag-to-reorder, search, favorites, per-game accent colors, a Classic or
 Featured detail panel, synthesized sound effects and intro, gamepad support, play statistics,
@@ -26,6 +27,33 @@ cp games.example.json games.json   # or run ./import_games.py to import .desktop
 
 Handy keys: **↑/↓** select, **Enter** play, **F** favorite, **R** jump to recent games, **Shift+F** jump to favorites, **S** change sort order, **T** playtime summary, **Ctrl+Q** quit.
 An empty library shows a welcome screen with an **Add a game** button. See [USER-GUIDE.md](USER-GUIDE.md) for everything else.
+
+## Meet Momentum Packages
+
+**More time playing. Less time piecing together launch commands.**
+
+[Momentum Packages](https://github.com/jacobm36/momentum-packages) is the companion repository
+where we build game-specific setup packages. Each package brings the launch settings, artwork,
+game details and installation steps together so Momentum can help turn your own game files
+into a playable library entry.
+
+The three projects work together:
+
+- **Momentum Core Launcher** is your arcade front door: choose a game, set it up and hit **PLAY**.
+- **Momentum Packages** is the private workshop where packages are built and tested.
+- [**Momentum Distribution**](https://github.com/jacobm36/momentum-distribution) hosts the public
+  catalog and approved installer downloads. The launcher connects here; players do not need
+  access to the private workshop or a GitHub account.
+
+In the launcher, choose **+ Add game**, pick a supported title and point Momentum at your game
+files. It downloads and checks the installer, helps set up compatible required software, and
+shows you the installation plan before making approved changes. Your original game files stay
+untouched. Local package ZIPs can also be imported through **Advanced**.
+
+**Bring your games; Momentum brings the setup.** Packages contain no game data, ROMs or BIOS
+files. The catalog currently starts with *The House of the Dead 2*—mouse aiming, zombie chaos
+and plenty of clicking. More titles can join as their packages are built and tested; updates
+are not installed automatically.
 
 ## Your data stays local
 
