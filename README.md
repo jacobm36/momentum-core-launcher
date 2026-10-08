@@ -54,8 +54,11 @@ untouched. Local package ZIPs can also be imported through **Advanced**.
 files come from you. Mod packages can include their complete distributable mod.
 The catalog includes *The House of the Dead 2*, *Virtua Cop 2*, *Star Wars Trilogy
 Arcade*, *L.A. Machineguns*, *Episode Enyo*, *Brutal Doom 64*, *Duke Nukem 3D*,
-*Brutal Doom*, *Aliens: Eradication* and *Ashes 2063: Enriched*. Installer verification is separate
+*Brutal Doom*, *Aliens: Eradication*, *Ashes 2063: Enriched* and *Quake Brutalist Jam III*. Installer verification is separate
 from gameplay confirmation. Updates are not installed automatically.
+QBJ3 requires your Quake PAKs and uses pinned Ironwail 0.8.2. Its restricted
+mod assets are not bundled: reuse a complete extracted source or separately
+approve a pinned 2.7 GB download before the game installation review.
 
 ## Your data stays local
 
@@ -74,15 +77,20 @@ Installer checks are not gameplay certification. All new installations report **
 HOD2's approved artwork revisions inherit unchanged installer-code evidence, not new gameplay runs.
 Technical evidence: [HOD2](docs/hod2-target-evidence.json),
 [arcade](docs/arcade-installer-evidence.json), [Episode Enyo](docs/quake-installer-evidence.json),
-[UZDoom games](docs/doom-installer-evidence.json), and [Duke Nukem 3D](docs/duke-installer-evidence.json).
+[UZDoom games](docs/doom-installer-evidence.json), [Duke Nukem 3D](docs/duke-installer-evidence.json),
+and [QBJ3](docs/qbj3-installer-evidence.json).
 [UZDoom preparation](docs/uzdoom-preparation.md) explains its scope and limits.
 [EDuke32 preparation](docs/eduke32-preparation.md) covers Duke's native engine
 reuse/build, complete enhancements and isolated state.
+[Ironwail/QBJ3 preparation](docs/ironwail-preparation.md) covers separately approved
+engine/source downloads, full inventory checks and retained shared caches.
 
 No automatic upgrades, elevation or RetroArch. Originals, personal settings and saves
 are preserved; ambiguous interrupted changes require reconciliation.
 Package scripts run as your user, not in a sandbox: trust the publisher before approval.
 Catalog downloads are bounded to 512 MiB and ten minutes, with exact size/hash checks.
+The distinct trusted QBJ3 source preparer allows only its exact 2.7 GB pinned
+archive, with a one-hour download deadline and no partial-download resume.
 The server binds to `127.0.0.1`, validates the Host header and requires a session token for changes.
 
 ## Validation
@@ -98,12 +106,16 @@ Package check without executing scripts: `python3 packages.py check <folder-or-z
 | Episode Enyo runner/lifecycle | `MCL_QUAKE_TESTS=1 python3 -m unittest tests.test_quake_installs` |
 | Four UZDoom games' runner/lifecycle | `MCL_DOOM_TESTS=1 python3 -m unittest tests.test_doom_installs` |
 | Duke Nukem 3D runner/lifecycle | `MCL_DUKE_TESTS=1 python3 -m unittest tests.test_duke_installs` |
+| QBJ3 full source and real preparation/lifecycle | `MCL_QBJ3_TESTS=1 python3 -m unittest tests.test_qbj3_installs` |
 | HOD2 runner/lifecycle | `MCL_HOD_PACKAGE=/absolute/HOD-package.zip python3 -m unittest tests.test_hod_receipts` |
 
 Browser checks need Chrome/Chromium; public checks need internet access.
 Runner checks need built packages in the sibling package repository and temporary storage.
 Native software is copied from exact pinned installations or downloaded from official releases.
 Flatpak is mocked; game media is synthetic and homes/settings are isolated.
+QBJ3 checks use the full real mod and real pinned source/engine downloads;
+only its commercial base PAK fixtures are synthetic. Run the large cases
+sequentially with at least 17 GiB free.
 These tests never launch games or engines and do not modify working installations.
 
 ## License

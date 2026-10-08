@@ -64,6 +64,27 @@ class InstallsTests(unittest.TestCase):
             os.environ["HOME"] = self._old_home
         self.tmp.cleanup()
 
+    def test_prepared_qbj3_source_is_verified_once_outside_job_lock_and_bound_to_both_steps(self):
+        detail = {"digest": "digest", "install_enabled": True, "dependencies": {"ironwail": {"installed": True}}}
+        context = {"inputs": {}, "package_root": "/package", "package_digest": "digest"}
+        job = {"meta": {"prepare_required_software": True, "package_id": "quake-brutalist-jam-3",
+                        "package_version": "0.1.0", "package_digest": "digest"},
+               "steps": [{}, {}, {"context": copy.deepcopy(context)}, {"context": copy.deepcopy(context)}]}
+
+        def resolve(*args):
+            self.assertFalse(self.jobs.lock._is_owned())
+            return Path("/cache/qbj3")
+
+        with mock.patch.object(self.inst, "package_details", return_value=detail), \
+                mock.patch.object(installs.ironwail, "source_for", side_effect=resolve) as source, \
+                mock.patch.object(self.jobs, "_save", create=True) as save:
+            self.assertIsNone(self.inst.before_step(job, 2))
+        source.assert_called_once()
+        save.assert_called_once_with(job)
+        for step in job["steps"][2:]:
+            self.assertEqual(step["context"]["inputs"]["mod_dir"], "/cache/qbj3")
+            self.assertEqual(step["context"]["dependencies"], detail["dependencies"])
+
     def test_merge_previous_defaults_rule(self):
         entry = {"name": "Old Name", "description": "", "tags": ["Rail"], "icon": None}
         defaults = {"name": "New Name", "description": "Desc", "tags": ["Rail", "Mouse"], "icon": "/i"}

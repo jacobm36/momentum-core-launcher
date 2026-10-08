@@ -27,6 +27,7 @@ import eduke32
 from tests.test_quake_installs import write_pak
 from tests.test_doom_installs import write_iwad, fake_flatpak
 from tests.test_duke_installs import write_grp
+from tests.test_qbj3_installs import prepare_test_engine, REFERENCE_SOURCE
 
 HERE = Path(__file__).resolve().parents[1]
 
@@ -63,6 +64,9 @@ class CatalogLiveBrowser(unittest.TestCase):
     def test_ashes_public_gui_install(self):
         self.exercise("ashes-2063", "Ashes 2063: Enriched", "0.1.0")
 
+    def test_qbj3_public_gui_install(self):
+        self.exercise("quake-brutalist-jam-3", "Quake Brutalist Jam III", "0.1.0")
+
     def exercise(self, game_id, name, version):
         chrome = shutil.which("google-chrome") or shutil.which("chromium")
         self.assertIsNotNone(chrome)
@@ -72,6 +76,7 @@ class CatalogLiveBrowser(unittest.TestCase):
         quake = vkquake.detect() if game_id == "quake-slave-zero-x" else None
         doom = game_id in ("brutal-doom-64", "brutal-doom", "aliens-eradication", "ashes-2063")
         duke = eduke32.detect() if game_id == "duke-nukem-3d" else None
+        qbj3 = game_id == "quake-brutalist-jam-3"
         with tempfile.TemporaryDirectory(prefix="mcl-catalog-live-") as tmp:
             root = Path(tmp)
             home, app, source, tools = (root / name for name in ("home", "launcher", "source", "tools"))
@@ -81,8 +86,9 @@ class CatalogLiveBrowser(unittest.TestCase):
             html = (HERE / "tests/fixtures/catalog-live.html").read_text()
             html = html.replace("SOURCE_DIRECTORY", json.dumps(str(source))).replace(
                 "GAMES_ROOT", json.dumps(str(home / "Games")))
+            html = html.replace("MOD_DIRECTORY", json.dumps(str(REFERENCE_SOURCE)) if qbj3 else "null")
             html = html.replace("the-house-of-the-dead-2", game_id).replace("The House of the Dead 2", name)
-            html = html.replace("SETUP_WAIT_ATTEMPTS", "6000" if quake or doom or duke else "1000")
+            html = html.replace("SETUP_WAIT_ATTEMPTS", "9000" if qbj3 else "6000" if quake or doom or duke else "1000")
             (app / "web/catalog-live.html").write_text(html)
             (app / "games.json").write_text("[]")
             (source / "House of the Dead 2, The (USA).cue").write_text(
@@ -101,6 +107,10 @@ class CatalogLiveBrowser(unittest.TestCase):
                 engine.parent.mkdir()
                 shutil.copyfile(quake["executable"], engine)
                 engine.chmod(0o755)
+                write_pak(source / "id1/pak0.pak", {"gfx/palette.lmp": b"synthetic palette"})
+                write_pak(source / "id1/pak1.pak", {"maps/e1m1.bsp": b"synthetic map"})
+            if qbj3:
+                prepare_test_engine(home, root)
                 write_pak(source / "id1/pak0.pak", {"gfx/palette.lmp": b"synthetic palette"})
                 write_pak(source / "id1/pak1.pak", {"maps/e1m1.bsp": b"synthetic map"})
             if game_id == "virtua-cop-2":
@@ -172,7 +182,7 @@ else: sys.exit('Real emulator execution is prohibited in this test')
                             f"http://127.0.0.1:{http.server_port}/web/catalog-live.html",
                         ], stdout=subprocess.DEVNULL, stderr=browser_log)
                         try:
-                            finished = completed.wait(600 if quake or doom or duke else 150)
+                            finished = completed.wait(900 if qbj3 else 600 if quake or doom or duke else 150)
                             browser_log.seek(0)
                             diagnostics = browser_log.read().decode(errors="replace")[-1500:]
                             self.assertTrue(finished, f"GUI did not finish; browser={browser.poll()}, "

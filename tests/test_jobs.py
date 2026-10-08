@@ -59,6 +59,24 @@ class Base(unittest.TestCase):
 
 
 class PlainJobs(Base):
+    def test_result_inventory_limit_accepts_four_mib_but_rejects_larger_bytes(self):
+        jid = self.j.submit("bounded result", [{"name": "step", "argv": [PY, "-c", "pass"]}])
+        self.until(jid, "succeeded")
+        job = self.j.jobs[jid]
+        overhead = len(json.dumps({"payload": ""}).encode())
+        for size in ((1 << 20) + 1, jobsmod.MAX_RESULT, jobsmod.MAX_RESULT + 1):
+            with self.subTest(bytes=size):
+                data = json.dumps({"payload": "x" * (size - overhead)}).encode()
+                self.assertEqual(len(data), size)
+                self.j.paths(jid)["result_file"].write_bytes(data)
+                result, error = self.j._take_result(job, 0, job["steps"][0])
+                if size <= jobsmod.MAX_RESULT:
+                    self.assertIsNone(error)
+                    self.assertEqual(len(result["payload"]), size - overhead)
+                else:
+                    self.assertIsNone(result)
+                    self.assertEqual(error, "result file is too large")
+
     def test_success_and_failure_and_resume(self):
         ok = self.j.submit("ok", [{"name": "a", "argv": [PY, "-c", "print('hi')"]}])
         self.assertEqual(self.until(ok, "succeeded")["done"], 1)

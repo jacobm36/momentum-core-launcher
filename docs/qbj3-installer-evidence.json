@@ -1,0 +1,23 @@
+{
+  "evidence_version": 1,
+  "scope": "Exact installer/lifecycle evidence and read-only native host prerequisites; no new gameplay evidence.",
+  "packages": [
+    {
+      "id": "quake-brutalist-jam-3",
+      "version": "0.1.0",
+      "digest": "sha256:5f98b31c48bd929fb2eb21272015459ce535755411805d40927574430c28b433",
+      "runtime": "ironwail",
+      "software": {
+        "provider": "native",
+        "scope": "user",
+        "version": "0.8.2",
+        "sha256": "484913a479bc1ddb64b405ff55e5c31caead0af1f158f4f911aa57d2368971cf",
+        "companion_sha256": "be6a546c1b267837d5b6558e9349b1df302a825587b994309b1c955a561292a1",
+        "game_local_state": true
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "Exact official Ironwail 0.8.2 engine/companion and complete QBJ3 1.3 source inventory bound. Actual approved official engine and 2.7 GB pinned mod downloads/extraction/publication passed, followed by separate game approval. Full real mod install/verify/repeat/repair/remove/retained-save reinstall passed in isolated homes with synthetic Quake base PAKs. Reinstall JSON measured 1097699 bytes, below the bounded 4 MiB runner result limit. Unit transport/failure mocks are separate from actual network evidence. Host readelf/ldconfig inspection only; no engine invocation, new graphical gameplay or fresh-machine certification. Confirm graphics, sound, input and save/relaunch; readiness remains setup-required."
+    }
+  ]
+}

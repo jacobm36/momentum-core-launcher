@@ -258,6 +258,27 @@ async function until(fn) {
   check($("#pdlg").textContent.includes("All three Duke enhancement packs"), "complete Duke enhancements visible");
   check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "native EDuke32 retains trust gate");
   $("#pdlg").close();
+  detail.dependencies = { ironwail: { installed: false, provider: "native", scope: "user" } };
+  detail.manifest.inputs.push({ id: "mod_dir", type: "directory", required: false,
+    role: "source", help: "Optional complete extracted qbj3 1.3 folder. No commercial Quake data is downloaded." });
+  detail.manifest.inputs[0].help = "Choose your Quake folder containing id1/pak0.pak and id1/pak1.pak.";
+  openPackages(); await selectPackage("test-game", "1.0.0");
+  check($("#pdlg").textContent.includes("2.7 GB") && $("#pdlg").textContent.includes("17 GiB"), "QBJ3 download and space visible");
+  check($("#pdlg").textContent.includes("Existing extracted mod folder (optional)"), "optional extracted mod input has distinct label");
+  check($("#pdlg").textContent.includes("No commercial Quake data is downloaded"), "additional source help visible");
+  check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "Ironwail preparation never skips publisher trust");
+  $("#pdlg").close();
+  plan.plan = { operation: "prepare-dependency", actions: [], downloads: [{
+    url: "https://us.22061996.xyz/qbj3/qbj3_1.3.zip", bytes: 2689872444,
+    sha256: "c".repeat(64), purpose: "mod-source", destination: "/home/test/cache/qbj3"
+  }] };
+  blockApproval = false;
+  await reviewPackagePlan(job.id);
+  check($("#rdlg").textContent.includes("us.22061996.xyz"), "pinned mod download source visible before approval");
+  check($("#rdlg").textContent.includes("separate game installation plan"), "software/source preparation is not game installation");
+  check($("#plan-approve").textContent === "Approve software / source preparation", "preparation approval button is explicit");
+  check($("#plan-approve").disabled && !$("#plan-consent").checked, "source download requires fresh explicit consent");
+  $("#rdlg").close();
   document.querySelector("#result").textContent = "PASS: imports, trust, plan, controller focus, platform, capability gates and game software review";
 })().catch(error => { document.querySelector("#result").textContent = "FAIL: " + error.stack; });
 </script></body></html>

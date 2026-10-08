@@ -31,7 +31,7 @@ EVENT_TYPES = ("step_started", "progress", "step_completed", "warning", "needs_a
 STEP_EVENTS = ("step_started", "progress", "step_completed")
 MAX_EVENT = 16384
 MAX_EVENTS = 20000
-MAX_RESULT = 1 << 20
+MAX_RESULT = 4 << 20
 MAX_ACTIONS = 20
 ENV_KEEP = ("HOME", "USER", "LOGNAME", "PATH", "LANG", "LANGUAGE", "TZ", "SHELL", "DISPLAY",
             "WAYLAND_DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS")
@@ -666,9 +666,10 @@ class Jobs:
         """Validate the step's result file and keep a copy; returns (result, error)."""
         p = self.paths(j["id"])
         try:
-            if p["result_file"].stat().st_size > MAX_RESULT:
+            with p["result_file"].open("rb") as stream:
+                data = stream.read(MAX_RESULT + 1)
+            if len(data) > MAX_RESULT:
                 return None, "result file is too large"
-            data = p["result_file"].read_bytes()
             res = json.loads(data.decode("utf-8"))
         except FileNotFoundError:
             return None, "no result file was written"

@@ -181,6 +181,7 @@ function openImportedPackages() {
 }
 
 function packageInputLabel(field) {
+  if (field.id === "mod_dir") return "Existing extracted mod folder (optional)";
   if (field.role === "source" || field.id === "source_dir") return "Where are your game files?";
   if (field.role === "destination" || field.id === "games_root") return "Install games in";
   return field.label || field.id.replace(/_/g, " ");
@@ -207,7 +208,7 @@ async function selectPackage(id, version) {
     selectedPackage = detail;
     const m = detail.manifest;
     const flatpak = detail.dependencies?.flycast || detail.dependencies?.uzdoom;
-    const native = detail.dependencies?.supermodel || detail.dependencies?.vkquake || detail.dependencies?.eduke32;
+    const native = detail.dependencies?.supermodel || detail.dependencies?.vkquake || detail.dependencies?.eduke32 || detail.dependencies?.ironwail;
     const source = m.inputs.find(f => f.id === "source_dir");
     const destination = m.inputs.find(f => f.id === "games_root");
     d.innerHTML = `<h2>${esc(detail.name)} <small>${esc(detail.version)}</small></h2>
@@ -233,10 +234,12 @@ async function selectPackage(id, version) {
         <details><summary>Technical software details</summary>${packageJson(native)}</details>` : ""}
       <form id="pkg-setup">
         <h3>Your game files</h3>
+        ${detail.dependencies?.ironwail ? '<p class="bnote">QBJ3 is downloaded separately from its official-site-linked mirror because its assets cannot be bundled. The pinned download is about 2.7 GB; allow about 17 GiB free for a fresh download and installation. A complete existing qbj3 folder is reused read-only. Review source/software preparation first, then approve the separate game installation plan.</p>' : ""}
         ${source ? `${packageInput(source, detail)}
           <p class="bnote">Leave your game files where they are. Choose their folder, or type/paste its full path; Momentum copies them and leaves your originals untouched.
           ${source.help ? esc(source.help) : detail.id === "the-house-of-the-dead-2" ? "For HOD2, use the folder containing the CUE file and all matching BIN tracks together. The package ZIP does not contain the game." : ""}</p>` : ""}
-        ${m.inputs.filter(f => f !== source && f !== destination).map(f => packageInput(f, detail)).join("")}
+        ${m.inputs.filter(f => f !== source && f !== destination).map(f =>
+          packageInput(f, detail) + (f.help ? `<p class="bnote">${esc(f.help)}</p>` : "")).join("")}
         ${destination ? `<p class="bnote">Momentum will install your game here:</p>
           <output id="pkg-destination" class="pkg-path" aria-live="polite"></output>
           <details><summary>Change installation folder</summary>${packageInput(destination, detail)}</details>` : ""}
@@ -332,6 +335,10 @@ async function reviewPackagePlan(id) {
         ${a.backup ? `<p class="bnote">Backup: <span class="pkg-path">${esc(a.backup)}</span></p>` : ""}</article>`).join("")}</div>`
         : '<p class="bnote">No file changes listed.</p>'}
       <details><summary>Technical software and network details</summary>${packageJson(plan.dependencies || {})}</details>
+      ${Array.isArray(plan.downloads) ? `<h3>Required software and mod source</h3>
+        <p class="bnote">These pinned downloads prepare shared software/source only. Original game files and saves are not changed. After preparation, review and approve the separate game installation plan.</p>
+        ${packageJson(plan.downloads)}
+        <p class="pkg-warning">Shared software and verified source caches remain after removal. QBJ3 source download is about 2.7 GB; allow about 17 GiB free for a fresh setup.</p>` : ""}
       ${Array.isArray(plan.dependency_commands) ? `<h3>Software required for this game</h3>
         <p class="bnote">${plan.dependency_download
           ? "Momentum will download the required software from its pinned official GitHub release for your account. No administrator access or automatic upgrade is requested."
@@ -346,7 +353,7 @@ async function reviewPackagePlan(id) {
       ${job.approval_blocked ? `<p class="pkg-warning">${esc(job.approval_blocked)}</p>` : ""}
       <label class="pkg-check"><input type="checkbox" id="plan-consent" ${job.approval_blocked ? "disabled" : ""}>I approve the listed changes.</label>
       <div class="btns"><button type="button" id="plan-close" autofocus>Close</button><button type="button" id="plan-cancel">Cancel job</button>
-        <button type="button" id="plan-approve" class="primary" disabled>${plan.operation === "prepare-dependency" ? "Approve required software" : "Approve and install"}</button></div>`;
+        <button type="button" id="plan-approve" class="primary" disabled>${plan.operation === "prepare-dependency" ? (plan.downloads ? "Approve software / source preparation" : "Approve required software") : "Approve and install"}</button></div>`;
     const approve = d.querySelector("#plan-approve");
     d.querySelector("#plan-consent").onchange = e => { approve.disabled = !e.target.checked || Boolean(job.approval_blocked); };
     d.onclick = async e => {

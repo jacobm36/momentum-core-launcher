@@ -415,8 +415,17 @@ def check_manifest(m, files, root):
                     "https://voidpoint.io/terminx/eduke32", "user",
                     "ec5824db81817866f70da326d3811bb0f52b3517"):
                 P.append(f"{w}native EDuke32 requires the pinned official user-scope source")
+        elif rid == "ironwail":
+            if (r.get("source"), r.get("scope"), r.get("version"), r.get("tested_version"),
+                    r.get("url"), r.get("sha256"), r.get("executable_sha256"), r.get("companion_sha256")) != (
+                    "github:andrei-drexler/ironwail", "user", "0.8.2", "0.8.2",
+                    "https://github.com/andrei-drexler/ironwail/releases/download/v0.8.2/ironwail-0.8.2-linux-x64.tar.gz",
+                    "fcb0219d13c50f64728892f0558b4761ba5578319a6cc01021fad981c6333aa5",
+                    "484913a479bc1ddb64b405ff55e5c31caead0af1f158f4f911aa57d2368971cf",
+                    "be6a546c1b267837d5b6558e9349b1df302a825587b994309b1c955a561292a1"):
+                P.append(f"{w}native Ironwail requires the exact official user-scope 0.8.2 release")
         elif (rid, r.get("source"), r.get("scope")) != ("supermodel", "github:trzy/Supermodel", "user"):
-            P.append(f"{w}native provider supports only pinned user-scope Supermodel or EDuke32")
+            P.append(f"{w}native provider supports only pinned user-scope Supermodel, EDuke32 or Ironwail")
 
     ops = obj("operations")
     for op in OPERATIONS if ops else ():

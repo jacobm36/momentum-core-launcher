@@ -112,6 +112,23 @@ class Digest(unittest.TestCase):
 
 
 class Intake(Base):
+    def test_ironwail_requires_exact_official_release_engine_and_companion(self):
+        import ironwail
+        requirement = {"id": "ironwail", "provider": "native", "scope": "user",
+                       "source": "github:andrei-drexler/ironwail", "version": "0.8.2",
+                       "tested_version": "0.8.2", "url": ironwail.URL,
+                       "sha256": ironwail.ARCHIVE_SHA, "executable_sha256": ironwail.ENGINE_SHA,
+                       "companion_sha256": ironwail.PAK_SHA}
+        self.assertTrue(packages.check(write_tree(self.t / "ironwail",
+                        package_files(manifest(requires=[requirement]))))["digest"])
+        for key, value in (("scope", "system"), ("source", "github:other/engine"),
+                           ("version", "0.8.3"), ("tested_version", "unknown"),
+                           ("url", "https://example.invalid/archive"), ("sha256", "a" * 64),
+                           ("executable_sha256", "b" * 64), ("companion_sha256", "c" * 64)):
+            with self.subTest(key=key):
+                self.assertIn("exact official", self.problems(write_tree(
+                    self.t / key, package_files(manifest(requires=[dict(requirement, **{key: value})])))))
+
     def test_eduke32_support_is_scoped_to_pinned_official_native_source(self):
         requirement = {"id": "eduke32", "provider": "native", "scope": "user",
                        "source": "https://voidpoint.io/terminx/eduke32",

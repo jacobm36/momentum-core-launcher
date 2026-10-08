@@ -21,6 +21,7 @@ import supermodel
 import vkquake
 import uzdoom
 import eduke32
+import ironwail
 import ownership
 
 DESC_FIELDS = ("name", "description", "tagline", "category", "tags")
@@ -30,7 +31,7 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 RUNTIME_RESOLVERS = {
     "flycast": dependencies, "supermodel": supermodel, "vkquake": vkquake, "uzdoom": uzdoom,
-    "eduke32": eduke32,
+    "eduke32": eduke32, "ironwail": ironwail,
 }
 
 
@@ -223,6 +224,10 @@ class Installs:
                 if (req.get("provider"), req.get("scope"), req.get("source"), req.get("source_commit")) != (
                         "native", "user", "https://voidpoint.io/terminx/eduke32", eduke32.SOURCE_COMMIT):
                     raise InstallError("Only the approved official user-scope EDuke32 setup is supported")
+            elif runtime == "ironwail":
+                if (req.get("provider"), req.get("scope"), req.get("source"), req.get("tested_version")) != (
+                        "native", "user", "github:andrei-drexler/ironwail", ironwail.VERSION):
+                    raise InstallError("Only the pinned official user-scope Ironwail release is supported")
             else:
                 raise InstallError(f"Unsupported dependency resolver: {runtime}")
             try:
@@ -254,6 +259,7 @@ class Installs:
                 "brutal-doom": "docs/doom-installer-evidence.json",
                 "aliens-eradication": "docs/doom-installer-evidence.json",
                 "ashes-2063": "docs/doom-installer-evidence.json",
+                "quake-brutalist-jam-3": "docs/qbj3-installer-evidence.json",
                 "duke-nukem-3d": "docs/duke-installer-evidence.json"
             }.get(package_id, "docs/arcade-installer-evidence.json")
             path = Path(__file__).parent / evidence_file
@@ -269,7 +275,7 @@ class Installs:
                 enabled = (len(facts) == 1 and current.get("installed") is True
                            and all(current.get(k) == v for k, v in expected.items()))
                 if enabled:
-                    if runtime in ("supermodel", "vkquake", "uzdoom", "eduke32"):
+                    if runtime in ("supermodel", "vkquake", "uzdoom", "eduke32", "ironwail"):
                         try:
                             current["host_checks"] = RUNTIME_RESOLVERS[runtime].check_host(current)
                         except dependencies.DependencyError as e:
@@ -300,9 +306,20 @@ class Installs:
         if detail["digest"] != meta["package_digest"] or not detail["install_enabled"]:
             return ("needs-action", "Required game software is not a validated build for this package. "
                     "No game files were installed; Momentum needs updated compatibility evidence.")
+        source = None
+        if "ironwail" in detail["dependencies"]:
+            ctx = job["steps"][2]["context"]
+            try:
+                source = ironwail.source_for(ctx["inputs"], ctx["package_root"], ctx["package_digest"])
+            except dependencies.DependencyError as e:
+                return ("needs-action", f"Mod source verification failed: {e}")
+            if source is None:
+                return ("needs-action", "Approved QBJ3 source preparation did not produce a complete source.")
         with self.jobs.lock:
             for step in job["steps"][2:]:
                 step["context"]["dependencies"] = _json_copy(detail["dependencies"])
+                if source is not None:
+                    step["context"]["inputs"]["mod_dir"] = str(source)
             meta["install_enabled"] = True
             self.jobs._save(job)
         return None
@@ -415,8 +432,23 @@ class Installs:
                 "install_enabled": detail["install_enabled"],
                 "catalog_defaults": {**man["catalog"], "name": man["name"], "icon": paths["icon"]}}
         runtime = next(iter(deps), None)
-        if detail["package_supported"] and runtime and not deps[runtime].get("installed"):
+        prepare_source = False
+        if runtime == "ironwail":
+            try:
+                mod = ironwail.source_for(inputs, str(snap), base["package_digest"])
+            except dependencies.DependencyError as e:
+                raise InstallError(str(e)) from e
+            prepare_source = mod is None
+            if mod is not None:
+                inputs["mod_dir"] = str(mod)
+        if detail["package_supported"] and runtime and (not deps[runtime].get("installed") or prepare_source):
             steps = self._dependency_steps(runtime) + steps
+            if runtime == "ironwail":
+                for step in steps[:2]:
+                    step["context"].update(package_root=str(snap), package_digest=base["package_digest"],
+                                           inputs=_json_copy(inputs), game_directory=game_dir)
+                    step["name"] = ("Check required software and mod download" if
+                                    step["context"]["phase"] == "preflight" else "Prepare required software and mod source")
             meta["prepare_required_software"] = True
         return self.jobs.submit(f"Install {man['name']}", steps, game=package_id, meta=meta)
 
@@ -453,6 +485,8 @@ class Installs:
                     return "Close UZDoom before approving this installation"
                 if "eduke32" in detail["dependencies"] and not preparing and eduke32.running(detail["dependencies"]["eduke32"]):
                     return "Close EDuke32 before approving this installation"
+                if "ironwail" in detail["dependencies"] and ironwail.running(detail["dependencies"]["ironwail"]):
+                    return "Close Ironwail before approving this installation"
             except (InstallError, ownership.OwnershipError, dependencies.DependencyError, OSError, ValueError) as e:
                 return f"Installation approval checks failed: {e}"
         return self.jobs.approve(jid, digest)

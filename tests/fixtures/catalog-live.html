@@ -35,6 +35,7 @@ async function until(fn) {
   check(jobs.some(j => j.kind === "download" && j.status === "succeeded"), "actual download job finished");
   check(games.length === 0, "download did not install a game");
   $("#pkg-input-source_dir").value = SOURCE_DIRECTORY;
+  if (MOD_DIRECTORY) $("#pkg-input-mod_dir").value = MOD_DIRECTORY;
   check($("#pkg-destination").textContent.startsWith(GAMES_ROOT), "isolated destination shown");
   $("#pkg-trust").click(); $("#pkg-setup").requestSubmit();
   await until(() => jobs.some(j => j.kind === "install" && j.status === "awaiting-approval"));
