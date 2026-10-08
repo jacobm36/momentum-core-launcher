@@ -3,6 +3,60 @@
   "scope": "Exact installer/lifecycle evidence plus non-graphical Flatpak metadata/runtime prerequisites. No gameplay evidence is inherited.",
   "packages": [
     {
+      "id": "brutal-doom",
+      "version": "0.1.0",
+      "digest": "sha256:850bf6ff653852f3584bd7c9b68bbf9929d77df2117a7f81483ceb4c87586b7b",
+      "runtime": "uzdoom",
+      "software": {
+        "provider": "flatpak",
+        "app_id": "org.zdoom.UZDoom",
+        "version": "5.0.1",
+        "commit": "d7b8ce76e5480a28d1e07400093a20d47f56c201fd974b0a5dbfa3b26bbd587e",
+        "arch": "x86_64",
+        "branch": "stable",
+        "origin": "flathub"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "Guide-defined Brutal Doom v21 baseline, explicit --metal soundtrack option, incompatible voxel excluded. Exact package tests and isolated full-payload runner lifecycle; user/default-system reuse and separately approved missing-user preparation checked using mocked Flatpak. Actual installed UZDoom metadata/runtime read-only checks only. No engine invocation, graphical gameplay, real fresh-machine install or save/relaunch certification. Shared settings preserved; readiness remains setup-required."
+    },
+    {
+      "id": "aliens-eradication",
+      "version": "0.1.0",
+      "digest": "sha256:555e4306d3706c566fc0540eb18295ab1b6425ba46a93f6e73923101babca194",
+      "runtime": "uzdoom",
+      "software": {
+        "provider": "flatpak",
+        "app_id": "org.zdoom.UZDoom",
+        "version": "5.0.1",
+        "commit": "d7b8ce76e5480a28d1e07400093a20d47f56c201fd974b0a5dbfa3b26bbd587e",
+        "arch": "x86_64",
+        "branch": "stable",
+        "origin": "flathub"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "Guide-defined Aliens 2.0 TC then campaign WAD order. Required mouse-look/jump/crouch and recommended lighting documented, no shared configuration writes. Exact package tests and isolated full-payload runner lifecycle; user/default-system reuse and separately approved missing-user preparation checked using mocked Flatpak. Actual installed UZDoom metadata/runtime read-only checks only. No engine invocation, graphical gameplay, real fresh-machine install or save/relaunch certification. Readiness remains setup-required."
+    },
+    {
+      "id": "ashes-2063",
+      "version": "0.1.0",
+      "digest": "sha256:82d94b61109cdf034248e5a7e27b54e19f93a64a4520c0138230b9ff599a11f3",
+      "runtime": "uzdoom",
+      "software": {
+        "provider": "flatpak",
+        "app_id": "org.zdoom.UZDoom",
+        "version": "5.0.1",
+        "commit": "d7b8ce76e5480a28d1e07400093a20d47f56c201fd974b0a5dbfa3b26bbd587e",
+        "arch": "x86_64",
+        "branch": "stable",
+        "origin": "flathub"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "Guide-defined Ashes Enriched 2.23 main PK3 with Doom II. Undocumented Freedoom patch and copied engine support files excluded. Exact package tests and isolated full-payload runner lifecycle; user/default-system reuse and separately approved missing-user preparation checked using mocked Flatpak. Actual installed UZDoom metadata/runtime read-only checks only. No engine invocation, graphical gameplay, real fresh-machine install or save/relaunch certification. Shared settings preserved; readiness remains setup-required."
+    },
+    {
       "id": "brutal-doom-64",
       "version": "0.1.0",
       "digest": "sha256:56b890f11e4a040e560db9aa90c927172b24f5a367674e36922c500fb2db1d32",

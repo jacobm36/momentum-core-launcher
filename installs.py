@@ -251,6 +251,9 @@ class Installs:
             evidence_file = {
                 "quake-slave-zero-x": "docs/quake-installer-evidence.json",
                 "brutal-doom-64": "docs/doom-installer-evidence.json",
+                "brutal-doom": "docs/doom-installer-evidence.json",
+                "aliens-eradication": "docs/doom-installer-evidence.json",
+                "ashes-2063": "docs/doom-installer-evidence.json",
                 "duke-nukem-3d": "docs/duke-installer-evidence.json"
             }.get(package_id, "docs/arcade-installer-evidence.json")
             path = Path(__file__).parent / evidence_file

@@ -54,6 +54,15 @@ class CatalogLiveBrowser(unittest.TestCase):
     def test_duke_public_gui_install(self):
         self.exercise("duke-nukem-3d", "Duke Nukem 3D", "0.1.1")
 
+    def test_brutal_doom_public_gui_install(self):
+        self.exercise("brutal-doom", "Brutal Doom", "0.1.0")
+
+    def test_aliens_public_gui_install(self):
+        self.exercise("aliens-eradication", "Aliens: Eradication", "0.1.0")
+
+    def test_ashes_public_gui_install(self):
+        self.exercise("ashes-2063", "Ashes 2063: Enriched", "0.1.0")
+
     def exercise(self, game_id, name, version):
         chrome = shutil.which("google-chrome") or shutil.which("chromium")
         self.assertIsNotNone(chrome)
@@ -61,7 +70,7 @@ class CatalogLiveBrowser(unittest.TestCase):
         metadata = f"    Version: {evidence['emulator_version']}\n    Commit: {evidence['emulator_commit']}"
         native = supermodel.detect() if game_id in ("star-wars-trilogy-arcade", "l-a-machineguns") else None
         quake = vkquake.detect() if game_id == "quake-slave-zero-x" else None
-        doom = game_id == "brutal-doom-64"
+        doom = game_id in ("brutal-doom-64", "brutal-doom", "aliens-eradication", "ashes-2063")
         duke = eduke32.detect() if game_id == "duke-nukem-3d" else None
         with tempfile.TemporaryDirectory(prefix="mcl-catalog-live-") as tmp:
             root = Path(tmp)

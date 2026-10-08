@@ -57,6 +57,12 @@ else: sys.exit('Unexpected Flatpak operation; game launches forbidden: '+str(arg
 
 @unittest.skipUnless(os.environ.get("MCL_DOOM_TESTS") == "1", "opt-in complete Doom mod integration")
 class DoomInstalls(unittest.TestCase):
+    game_id = GAME_ID
+    package_version = "0.1.0"
+    mod_directory = "mods/BrutalDoom64"
+    files = ("bd64gamev2.pk3", "bd64mapsV2.pk3", "STAnnouncerPack.pk3", "ZD64MUSIC.PK3")
+    load_order = files
+
     def wait(self, runner, jid):
         deadline = time.monotonic() + 120
         while time.monotonic() < deadline and runner.get(jid)["status"] in jobs.RUNNING:
@@ -93,14 +99,15 @@ class DoomInstalls(unittest.TestCase):
             catalog = app / "games.json"
             catalog.write_text("[]")
             with mock.patch.dict(os.environ, {"HOME": str(home), "PATH": str(tools) + ":" + os.environ["PATH"]}):
-                info = packages.import_package(PACKAGE_REPO / "dist/brutal-doom-64-0.1.0.zip", app)
+                info = packages.import_package(
+                    PACKAGE_REPO / f"dist/{self.game_id}-{self.package_version}.zip", app)
                 runner = jobs.Jobs(app / "jobs")
                 inst = installs.Installs(app, threading.Lock(), lambda: json.loads(catalog.read_text()),
                                         lambda gs: installs._write_atomic(catalog, json.dumps(gs).encode()), runner)
                 runner.on_success, runner.before_step = inst.on_success, inst.before_step
 
                 def submit():
-                    return inst.submit_install(GAME_ID, "0.1.0", str(source), trusted_digest=info["digest"])
+                    return inst.submit_install(self.game_id, self.package_version, str(source), trusted_digest=info["digest"])
 
                 def approve(jid):
                     job = self.wait(runner, jid)
@@ -110,7 +117,7 @@ class DoomInstalls(unittest.TestCase):
                     return self.wait(runner, jid)
 
                 def operation(name, receipt, template):
-                    detail = inst.package_details(GAME_ID, "0.1.0")
+                    detail = inst.package_details(self.game_id, self.package_version)
                     context = dict(template, operation=name, previous_receipt=receipt,
                                    dependencies=detail["dependencies"])
                     steps = [{"name": f"{name} {phase}", "protocol": True, "approve_after": phase == "preflight",
@@ -119,7 +126,7 @@ class DoomInstalls(unittest.TestCase):
                               "cwd": context["package_root"], "context": dict(context, phase=phase)}
                              for phase in ("preflight", "apply")]
                     meta = dict(runner.jobs[template_jid]["meta"], operation=name)
-                    return runner.submit(name, steps, game=GAME_ID, meta=meta)
+                    return runner.submit(name, steps, game=self.game_id, meta=meta)
 
                 try:
                     jid = submit()
@@ -142,15 +149,20 @@ class DoomInstalls(unittest.TestCase):
                     inst.jobs = runner
                     self.assertEqual(runner.get(jid)["plan_digest"], job["plan_digest"])
                     self.assertEqual(approve(jid)["status"], "succeeded", runner.get(jid))
-                    receipt = inst._load_receipt(GAME_ID)
+                    receipt = inst._load_receipt(self.game_id)
                     game = Path(receipt["game_directory"])
                     self.assertEqual(receipt["readiness"], "setup-required")
                     wrapper = Path(receipt["paths"]["launcher"]).read_text()
                     self.assertIn(f"flatpak run --{scope}", wrapper)
                     self.assertIn('--filesystem="$game_dir:ro"', wrapper)
-                    files = ("bd64gamev2.pk3", "bd64mapsV2.pk3", "STAnnouncerPack.pk3", "ZD64MUSIC.PK3")
-                    self.assertEqual(sorted(files, key=wrapper.index), list(files))
-                    self.assertTrue(all((game / "mods/BrutalDoom64" / f).is_file() for f in files))
+                    self.assertEqual(sorted(self.load_order, key=wrapper.index), list(self.load_order))
+                    self.assertTrue(all((game / self.mod_directory / f).is_file() for f in self.files))
+                    if self.game_id == "brutal-doom":
+                        self.assertIn('if [[ "${1:-}" == "--metal" ]]', wrapper)
+                        self.assertNotIn("brutalVoxelDoom", wrapper)
+                    if self.game_id == "ashes-2063":
+                        self.assertNotIn("FDPatch", wrapper)
+                        self.assertNotIn("game_support", wrapper)
                     if not lifecycle:
                         return
                     template_jid = jid
@@ -158,20 +170,20 @@ class DoomInstalls(unittest.TestCase):
                     repeat = submit()
                     self.assertEqual(self.wait(runner, repeat)["plan"]["actions"], [])
                     self.assertEqual(approve(repeat)["status"], "succeeded", runner.get(repeat))
-                    receipt = inst._load_receipt(GAME_ID)
-                    (game / "mods/BrutalDoom64/bd64gamev2.pk3").unlink()
+                    receipt = inst._load_receipt(self.game_id)
+                    (game / self.mod_directory / self.files[0]).unlink()
                     repair = operation("repair", receipt, template)
                     self.assertEqual(approve(repair)["status"], "succeeded", runner.get(repair))
-                    receipt = inst._load_receipt(GAME_ID)
+                    receipt = inst._load_receipt(self.game_id)
                     (game / "save.zds").write_text("keep this save")
                     remove = operation("uninstall", receipt, template)
                     self.assertEqual(approve(remove)["status"], "succeeded", runner.get(remove))
-                    self.assertFalse((game / "mods/BrutalDoom64/bd64gamev2.pk3").exists())
+                    self.assertFalse((game / self.mod_directory / self.files[0]).exists())
                     self.assertEqual((game / "DOOM2.WAD").read_bytes(), original)
                     reinstall = submit()
                     self.assertEqual(approve(reinstall)["status"], "succeeded", runner.get(reinstall))
                     self.assertEqual((game / "save.zds").read_text(), "keep this save")
-                    self.assertEqual(inst._load_receipt(GAME_ID)["installation_id"], receipt["installation_id"])
+                    self.assertEqual(inst._load_receipt(self.game_id)["installation_id"], receipt["installation_id"])
                     self.assertEqual(len(json.loads(catalog.read_text())), 1)
                     cancel = submit()
                     self.assertEqual(self.wait(runner, cancel)["status"], "awaiting-approval")
@@ -181,3 +193,24 @@ class DoomInstalls(unittest.TestCase):
                     self.assertEqual(state.read_text(), "keep personal settings")
                     runner.close()
                     packages._rmtree(app / "packages")
+
+
+class BrutalDoomInstalls(DoomInstalls):
+    game_id = "brutal-doom"
+    mod_directory = "mods/Brutal_Doom"
+    files = ("brutalv21.pk3", "DoomMetalVol5.wad")
+    load_order = ("brutalv21.pk3",)
+
+
+class AliensInstalls(DoomInstalls):
+    game_id = "aliens-eradication"
+    mod_directory = "mods/Aliens_Eradication"
+    files = ("ALIENS_ERADICATION_TC_2_0.pk3", "ERADICATION_MAPSET_2_0.wad")
+    load_order = files
+
+
+class AshesInstalls(DoomInstalls):
+    game_id = "ashes-2063"
+    mod_directory = "mods/Ashes_2063"
+    files = ("Ashes2063Enriched2_23.pk3",)
+    load_order = files

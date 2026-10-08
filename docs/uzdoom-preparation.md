@@ -1,6 +1,7 @@
 # Approved UZDoom setup
 
-Brutal Doom 64 follows its guide's `org.zdoom.UZDoom` Flatpak, exact four-file
+Brutal Doom 64, Brutal Doom v21, Aliens: Eradication 2.0 and Ashes 2063:
+Enriched 2.23 follow their guides' `org.zdoom.UZDoom` Flatpak, exact mod
 load order and per-invocation read-only filesystem grant. No fallback engines,
 forced video/input settings or persistent Flatpak overrides.
 
@@ -20,6 +21,15 @@ content access, graphics/audio, input or real save/relaunch. The legacy
 `capabilities_checked` lifecycle field signifies the bound installer gate;
 `host_checks` explicitly leaves graphical/CLI/gameplay checks false.
 Readiness remains setup-required.
+
+Brutal Doom bundles Doom Metal Volume 5 but loads it only with the guide's
+explicit `--metal` option; the incompatible Complete voxel addon is excluded.
+Aliens loads TC first, then campaign WAD; its player guide calls out required
+mouse-look/jumping/crouching and recommended lighting without overwriting
+shared preferences. Ashes uses the Doom II baseline and main Enriched PK3,
+not the undocumented Freedoom patch or copied engine support files.
+All three retain exact upstream payloads, original embedded credits and
+guide-selected artwork converted to valid PNG, with explicit provenance gaps.
 
 Validate with `MCL_DOOM_TESTS=1 python3 -m unittest tests.test_doom_installs`
 and `python3 -m unittest tests.test_uzdoom`. Complete mod runner tests use isolated
