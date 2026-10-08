@@ -20,6 +20,7 @@ import dependencies
 import supermodel
 import vkquake
 import uzdoom
+import eduke32
 import ownership
 
 DESC_FIELDS = ("name", "description", "tagline", "category", "tags")
@@ -29,6 +30,7 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 RUNTIME_RESOLVERS = {
     "flycast": dependencies, "supermodel": supermodel, "vkquake": vkquake, "uzdoom": uzdoom,
+    "eduke32": eduke32,
 }
 
 
@@ -217,6 +219,10 @@ class Installs:
                         req.get("tested_version")) != (
                         "flatpak", "user", "flathub", uzdoom.APP, "5.0.1"):
                     raise InstallError("Only the approved Flathub UZDoom setup is supported")
+            elif runtime == "eduke32":
+                if (req.get("provider"), req.get("scope"), req.get("source"), req.get("source_commit")) != (
+                        "native", "user", "https://voidpoint.io/terminx/eduke32", eduke32.SOURCE_COMMIT):
+                    raise InstallError("Only the approved official user-scope EDuke32 setup is supported")
             else:
                 raise InstallError(f"Unsupported dependency resolver: {runtime}")
             try:
@@ -244,7 +250,8 @@ class Installs:
         if package_id != evidence["package_id"]:
             evidence_file = {
                 "quake-slave-zero-x": "docs/quake-installer-evidence.json",
-                "brutal-doom-64": "docs/doom-installer-evidence.json"
+                "brutal-doom-64": "docs/doom-installer-evidence.json",
+                "duke-nukem-3d": "docs/duke-installer-evidence.json"
             }.get(package_id, "docs/arcade-installer-evidence.json")
             path = Path(__file__).parent / evidence_file
             records = json.loads(path.read_text()) if path.exists() else {"packages": []}
@@ -259,7 +266,7 @@ class Installs:
                 enabled = (len(facts) == 1 and current.get("installed") is True
                            and all(current.get(k) == v for k, v in expected.items()))
                 if enabled:
-                    if runtime in ("supermodel", "vkquake", "uzdoom"):
+                    if runtime in ("supermodel", "vkquake", "uzdoom", "eduke32"):
                         try:
                             current["host_checks"] = RUNTIME_RESOLVERS[runtime].check_host(current)
                         except dependencies.DependencyError as e:
@@ -441,6 +448,8 @@ class Installs:
                     return "Close vkQuake before approving this installation"
                 if "uzdoom" in detail["dependencies"] and uzdoom.running(detail["dependencies"]["uzdoom"]):
                     return "Close UZDoom before approving this installation"
+                if "eduke32" in detail["dependencies"] and not preparing and eduke32.running(detail["dependencies"]["eduke32"]):
+                    return "Close EDuke32 before approving this installation"
             except (InstallError, ownership.OwnershipError, dependencies.DependencyError, OSError, ValueError) as e:
                 return f"Installation approval checks failed: {e}"
         return self.jobs.approve(jid, digest)

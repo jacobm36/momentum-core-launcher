@@ -207,7 +207,7 @@ async function selectPackage(id, version) {
     selectedPackage = detail;
     const m = detail.manifest;
     const flatpak = detail.dependencies?.flycast || detail.dependencies?.uzdoom;
-    const native = detail.dependencies?.supermodel || detail.dependencies?.vkquake;
+    const native = detail.dependencies?.supermodel || detail.dependencies?.vkquake || detail.dependencies?.eduke32;
     const source = m.inputs.find(f => f.id === "source_dir");
     const destination = m.inputs.find(f => f.id === "games_root");
     d.innerHTML = `<h2>${esc(detail.name)} <small>${esc(detail.version)}</small></h2>
@@ -226,7 +226,9 @@ async function selectPackage(id, version) {
         <details><summary>Technical software details</summary>${packageJson(flatpak)}</details>` : ""}
       ${native ? `<h3>Required game software</h3>
         <p class="bnote">${native.installed ? "Required software is installed. Momentum will reuse it without upgrading or changing its settings."
-          : "Momentum will get the required software from its pinned official release after your approval. Then review the game installation plan."}</p>
+          : detail.dependencies?.eduke32
+            ? "Momentum will build the required software from pinned official source after your approval. Ubuntu build prerequisites must already be installed. Then review the game installation plan."
+            : "Momentum will get the required software from its pinned official release after your approval. Then review the game installation plan."}</p>
         <p class="pkg-warning">Installer checks do not certify gameplay. Confirm controls, display and saved progress for this installation.</p>
         <details><summary>Technical software details</summary>${packageJson(native)}</details>` : ""}
       <form id="pkg-setup">

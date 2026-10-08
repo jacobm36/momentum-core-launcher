@@ -410,8 +410,13 @@ def check_manifest(m, files, root):
             if (rid, r.get("source"), r.get("scope"), r.get("tested_version")) != (
                     "vkquake", "github:Novum/vkQuake", "user", "1.36.0"):
                 P.append(f"{w}appimage provider supports only pinned user-scope vkQuake 1.36.0 from its official GitHub release")
+        elif rid == "eduke32":
+            if (r.get("source"), r.get("scope"), r.get("source_commit")) != (
+                    "https://voidpoint.io/terminx/eduke32", "user",
+                    "ec5824db81817866f70da326d3811bb0f52b3517"):
+                P.append(f"{w}native EDuke32 requires the pinned official user-scope source")
         elif (rid, r.get("source"), r.get("scope")) != ("supermodel", "github:trzy/Supermodel", "user"):
-            P.append(f"{w}native provider supports only pinned user-scope Supermodel from its official GitHub release")
+            P.append(f"{w}native provider supports only pinned user-scope Supermodel or EDuke32")
 
     ops = obj("operations")
     for op in OPERATIONS if ops else ():

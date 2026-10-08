@@ -112,6 +112,18 @@ class Digest(unittest.TestCase):
 
 
 class Intake(Base):
+    def test_eduke32_support_is_scoped_to_pinned_official_native_source(self):
+        requirement = {"id": "eduke32", "provider": "native", "scope": "user",
+                       "source": "https://voidpoint.io/terminx/eduke32",
+                       "source_commit": "ec5824db81817866f70da326d3811bb0f52b3517"}
+        self.assertTrue(packages.check(write_tree(self.t / "eduke32",
+                        package_files(manifest(requires=[requirement]))))["digest"])
+        for key, value in (("id", "other-engine"), ("scope", "system"),
+                           ("source", "https://example.invalid"), ("source_commit", "unknown")):
+            with self.subTest(key=key):
+                self.assertIn("pinned", self.problems(write_tree(
+                    self.t / key, package_files(manifest(requires=[dict(requirement, **{key: value})])))))
+
     def test_appimage_support_is_scoped_to_the_pinned_official_vkquake(self):
         requirement = {"id": "vkquake", "provider": "appimage", "scope": "user",
                        "source": "github:Novum/vkQuake", "tested_version": "1.36.0"}

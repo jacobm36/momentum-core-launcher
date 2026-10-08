@@ -1,0 +1,20 @@
+{
+  "evidence_version": 1,
+  "scope": "Installer/lifecycle and non-graphical native ELF/library prerequisites only. User-confirmed working guide setup is a reference, not new packaged gameplay evidence.",
+  "packages": [
+    {
+      "id": "duke-nukem-3d",
+      "version": "0.1.1",
+      "digest": "sha256:fada5b3a6b6e04bbfc79239a5af216c9047a78cc3a2b1a62edb675bf477bc76b",
+      "runtime": "eduke32",
+      "software": {
+        "provider": "native",
+        "scope": "user",
+        "sha256": "bc3a5465c7e236f5f5662ccdc663c7f36ba375b70b4ccc5c2f3ca44f592e8270"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "Complete supplied upscale, voxel and SC-55 archives; guide-defined arguments, game-local state, source preservation and exact isolated lifecycle checks. Guide engine bytes are reused read-only. Source build preparation is separately approved; a newly compiled unknown hash remains gated before game writes. ELF/library prerequisites do not certify engine invocation, OpenGL, input, sound, real GRP gameplay or save/relaunch. Confirm these before relying on the installation."
+    }
+  ]
+}

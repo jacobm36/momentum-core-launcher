@@ -53,7 +53,7 @@ untouched. Local package ZIPs can also be imported through **Advanced**.
 **Bring your games; Momentum brings the setup.** Commercial base-game data, ROMs and BIOS
 files come from you. Mod packages can include their complete distributable mod.
 The catalog includes *The House of the Dead 2*, *Virtua Cop 2*, *Star Wars Trilogy
-Arcade*, *L.A. Machineguns*, *Episode Enyo* and *Brutal Doom 64*. Installer verification is separate
+Arcade*, *L.A. Machineguns*, *Episode Enyo*, *Brutal Doom 64* and *Duke Nukem 3D*. Installer verification is separate
 from gameplay confirmation. Updates are not installed automatically.
 
 ## Your data stays local
@@ -73,8 +73,10 @@ Installer checks are not gameplay certification. All new installations report **
 HOD2's approved artwork revisions inherit unchanged installer-code evidence, not new gameplay runs.
 Technical evidence: [HOD2](docs/hod2-target-evidence.json),
 [arcade](docs/arcade-installer-evidence.json), [Episode Enyo](docs/quake-installer-evidence.json),
-and [Brutal Doom 64](docs/doom-installer-evidence.json).
+[Brutal Doom 64](docs/doom-installer-evidence.json), and [Duke Nukem 3D](docs/duke-installer-evidence.json).
 [UZDoom preparation](docs/uzdoom-preparation.md) explains its scope and limits.
+[EDuke32 preparation](docs/eduke32-preparation.md) covers Duke's native engine
+reuse/build, complete enhancements and isolated state.
 
 No automatic upgrades, elevation or RetroArch. Originals, personal settings and saves
 are preserved; ambiguous interrupted changes require reconciliation.
@@ -94,6 +96,7 @@ Package check without executing scripts: `python3 packages.py check <folder-or-z
 | Arcade runner/lifecycle | `MCL_ARCADE_TESTS=1 python3 -m unittest tests.test_arcade_installs` |
 | Episode Enyo runner/lifecycle | `MCL_QUAKE_TESTS=1 python3 -m unittest tests.test_quake_installs` |
 | Brutal Doom 64 runner/lifecycle | `MCL_DOOM_TESTS=1 python3 -m unittest tests.test_doom_installs` |
+| Duke Nukem 3D runner/lifecycle | `MCL_DUKE_TESTS=1 python3 -m unittest tests.test_duke_installs` |
 | HOD2 runner/lifecycle | `MCL_HOD_PACKAGE=/absolute/HOD-package.zip python3 -m unittest tests.test_hod_receipts` |
 
 Browser checks need Chrome/Chromium; public checks need internet access.

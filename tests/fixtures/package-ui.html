@@ -251,6 +251,13 @@ async function until(fn) {
   check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "UZDoom retains separate package trust");
   $("#pdlg").close();
   check(jobSub({ kind: "dependency", status: "succeeded" }).includes("No game installed"), "dependency success does not imply game success");
+  detail.dependencies = { eduke32: { installed: false, provider: "native", scope: "user" } };
+  detail.manifest.inputs[0].help = "Choose DUKE3D.GRP's folder. All three Duke enhancement packs are already included.";
+  openPackages(); await selectPackage("test-game", "1.0.0");
+  check($("#pdlg").textContent.includes("DUKE3D.GRP"), "Duke base requirements visible");
+  check($("#pdlg").textContent.includes("All three Duke enhancement packs"), "complete Duke enhancements visible");
+  check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "native EDuke32 retains trust gate");
+  $("#pdlg").close();
   document.querySelector("#result").textContent = "PASS: imports, trust, plan, controller focus, platform, capability gates and game software review";
 })().catch(error => { document.querySelector("#result").textContent = "FAIL: " + error.stack; });
 </script></body></html>

@@ -23,8 +23,10 @@ import packages
 import server
 import supermodel
 import vkquake
+import eduke32
 from tests.test_quake_installs import write_pak
 from tests.test_doom_installs import write_iwad, fake_flatpak
+from tests.test_duke_installs import write_grp
 
 HERE = Path(__file__).resolve().parents[1]
 
@@ -49,6 +51,9 @@ class CatalogLiveBrowser(unittest.TestCase):
     def test_brutal_doom_64_public_gui_install(self):
         self.exercise("brutal-doom-64", "Brutal Doom 64", "0.1.0")
 
+    def test_duke_public_gui_install(self):
+        self.exercise("duke-nukem-3d", "Duke Nukem 3D", "0.1.1")
+
     def exercise(self, game_id, name, version):
         chrome = shutil.which("google-chrome") or shutil.which("chromium")
         self.assertIsNotNone(chrome)
@@ -57,6 +62,7 @@ class CatalogLiveBrowser(unittest.TestCase):
         native = supermodel.detect() if game_id in ("star-wars-trilogy-arcade", "l-a-machineguns") else None
         quake = vkquake.detect() if game_id == "quake-slave-zero-x" else None
         doom = game_id == "brutal-doom-64"
+        duke = eduke32.detect() if game_id == "duke-nukem-3d" else None
         with tempfile.TemporaryDirectory(prefix="mcl-catalog-live-") as tmp:
             root = Path(tmp)
             home, app, source, tools = (root / name for name in ("home", "launcher", "source", "tools"))
@@ -67,12 +73,19 @@ class CatalogLiveBrowser(unittest.TestCase):
             html = html.replace("SOURCE_DIRECTORY", json.dumps(str(source))).replace(
                 "GAMES_ROOT", json.dumps(str(home / "Games")))
             html = html.replace("the-house-of-the-dead-2", game_id).replace("The House of the Dead 2", name)
-            html = html.replace("SETUP_WAIT_ATTEMPTS", "6000" if quake or doom else "1000")
+            html = html.replace("SETUP_WAIT_ATTEMPTS", "6000" if quake or doom or duke else "1000")
             (app / "web/catalog-live.html").write_text(html)
             (app / "games.json").write_text("[]")
             (source / "House of the Dead 2, The (USA).cue").write_text(
                 'FILE "track 01.bin" BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00\n')
             (source / "track 01.bin").write_bytes(b"synthetic media, not a game" * 100)
+            if duke:
+                self.assertTrue(duke["installed"], "Known-working EDuke32 required for isolated GUI validation")
+                engine = home / "Games/Duke-Nukem-3D/eduke32"
+                engine.parent.mkdir(parents=True)
+                shutil.copyfile(duke["executable"], engine)
+                engine.chmod(0o755)
+                write_grp(source / "DUKE3D.GRP")
             if quake:
                 self.assertTrue(quake["installed"], "Pinned vkQuake is required for isolated live GUI verification")
                 engine = home / "Applications/vkquake.AppImage"
@@ -150,7 +163,7 @@ else: sys.exit('Real emulator execution is prohibited in this test')
                             f"http://127.0.0.1:{http.server_port}/web/catalog-live.html",
                         ], stdout=subprocess.DEVNULL, stderr=browser_log)
                         try:
-                            finished = completed.wait(600 if quake or doom else 150)
+                            finished = completed.wait(600 if quake or doom or duke else 150)
                             browser_log.seek(0)
                             diagnostics = browser_log.read().decode(errors="replace")[-1500:]
                             self.assertTrue(finished, f"GUI did not finish; browser={browser.poll()}, "

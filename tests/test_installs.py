@@ -401,6 +401,8 @@ class InstallsTests(unittest.TestCase):
              "source": "github:Novum/vkQuake", "tested_version": installs.vkquake.VERSION},
             {"id": "uzdoom", "provider": "flatpak", "scope": "user", "source": "flathub",
              "app_id": installs.uzdoom.APP, "tested_version": "5.0.1"},
+            {"id": "eduke32", "provider": "native", "scope": "user",
+             "source": "https://voidpoint.io/terminx/eduke32", "source_commit": "ec5824db81817866f70da326d3811bb0f52b3517"},
         )
         for requirement in requirements:
             runtime = requirement["id"]
@@ -434,7 +436,7 @@ class InstallsTests(unittest.TestCase):
 
     def test_runtime_helpers_preserve_approval_steps_and_reject_unknown_runtime(self):
         for runtime, filename in (("flycast", "dependencies.py"), ("supermodel", "supermodel.py"),
-                                  ("vkquake", "vkquake.py"), ("uzdoom", "uzdoom.py")):
+                                  ("vkquake", "vkquake.py"), ("uzdoom", "uzdoom.py"), ("eduke32", "eduke32.py")):
             with self.subTest(runtime=runtime):
                 steps = self.inst._dependency_steps(runtime)
                 self.assertEqual(len(steps), 2)
