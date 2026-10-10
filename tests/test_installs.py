@@ -35,6 +35,15 @@ class DummyJobs:
     def _finish(self, job, status, error=None):
         job.update(status=status, error=error)
 
+    def _intents_recorded(self, jid):
+        try:
+            return self.paths(jid)["intent_file"].stat().st_size > 0
+        except OSError:
+            return True
+
+    def dependency_uncertain(self, jid):
+        return False
+
 
 class InstallsTests(unittest.TestCase):
     def setUp(self):
@@ -95,6 +104,48 @@ class InstallsTests(unittest.TestCase):
         self.assertEqual(out["tags"], ["Rail", "Mouse"])
         self.assertIsNone(out["icon"])  # artwork never auto-refilled after first association
 
+    def test_ubuntu_prerequisite_instructions_are_copyable_and_never_run_by_momentum(self):
+        with mock.patch("installs.platform.freedesktop_os_release",
+                        return_value={"ID": "ubuntu", "VERSION_ID": "24.04"}):
+            action = installs._ubuntu_apt_prerequisite(
+                "Flatpak is required", "The launcher needs Flatpak.", ["flatpak"])
+        self.assertEqual(action["commands"], [
+            ["sudo", "apt", "update"], ["sudo", "apt", "install", "-y", "flatpak"]])
+        self.assertIn("Momentum never requests elevation", action["instruction"])
+        with mock.patch("installs.platform.freedesktop_os_release",
+                        return_value={"ID": "debian", "VERSION_ID": "12"}):
+            action = installs._ubuntu_apt_prerequisite(
+                "Flatpak is required", "The launcher needs Flatpak.", ["flatpak"])
+        self.assertEqual(action["commands"], [])
+        self.assertIn("operating system's package manager", action["instruction"])
+
+    def test_missing_runtime_libraries_resolve_to_exact_ubuntu_packages_or_block_clearly(self):
+        with mock.patch("installs.platform.freedesktop_os_release",
+                        return_value={"ID": "ubuntu", "VERSION_ID": "24.04"}):
+            action = installs._runtime_prerequisite(
+                "supermodel", "Supermodel cannot load required host libraries: "
+                "error while loading shared libraries: libSDL2_net-2.0.so.0: not found")
+            self.assertEqual(action["packages"], ["libsdl2-net-2.0-0"])
+            self.assertEqual(action["commands"][1],
+                             ["sudo", "apt", "install", "-y", "libsdl2-net-2.0-0"])
+            action = installs._runtime_prerequisite(
+                "ironwail", "Ironwail host libraries missing: libGLU.so.1. Install prerequisites.")
+            self.assertEqual(action["packages"], ["libglu1-mesa"])
+            action = installs._runtime_prerequisite(
+                "eduke32", "Missing linked library libmystery.so.1; use system tools.")
+            self.assertEqual(action["commands"], [])
+            self.assertIn("libmystery.so.1", action["reason"])
+            action = installs._runtime_prerequisite(
+                "ironwail", "Install binutils/libc-bin using Ubuntu system tools.")
+            self.assertEqual(action["packages"], ["binutils", "libc-bin"])
+
+    def test_dependency_steps_include_only_evidence_backed_flatpak_pins(self):
+        for runtime in ("flycast", "uzdoom"):
+            with self.subTest(runtime=runtime):
+                steps = self.inst._dependency_steps(runtime, {"version": "5.0.1", "commit": "a" * 64})
+                self.assertEqual([step["context"]["target_commit"] for step in steps], ["a" * 64] * 2)
+        self.assertNotIn("target_commit", self.inst._dependency_steps("flycast")[0]["context"])
+
     def test_first_association_preserves_existing_and_fills_missing(self):
         entry = {"name": "Personal", "description": "", "tags": [], "icon": None}
         defaults = {"name": "Pkg Name", "description": "Pkg Desc", "tags": ["A"], "icon": "/i"}
@@ -138,6 +189,9 @@ class InstallsTests(unittest.TestCase):
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text("#!/bin/sh\n")
         os.chmod(f, 0o755)
+        game = Path(job["meta"]["game_directory"])
+        optional = game / "momentum-core-launcher-main.zip"
+        optional.write_text("user-added source file")
         self.jobs.paths(job["id"])["intent_file"].write_text(
             json.dumps({
                 "intent_version": 1, "job_id": "j00000001", "seq": 1, "step": "configure",
@@ -157,6 +211,7 @@ class InstallsTests(unittest.TestCase):
             "resources": [
                 {"path": str(f), "kind": "file", "ownership": "managed", "sha256": installs._hash_file(f)},
                 {"path": str(Path(job["meta"]["game_directory"])), "kind": "directory", "ownership": "managed", "sha256": None},
+                {"path": str(optional), "kind": "file", "ownership": "user-state", "sha256": installs._hash_file(optional)},
             ],
             "published_changes": [],
             "checks": [],
@@ -183,7 +238,7 @@ class InstallsTests(unittest.TestCase):
         actions, changes, records = [], [], []
         for seq, resource in enumerate(result["resources"], 1):
             action = {"path": resource["path"], "op": "create" if resource["kind"] == "file" else "mkdir",
-                      "ownership": "managed", "before": {"kind": "absent", "sha256": None},
+                      "ownership": resource["ownership"], "before": {"kind": "absent", "sha256": None},
                       "after": {k: resource[k] for k in ("kind", "sha256")}, "backup": None}
             records.append(dict(action, intent_version=1, job_id=job["id"], seq=seq, step="configure"))
             changes.append(dict(resource, intent_seq=seq))
@@ -192,13 +247,17 @@ class InstallsTests(unittest.TestCase):
         plan = {k: context[k] for k in ("package_id", "package_version", "package_digest", "operation",
                                         "inputs", "game_directory", "paths", "catalog_entry_id")}
         plan.update(job_id=job["id"], actions=actions,
+                    media_inventory=[{"relative_path": "momentum-core-launcher-main.zip"}],
+                    media_ownership={"momentum-core-launcher-main.zip": "user-state"},
                     previous_receipt_digest=ownership.digest(ownership.packed(None)).removeprefix("sha256:"))
         envelope = ownership.packed({"phase": "preflight", "outcome": "succeeded", "plan": plan})
         self.jobs.paths(job["id"])["approved_plan_file"].write_bytes(envelope)
         job["approved_plan_digest"] = ownership.digest(envelope)
         self.jobs.paths(job["id"])["intent_file"].write_bytes(
             b"".join(ownership.packed(record) for record in records))
-        (self.jobs.paths(job["id"])["results_dir"] / "step-1.json").write_text(json.dumps(result))
+        raw_result = json.dumps(result).encode()
+        (self.jobs.paths(job["id"])["results_dir"] / "step-1.json").write_bytes(raw_result)
+        job["steps"][-1]["result_digest"] = ownership.digest(raw_result)
         self.jobs.jobs[job["id"]] = job
         return job, result
 
@@ -215,6 +274,80 @@ class InstallsTests(unittest.TestCase):
         self.assertEqual(rec["paths"], job["meta"]["paths"])
         self.assertEqual(rec["game_directory"], result["game_directory"])
         self.assertTrue(job["commit_completed"])
+
+    def test_reconcile_install_omits_only_explicitly_missing_user_state(self):
+        job, _ = self.fixture(association=None)
+        job["meta"]["kind"] = "install"
+        job.update(status="failed", manual=True)
+        self.jobs.jobs[job["id"]] = job
+        optional = Path(job["meta"]["game_directory"]) / "momentum-core-launcher-main.zip"
+        optional.unlink()
+        with mock.patch.object(self.inst, "write_games", side_effect=OSError("catalog write interrupted")):
+            self.assertIn("catalog write interrupted", self.inst.reconcile_install(job["id"]))
+        marker = self.jobs.paths(job["id"])["job_dir"] / "catalog-pending.json"
+        self.assertTrue(marker.exists())
+        self.inst.recover_pending_catalog()
+        self.assertFalse(marker.exists())
+        receipt = self.inst._load_receipt(job["meta"]["package_id"])
+        self.assertNotIn(str(optional), {resource["path"] for resource in receipt["resources"]})
+        self.assertTrue(job["commit_completed"])
+        self.assertEqual(job["status"], "succeeded")
+
+    def test_reconcile_install_refuses_missing_managed_resources(self):
+        job, _ = self.fixture(association=None)
+        job["meta"]["kind"] = "install"
+        job.update(status="failed", manual=True)
+        self.jobs.jobs[job["id"]] = job
+        Path(job["meta"]["paths"]["launcher"]).unlink()
+        error = self.inst.reconcile_install(job["id"])
+        self.assertIn("stopped safely", error)
+        self.assertTrue(job["manual"])
+        self.assertFalse(job.get("commit_completed", False))
+
+    def test_reconcile_refuses_changed_apply_proposal(self):
+        job, result = self.fixture()
+        job.update(status="failed", manual=True)
+        result["checks"].append("unrecorded change")
+        path = self.jobs.paths(job["id"])["results_dir"] / "step-1.json"
+        path.write_text(json.dumps(result))
+        self.assertIn("Saved apply result changed", self.inst.reconcile_install(job["id"]))
+        self.assertIsNone(self.inst._load_receipt(job["meta"]["package_id"]))
+
+    def test_reconcile_refuses_modified_optional_media(self):
+        job, _ = self.fixture()
+        job.update(status="failed", manual=True)
+        path = Path(job["meta"]["game_directory"]) / "momentum-core-launcher-main.zip"
+        path.write_text("changed rather than missing")
+        self.assertIn("stopped safely", self.inst.reconcile_install(job["id"]))
+        self.assertIsNone(self.inst._load_receipt(job["meta"]["package_id"]))
+
+    def test_interrupted_reconciliation_keeps_exact_approved_omissions(self):
+        job, _ = self.fixture(association=None)
+        job.update(status="failed", manual=True)
+        optional = Path(job["meta"]["game_directory"]) / "momentum-core-launcher-main.zip"
+        original = optional.read_bytes()
+        optional.unlink()
+        with mock.patch.object(self.inst, "write_games", side_effect=OSError("catalog write interrupted")):
+            self.assertIn("catalog write interrupted", self.inst.reconcile_install(job["id"]))
+        marker = self.jobs.paths(job["id"])["job_dir"] / "catalog-pending.json"
+        self.assertEqual(json.loads(marker.read_text())["recovery_policy"]["paths"], [str(optional)])
+        optional.write_bytes(original)
+        self.inst.recover_pending_catalog()
+        self.assertEqual(job["status"], "failed")
+        self.assertIn("Optional media changed", job["error"])
+        self.assertTrue(marker.exists())
+        optional.unlink()
+        self.inst.recover_pending_catalog()
+        self.assertEqual(job["status"], "succeeded")
+        self.assertFalse(marker.exists())
+
+    def test_reconcile_refuses_changed_approved_inventory(self):
+        job, _ = self.fixture()
+        job.update(status="failed", manual=True)
+        plan = self.jobs.paths(job["id"])["approved_plan_file"]
+        plan.write_bytes(plan.read_bytes() + b" ")
+        self.assertIn("Approved plan changed", self.inst.reconcile_install(job["id"]))
+        self.assertIsNone(self.inst._load_receipt(job["meta"]["package_id"]))
 
     def test_fresh_catalog_entry_seeds_name_tags_not_placeholder_values(self):
         job, _ = self.fixture(association=None)
@@ -375,10 +508,11 @@ class InstallsTests(unittest.TestCase):
                       before={"kind": "absent", "sha256": None},
                       after={"kind": "file", "sha256": resource["sha256"]}, backup=None)
         envelope["plan"]["actions"].append(action)
-        record = dict(action, job_id=job["id"], intent_version=1, seq=3, step="configure")
+        seq = len(self.jobs.paths(job["id"])["intent_file"].read_text().splitlines()) + 1
+        record = dict(action, job_id=job["id"], intent_version=1, seq=seq, step="configure")
         with self.jobs.paths(job["id"])["intent_file"].open("ab") as f:
             f.write(ownership.packed(record))
-        result["published_changes"].append(dict(resource, intent_seq=3))
+        result["published_changes"].append(dict(resource, intent_seq=seq))
         data = ownership.packed(envelope)
         self.jobs.paths(job["id"])["approved_plan_file"].write_bytes(data)
         job["approved_plan_digest"] = ownership.digest(data)
@@ -449,6 +583,17 @@ class InstallsTests(unittest.TestCase):
                 detect.side_effect = installs.dependencies.DependencyError("Detection failed")
                 with self.assertRaisesRegex(installs.InstallError, "Detection failed"):
                     self.inst.package_details("untested-game", "0.1.0")
+        (snapshot / "package.json").write_text(json.dumps({"requires": [
+            {"id": "uzdoom", "provider": "flatpak", "scope": "user", "source": "flathub",
+             "app_id": installs.uzdoom.APP, "tested_version": "5.0.1"}]}))
+        with mock.patch("packages.snapshot_path", return_value=snapshot), \
+                mock.patch("packages.check", return_value=summary), \
+                mock.patch("uzdoom.detect", return_value={"installed": False, "flatpak_available": False}), \
+                mock.patch("installs.platform.freedesktop_os_release",
+                           return_value={"ID": "ubuntu", "VERSION_ID": "24.04"}):
+            detail = self.inst.package_details("untested-game", "0.1.0")
+        self.assertEqual(detail["host_prerequisites"][0]["commands"], [
+            ["sudo", "apt", "update"], ["sudo", "apt", "install", "-y", "flatpak"]])
         with mock.patch("packages.snapshot_path", return_value=snapshot), \
                 mock.patch("packages.check", return_value=summary):
             (snapshot / "package.json").write_text(json.dumps({"requires": [{"id": "unknown"}]}))

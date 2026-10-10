@@ -404,6 +404,25 @@ def check_build_prerequisites():
             raise NeedsAction(f"Missing EDuke32 development library {library}; use system tools. {e}") from e
 
 
+def missing_build_prerequisites():
+    missing_tools = [tool for tool in BUILD_TOOLS if not shutil.which(tool)]
+    missing_libraries = []
+    if shutil.which("pkg-config"):
+        for library in BUILD_LIBRARIES:
+            try:
+                result = subprocess.run(["pkg-config", "--exists", library], stdin=subprocess.DEVNULL,
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                        timeout=15, env={**os.environ, "LC_ALL": "C"})
+            except (OSError, subprocess.SubprocessError, UnicodeError) as e:
+                raise DependencyError(f"Cannot inspect EDuke32 prerequisites: {e}") from e
+            if result.returncode == 1 and not result.stderr.strip():
+                missing_libraries.append(library)
+            elif result.returncode:
+                raise DependencyError("Prerequisite inspection failed: pkg-config: "
+                                      + (result.stderr.strip() or str(result.returncode)))
+    return {"tools": missing_tools, "libraries": missing_libraries}
+
+
 def _build(source):
     # A protocol runner requests cancellation via a file, not signals. Waiting
     # here deliberately lets make and all its children finish before checking it.

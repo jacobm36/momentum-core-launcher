@@ -38,7 +38,8 @@ class ArcadeInstalls(unittest.TestCase):
         return runner.get(jid)
 
     def exercise(self, game_id, software_missing=False, wrong_build=False):
-        archive = PACKAGE_REPO / 'dist' / f'{game_id}-0.1.0.zip'
+        version = {'star-wars-trilogy-arcade': '0.2.1', 'l-a-machineguns': '0.2.2'}.get(game_id, '0.1.0')
+        archive = PACKAGE_REPO / 'dist' / f'{game_id}-{version}.zip'
         source_package = PACKAGE_REPO / game_id / 'package'
         profile = json.loads((source_package / 'profile.json').read_text())
         runtime = profile['runtime']
@@ -104,10 +105,10 @@ else: sys.exit('Game/emulator launch prohibited in this test')
                                         lambda games: installs._write_atomic(catalog_path, json.dumps(games).encode()), runner)
                 runner.on_success, runner.before_step = inst.on_success, inst.before_step
                 try:
-                    detail = inst.package_details(game_id, '0.1.0')
+                    detail = inst.package_details(game_id, version)
                     self.assertEqual(detail['package_supported'], True, detail)
                     self.assertEqual(detail['install_enabled'], not (software_missing or wrong_build), detail)
-                    jid = inst.submit_install(game_id, '0.1.0', str(source), trusted_digest=info['digest'])
+                    jid = inst.submit_install(game_id, version, str(source), trusted_digest=info['digest'])
                     job = self.wait(runner, jid)
                     self.assertEqual(job['status'], 'awaiting-approval', job)
                     if software_missing:
@@ -141,7 +142,7 @@ else: sys.exit('Game/emulator launch prohibited in this test')
                         spec.loader.exec_module(module)
                     command, cwd = module.build_command(Path(receipt['game_directory']),
                                                        Path(receipt['paths']['state']),
-                                                       inst.package_details(game_id, '0.1.0')['dependencies'].get('supermodel', {}).get('root'))
+                                                       inst.package_details(game_id, version)['dependencies'].get('supermodel', {}).get('root'))
                     self.assertNotIn('retroarch', ' '.join(command).lower())
                     if runtime == 'supermodel':
                         self.assertEqual(command[2:], profile['flags'])
@@ -150,14 +151,14 @@ else: sys.exit('Game/emulator launch prohibited in this test')
                         self.assertEqual(config.read_bytes(), (support / 'presets/Supermodel.ini').read_bytes())
                         config.write_text('user settings')
                         module.build_command(Path(receipt['game_directory']), cwd,
-                                             inst.package_details(game_id, '0.1.0')['dependencies']['supermodel']['root'])
+                                             inst.package_details(game_id, version)['dependencies']['supermodel']['root'])
                         self.assertEqual(config.read_text(), 'user settings')
                     else:
                         self.assertIn('--command=sh', command)
                         self.assertIn(str(receipt['paths']['state']), command)
                         self.assertIn('config:Dreamcast.Region=0', command)
                         self.assertIn('config:rend.ThreadedRendering=no', command)
-                    second = inst.submit_install(game_id, '0.1.0', str(source), trusted_digest=info['digest'])
+                    second = inst.submit_install(game_id, version, str(source), trusted_digest=info['digest'])
                     self.assertEqual(self.wait(runner, second)['status'], 'awaiting-approval')
                     runner.cancel(second)
                     self.assertEqual(inst._load_receipt(game_id), receipt)

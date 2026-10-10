@@ -164,6 +164,25 @@ class PackageUiApi(Base):
         self.assertFalse(self.catalog)
         self.assertEqual(self.request(f"/api/jobs/{jid}/cancel", {})[0], 200)
 
+    def test_existing_installation_keeps_recorded_folder(self):
+        data = self.upload()
+        old = self.t / "Games" / "Old Name, The (USA)"
+        prev = {"game_directory": str(old), "paths": self.inst._defaults_path("test-game"), "catalog": {}}
+        with mock.patch.object(self.inst, "_load_receipt", return_value=prev):
+            status, reply = self.request("/api/packages/install", {
+                "id": data["id"], "version": data["version"], "trusted_digest": data["digest"],
+                "inputs": {"source_dir": str(self.t), "games_root": str(self.t / "Elsewhere")}})
+        self.assertEqual(status, 200, reply)
+        jid = reply["id"]
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and self.runner.get(jid)["status"] in jobs.RUNNING:
+            time.sleep(.02)
+        status, detail = self.request(f"/api/jobs/{jid}")
+        self.assertEqual(detail["plan"]["game_directory"], str(old))
+        context = self.runner.jobs[jid]["steps"][0]["context"]
+        self.assertEqual(context["inputs"]["games_root"], str(old.parent))
+        self.assertEqual(self.request(f"/api/jobs/{jid}/cancel", {})[0], 200)
+
     def test_input_and_association_validation(self):
         data = self.upload()
         args = {"id": data["id"], "version": data["version"], "trusted_digest": data["digest"],
@@ -232,6 +251,12 @@ class PackageUiApi(Base):
         self.assertTrue(self.runner.get(jid)["manual"])
         self.assertEqual(self.request(f"/api/jobs/{jid}/dismiss", {})[0], 409)
         self.assertEqual(self.request("/api/packages/install", args)[0], 400)
+
+    def test_reconcile_install_endpoint_is_explicit(self):
+        with mock.patch.object(self.inst, "reconcile_install", return_value=True) as reconcile:
+            status, response = self.request("/api/jobs/j12345678/reconcile", {})
+        self.assertEqual((status, response), (200, {"status": "reconcile"}))
+        reconcile.assert_called_once_with("j12345678")
 
     def test_duplicate_work_and_changed_plan_are_not_silently_accepted(self):
         data = self.upload()
@@ -326,10 +351,10 @@ class DependencyFacts(unittest.TestCase):
         remotes = mock.Mock(returncode=0, stdout="flathub\thttps://dl.flathub.org/repo/\n", stderr="")
         apps = mock.Mock(returncode=0, stdout="org.flycast.Flycast\n", stderr="")
         with mock.patch("dependencies.shutil.which", return_value="/mock/flatpak"), \
-                mock.patch("dependencies.subprocess.run", side_effect=[remotes, apps, probe]) as run:
+                mock.patch("dependencies.subprocess.run", side_effect=[apps, remotes, probe]) as run:
             facts = installs.Installs._flycast_facts({"provider": "flatpak", "scope": "user",
                                                     "app_id": "org.flycast.Flycast"})
         self.assertTrue(facts["installed"])
         self.assertFalse(facts["capabilities_checked"])
         self.assertEqual(facts["version"], "v2.7")
-        self.assertEqual(run.call_args_list[0].args[0], ["flatpak", "remotes", "--user", "--columns=name,url"])
+        self.assertEqual(run.call_args_list[1].args[0], ["flatpak", "remotes", "--user", "--columns=name,url"])

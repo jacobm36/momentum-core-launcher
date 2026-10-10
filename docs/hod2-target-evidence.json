@@ -5,6 +5,12 @@
   "package_digest": "sha256:1b6d80a851b550d03861863864f0aa87fe0886a126f470942441aa17415fe309",
   "derived_packages": [
     {
+      "version": "0.2.0",
+      "digest": "sha256:e513ca4fc316f909ce41ab22ce878ed977dd35be923eaf34c654f5519eeef378",
+      "gameplay": "not-tested-for-this-package",
+      "basis": "2026-10-09: exact local ZIP through real launcher intake, approval, package apply, receipt/catalog commit and repeat install in disposable homes with synthetic disc and mocked user-scope Flycast metadata. Folder standard and scope-aware wrapper changed; original user-scope game flags retained. This is new installer evidence only, not unchanged-code inheritance or new gameplay evidence. Fresh input mappings and gameplay remain manual acceptance checks."
+    },
+    {
       "version": "0.1.2",
       "digest": "sha256:ee75c953277283f8a9d38662b13900f3ea5a6a66ed14dc6e00cfd5db6700675a",
       "basis": "Original Momentum icon, documentation and version-bound schema/test fixtures only. lifecycle.py and all four shell entrypoints are byte-identical to the tested 0.1.1 tag. Separate synthetic runner integration validates these bytes; no new gameplay run is claimed."

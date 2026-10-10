@@ -83,7 +83,7 @@ def inventory_paths(action, job_dir, game):
     return rows, resources
 
 
-def reconcile(job, result, paths):
+def reconcile(job, result, paths, missing_user_state=()):
     """No filesystem existence alone grants ownership. Uncertain/contradictory evidence stops."""
     context = job["steps"][-1]["context"]
     raw = paths["approved_plan_file"].read_bytes()
@@ -126,6 +126,24 @@ def reconcile(job, result, paths):
         observed[seq] = change
     game = safe_path(context["game_directory"])
     support = safe_path(context["paths"]["support"])
+    missing_user_state = set(missing_user_state)
+    if missing_user_state:
+        owners = plan.get("media_ownership", {})
+        rows = plan.get("media_inventory", [])
+        optional = set()
+        for row in rows:
+            if not isinstance(row, dict) or owners.get(row.get("relative_path")) != "user-state":
+                continue
+            relative = Path(row["relative_path"])
+            if relative.is_absolute() or ".." in relative.parts or not relative.parts:
+                raise OwnershipError("Unsafe optional media path")
+            path = safe_path(str(game / relative))
+            if not path.is_relative_to(game) or path == game:
+                raise OwnershipError("Optional media must be inside the game directory")
+            optional.add(str(path))
+        if not missing_user_state.issubset(optional) or any(
+                fact(name)["kind"] != "absent" for name in missing_user_state):
+            raise OwnershipError("Recovery may omit only missing user-state media from the approved inventory")
     old = {r["path"]: r for r in (previous or {}).get("resources", [])}
     evidence = dict(old)
     for seq, (record, action) in enumerate(zip(records, actions), 1):
@@ -142,6 +160,8 @@ def reconcile(job, result, paths):
         if not change or change.get("path") != str(path) or change.get("ownership") != record["ownership"]:
             raise OwnershipError("Intent lacks matching observed completion")
         after = record["after"]
+        if str(path) in missing_user_state and record["ownership"] != "user-state":
+            raise OwnershipError("Recovery cannot omit a managed mutation")
         if not matches(change, after):
             raise OwnershipError("Observed change contradicts intent")
         # A staging directory is consumed by the approved no-replace publication.
@@ -151,7 +171,7 @@ def reconcile(job, result, paths):
                 raise OwnershipError("Staged inventory lacks approved publication")
             if path.exists():
                 raise OwnershipError("Successful publication left its staging directory behind")
-        elif not matches(fact(path), after):
+        elif str(path) not in missing_user_state and not matches(fact(path), after):
             raise OwnershipError(f"Filesystem contradicts completed intent: {path}")
         if record["op"] == "publish":
             if path != game or record["before"]["kind"] != "absent" or record["ownership"] != "managed":
@@ -161,6 +181,8 @@ def reconcile(job, result, paths):
                 raise OwnershipError("Durable inventory differs from approved media")
             owners = plan.get("media_ownership", {})
             for name, expected in media.items():
+                if name in missing_user_state:
+                    continue
                 if not matches(fact(name), expected):
                     raise OwnershipError(f"Published inventory mismatch: {name}")
                 ownership = owners.get(Path(name).relative_to(game).as_posix()) if expected["kind"] == "file" else "managed"
@@ -169,6 +191,8 @@ def reconcile(job, result, paths):
                 evidence[name] = dict(expected, path=name, ownership=ownership)
         elif path == game or path.is_relative_to(game) or path.is_relative_to(support) or str(path) in (
                 context["paths"]["launcher"], context["paths"]["desktop_entry"], context["paths"]["icon"]):
+            if str(path) in missing_user_state:
+                continue
             if after["kind"] == "absent":
                 evidence.pop(str(path), None)
             else:
@@ -185,6 +209,10 @@ def reconcile(job, result, paths):
     seen = set()
     for resource in resources:
         name = resource.get("path") if isinstance(resource, dict) else None
+        if name in missing_user_state:
+            if resource.get("ownership") != "user-state" or resource.get("kind") != "file":
+                raise OwnershipError("Recovery cannot omit a managed resource")
+            continue
         path = safe_path(name)
         if name in seen or name not in evidence:
             raise OwnershipError(f"Ownership lacks approved mutation or previous receipt evidence: {name}")

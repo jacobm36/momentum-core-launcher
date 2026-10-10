@@ -46,7 +46,7 @@ function renderJobs(force) {
       : jobActive(j) ? `<button type="button" data-a="cancel">Cancel</button>`
       : j.status === "awaiting-approval" ? `<button type="button" data-a="review">Review plan</button><button type="button" data-a="cancel">Cancel</button>`
       : j.surviving ? ""
-      : `${j.kind === "download" && j.status === "succeeded" ? '<button type="button" data-a="setup">Continue setup</button>' : ""}${j.status === "succeeded" || j.manual ? "" : '<button type="button" data-a="retry">Retry</button>'}<button type="button" data-a="dismiss">Dismiss</button>`;
+      : `${j.kind === "download" && j.status === "succeeded" ? '<button type="button" data-a="setup">Continue setup</button>' : ""}${j.kind === "install" && j.manual && j.status === "failed" ? '<button type="button" data-a="reconcile">Reconcile install</button>' : ""}${j.status === "succeeded" || j.manual ? "" : '<button type="button" data-a="retry">Retry</button>'}<button type="button" data-a="dismiss">Dismiss</button>`;
     return `<div class="job ${esc(j.status)}" data-id="${esc(j.id)}">
       <div class="jhead"><b>${esc(j.title)}</b><span class="jstat">${esc(jobLabel(j.status))}</span></div>
       <div class="jbar ${jobActive(j) && !(j.progress?.total > 0) ? "indeterminate" : ""}" aria-label="Current step progress"><i style="width:${jobPct(j)}%"></i></div>
@@ -83,6 +83,9 @@ function openJobs() {
     const id = b.closest(".job").dataset.id, a = b.dataset.a;
     if (a === "log") { openLog = openLog === id ? null : id; return renderJobs(); }
     if (a === "review") return reviewPackagePlan(id);
+    if (a === "reconcile" && !globalThis.confirm(
+      "Reconcile this install using its saved plan and file-change journal? Missing optional user-state files will be left out of the receipt. Managed package files must still match exactly; otherwise recovery stops and keeps the journal."
+    )) return;
     if (a === "setup") {
       const job = jobs.find(j => j.id === id);
       openPackages();

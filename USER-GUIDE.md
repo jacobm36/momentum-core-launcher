@@ -2,6 +2,45 @@
 
 One window to launch all your games.
 
+## Local acceptance candidate
+
+The October 9 public launcher release contains the same exact-build evidence
+and runtime/recovery helpers as the accepted local candidate. Game ZIPs are
+downloaded separately through **Add game**. Update the launcher before using
+SWTA 0.2.1 or L.A. Machineguns 0.2.2; old launchers lack their evidence.
+
+The acceptance bundle is a complete, separate launcher, not a four-file patch.
+Extract it into a new folder without replacing an existing launcher. Run
+`bash start-candidate.sh` from that folder. It refuses to reuse an already
+responding launcher and defaults to a normal window. It does not change desktop
+shortcuts, install system dependencies, import old jobs or delete old data.
+
+Use **Add game → Local packages / import...** to select the bundled SWTA
+0.2.1, L.A. Machineguns 0.2.2, Episode Enyo 0.2.1 or HOD2 0.2.0.
+These are local candidates, not necessarily the versions in the public catalog.
+Brutal Doom 0.2.0 installer validation is recorded, but its archive is not bundled
+pending approval of voxel-addon redistribution rights.
+
+The candidate has exact package/build installer evidence. Changing a package
+or using a different emulator build still blocks approval; missing host
+prerequisites still require the displayed manual Ubuntu commands. Existing
+supported engines are reused in place. New games use `~/Games/<package-id>`.
+Receipts and game state remain shared user data even when the launcher folder
+is different; a separate folder is not an isolated test account.
+
+Installer tests use synthetic media and do not prove fresh-system gameplay,
+graphics capability, calibration or input. Native Supermodel/vkQuake acquisition
+is tested in disposable homes; Flatpak acquisition/pinning is covered by
+command-level tests rather than a newly provisioned Ubuntu machine.
+SWTA retains stock credit settings (**3** for credit, **1** for Start); free play
+is a manual cabinet setting. Episode Enyo does not import root `vkQuake.cfg` or
+force the reference laptop's display mode.
+
+L.A. Machineguns 0.2.2 seeds absent isolated NVRAM with the clean calibration
+confirmed on the reference and debug laptops. It never overwrites existing
+NVRAM, including older uncalibrated state; existing installations may still
+need manual AIM SET. Calibration persists across launches.
+
 ## 1. Opening the launcher
 
 - Click **Momentum Core Launcher** in the app menu or on the Desktop.
@@ -52,6 +91,14 @@ Typing in the search box filters by game name or tag. If your controller isn't d
 The launcher opens as a fullscreen kiosk by default: no window frame, title bar or taskbar. Use the **⏻** button (section 2e) to exit, since there is no close button. Alt+F4 also works.
 
 To use a normal maximized window instead (with a title bar, and the **⛶** / F11 fullscreen toggle), run `MCL_WINDOWED=1 ./launch.sh`, or in the app-menu entry change the `Exec=` line to `env MCL_WINDOWED=1 /path/to/launch.sh`. The **⛶** button only appears in windowed mode.
+
+On X11, Momentum temporarily releases its kiosk window's fullscreen state before
+launching a game, so it does not cover the game's window. Fullscreen is restored
+after the last tracked game exits. This requires `wmctrl` and `xprop`
+(`sudo apt install wmctrl x11-utils` on Ubuntu); Momentum never installs them
+or elevates itself. A missing tool or failed handoff is reported explicitly.
+Windowed Momentum and other browser windows are not changed. This handoff does
+not apply to Wayland. Game fullscreen, input settings and saves are unchanged.
 
 If the launcher was already open when you start it again, Chrome reuses that window. Exit first, then reopen.
 
@@ -240,7 +287,7 @@ Only shortcuts whose launch command matches a game in `games.json` are moved. Th
   - **Results:** *succeeded*, *needs action* (a prerequisite or manual setup needs attention; this does not necessarily mean installed), *conflicted* (existing files are in the way), *failed*, *cancelled*, or *interrupted* (the computer restarted or the launcher crashed mid-job).
   - **Awaiting approval:** choose **Review plan** to see the saved plan's destination, changes, backups, dependency facts, preserved state and manual requirements. Approval requires a separate confirmation of those exact plan bytes. Closing the review does not cancel the job; **Cancel job** does.
   - **Leftover processes:** if a job's programs are still running after a crash, Retry and Dismiss stay unavailable until they exit.
-  - **Retry:** installs restart preflight; simple jobs resume from the failed step. If an install wrote mutation intents or its receipt/catalog commit was interrupted, automatic retry/new package jobs are blocked until those changes are reconciled. Recovery records cannot be dismissed.
+  - **Retry:** installs restart preflight; simple jobs resume from the failed step. If an install wrote mutation intents or its receipt/catalog commit was interrupted, automatic retry/new package jobs are blocked until those changes are reconciled. A failed install with a successful apply proposal may offer **Reconcile install**. After confirmation, Momentum revalidates the saved approval, mutation journal and current files before committing its receipt. Only missing optional `user-state` files from the approved media inventory can be omitted; missing or changed managed package files stop recovery and retain the journal. Recovery records cannot be dismissed until reconciled.
   - **Step progress:** bars show the current step's measurable progress, not an estimated overall installation percentage. Unknown totals display an indeterminate bar.
   - **Add a supported game:**
     1. Choose **+ Add game** (or **Add game...** in **Installs & jobs**) and select a supported game.
@@ -248,6 +295,8 @@ Only shortcuts whose launch command matches a game in `games.json` are moved. Th
     3. Under **Where are your game files?**, use **Choose folder...** to select the folder described by that game's setup screen, or type/paste its full path. For HOD2, it contains your USA CUE and matching BIN tracks; Virtua Cop 2 needs its Japan GDI and all 39 tracks; the Model 3 games need their named ROM ZIP kept zipped. The optional installation folder has the same picker. Cancelling leaves the path unchanged. Native selection requires Zenity or KDialog; if unavailable, Momentum shows an error and you can still enter paths manually. No game files are uploaded through the browser. Review trust, request the installation plan, then approve its changes. Your original files stay untouched.
     4. Downloads show progress and can be cancelled. Closing the interface leaves a download running. Reopen **Installs & jobs → Continue setup**, or select the game again after it finishes. Failed downloads can be retried; incomplete files are discarded. Downloads are not completed game installations.
     - The catalog includes HOD2, Virtua Cop 2, Star Wars Trilogy Arcade, L.A. Machineguns, Episode Enyo, Brutal Doom 64, Duke Nukem 3D, Brutal Doom, Aliens: Eradication, Ashes 2063: Enriched and Quake Brutalist Jam III. Momentum selects required software; there are no emulator choices or automatic package upgrades. An internet connection is needed to load the public catalog/download new installers. Errors are shown rather than silently falling back to stale data.
+    - **System prerequisites are never installed by Momentum and never require passwordless sudo.** If Flatpak is missing, the package screen provides `sudo apt update` and `sudo apt install -y flatpak`; if an emulator lacks required host libraries, it identifies the missing library and shows its known Ubuntu package; Episode Enyo lists `libfuse2t64` and/or `libvulkan1`; and a pinned EDuke32 source build lists its compiler/development packages. Run the displayed commands yourself in a terminal, then retry the job or reopen setup. An unknown library is named but never guessed. Flatpak installs, remotes and runtimes are user-scope only; Momentum does not install or update system-wide software.
+    - For a package with exact Flatpak build evidence, a missing UZDoom or Flycast is prepared in user scope and pinned to that evidence-backed commit before any game files are changed. The approved plan shows the commands. A current Flathub build is never silently accepted as compatible; if Flathub no longer offers the tested commit, preparation stops and the package remains blocked until evidence is refreshed. Already-installed engines, including system-wide engines, are not downgraded or otherwise changed.
     - **Episode Enyo** bundles the complete Slave Zero X mod. Choose your Quake folder containing `id1/pak0.pak` and `id1/pak1.pak`; you do not need to download or select the mod separately. Existing `enyo` settings/saves are copied without modifying originals. Momentum uses the pinned official vkQuake 1.36.0 AppImage, never the Snap build. FUSE2 and Vulkan loaders are prerequisites, not gameplay certification. Confirm display, controls, audio and save/relaunch; no fullscreen or new control mapping is forced. Game-only removal retains base copies, settings, saves and the shared engine.
     - **Brutal Doom 64** bundles all four mod files in the guide's loading order. Choose the folder containing `DOOM2.WAD`. Momentum reuses the exact compatible UZDoom 5.0.1 Flatpak in user or default-system scope; missing software is prepared only for your account after separate approval. No GZDoom/Zandronum fallback, persistent sandbox overrides or forced video/input settings. UZDoom settings/saves remain under `~/.var/app/org.zdoom.UZDoom/`. Runtime metadata checks do not prove graphical gameplay; confirm controls, display, sound and save/relaunch.
     - **Brutal Doom**, **Aliens: Eradication** and **Ashes 2063: Enriched** use the same approved UZDoom flow and require your `DOOM2.WAD`. Brutal Doom preserves the v21 baseline: Doom Metal Volume 5 is included but enabled only with `~/.local/bin/brutal-doom --metal`; the incompatible Complete voxel addon is excluded. Aliens 2.0 loads its TC before the eight-map campaign; enable/bind mouse-look, jumping and crouching, with dynamic lights/dark sector lighting recommended. Ashes follows the exact Enriched 2.23 main PK3, without the undocumented Freedoom patch or copied engine resources. Each has separate game content/artwork and preserved original data; shared UZDoom preferences/saves remain untouched. See each included player guide and legal notices, and confirm actual gameplay.
@@ -258,7 +307,7 @@ Only shortcuts whose launch command matches a game in `games.json` are moved. Th
   - **Install packages (advanced local import):**
     1. Obtain a ZIP from a publisher you trust, or use a package already imported on this computer.
     2. Open **Add game → Advanced → Import a local package...** and **Choose package ZIP...**, or enter an absolute local package-folder/ZIP path and choose **Import path**. ZIP uploads are limited to 1 GiB. Intake validates and copies the package; no package code runs.
-    3. Choose **Set up**. Under **Where are your game files?**, choose the folder where your game files already live, or enter its full path. For HOD2, keep the CUE file and all matching BIN tracks together in that folder; the package does not include them. Momentum copies the files and leaves your originals untouched. **Momentum will install your game here** shows the destination inside your own `~/Games`; expand **Change installation folder** only if you want a different location. **Use an existing library entry** optionally links the installation to an entry without claiming ownership of existing files.
+    3. Choose **Set up**. Under **Where are your game files?**, choose the folder where your game files already live, or enter its full path. For HOD2, keep the CUE file and all matching BIN tracks together in that folder; the package does not include them. Momentum copies the files and leaves your originals untouched. **Momentum will install your game here** shows the destination inside your own `~/Games`, using a simple folder named after the package, such as `~/Games/the-house-of-the-dead-2`. Expand **Change installation folder** only if you want a different location. A game Momentum already installed keeps its existing folder when you upgrade or repair it, even if it has an older name such as `House of the Dead 2, The (USA)`. **Use an existing library entry** optionally links the installation to an entry without claiming ownership of existing files.
     4. Check the trust box and choose **Check installation plan**. Momentum selects the software the game needs; you do not choose an emulator. If required software is missing, review and approve its downloads first. The same game job checks the installed build and then continues to the game-file plan. An untested build stops before changing game files. Package scripts run with your user permissions; checksums establish integrity, not publisher trust or sandboxing. Unsupported platforms cannot proceed.
     5. In **Installs & jobs**, choose **Review plan**. Reopening the launcher retrieves the same saved waiting plan. **Approve and install** requires matching evidence for that exact package digest and software build. Approval rechecks evidence, receipt state and running software. Unknown builds remain gated, and game-package preflight does not install or upgrade an engine.
     - HOD2 0.1.1 and its approved artwork revisions 0.1.2/0.1.3 use the tested user-scope Flycast v2.7 build. These revisions inherit unchanged installer-code evidence, not separate gameplay runs. Version 0.1.3 restores the original t00ny icon; custom artwork and Steam lookup remain available. Other catalog games have separate installer evidence and do not inherit HOD2 gameplay confirmation.

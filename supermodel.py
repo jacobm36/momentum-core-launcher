@@ -105,20 +105,26 @@ def _verified(root):
 
 
 def detect():
+    """Reuse a verified copy where it already is; record, but never touch, a different build."""
     root = target_root()
     installed = False
+    skipped = []
     if supported():
         for candidate in (Path.home() / "Games/Supermodel", root):
             if _verified(candidate):
                 root, installed = candidate, True
                 break
+            if os.path.lexists(candidate):
+                skipped.append({"path": str(candidate),
+                                "reason": "Different or modified Supermodel build; left untouched."})
     executable = str(root / "supermodel")
     return {"provider": "native", "scope": "user", "installed": installed,
             "version": VERSION if installed else None, "root": str(root),
             "executable": executable,
             "sha256": ASSET_INVENTORY["supermodel"][2] if installed else None,
             "games_xml_sha256": ASSET_INVENTORY["Config/Games.xml"][2] if installed else None,
-            "capabilities_checked": False, "launch_argv": [executable]}
+            "capabilities_checked": False, "launch_argv": [executable],
+            "location": str(root), "skipped": skipped}
 
 
 def _unrelated_protected(entry, executable):

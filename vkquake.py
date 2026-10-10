@@ -79,19 +79,30 @@ def _verified(path):
 
 
 def detect():
-    candidates = (Path.home() / "Applications/vkquake.AppImage", target_path())
-    # A known but invalid candidate must never quietly turn into a new install.
-    for candidate in candidates:
-        if not _safe_path(candidate):
-            raise DependencyError(f"Unsafe vkQuake candidate path: {candidate}; reconcile manually.")
-        if os.path.lexists(candidate) and not _verified(candidate):
-            raise DependencyError(f"Unverified vkQuake candidate: {candidate}; reconcile manually.")
-    executable = next((p for p in candidates if os.path.lexists(p)), candidates[1])
+    """Reuse the user's verified AppImage in place; a different build there is recorded and left untouched."""
+    existing, own = Path.home() / "Applications/vkquake.AppImage", target_path()
+    skipped = []
+    executable = own
+    if os.path.lexists(existing) or os.path.lexists(existing.parent):
+        if not _safe_path(existing):
+            skipped.append({"path": str(existing), "reason": "Symlinked path; not followed and left untouched."})
+        elif os.path.lexists(existing):
+            if _verified(existing):
+                executable = existing
+            else:
+                skipped.append({"path": str(existing),
+                                "reason": f"Not the tested vkQuake {VERSION} AppImage; left untouched."})
+    if executable == own:
+        # Momentum's own copy must be exactly what it installed; never silently replace it.
+        if not _safe_path(own):
+            raise DependencyError(f"Unsafe vkQuake candidate path: {own}; reconcile manually.")
+        if os.path.lexists(own) and not _verified(own):
+            raise DependencyError(f"Unverified vkQuake candidate: {own}; reconcile manually.")
     installed = os.path.lexists(executable) and supported()
     return {"provider": "appimage", "scope": "user", "installed": installed,
             "version": VERSION if installed else None, "executable": str(executable),
             "sha256": ASSET_SHA256 if installed else None, "launch_argv": [str(executable)],
-            "capabilities_checked": False}
+            "capabilities_checked": False, "location": str(executable), "skipped": skipped}
 
 
 def _require_runtime(facts):
@@ -134,6 +145,27 @@ def check_host(facts):
             "cli_checked": False, "capabilities_checked": False, "gameplay_checked": False,
             "fuse_mount_checked": False, "graphics_device_checked": False,
             "loaders": {"fuse2": fuse, "vulkan": vulkan}}
+
+
+def missing_host_prerequisites(facts):
+    """Report missing loader libraries without launching the AppImage or guessing about GPU drivers."""
+    executable = _require_runtime(facts)
+    with executable.open("rb") as stream:
+        header = stream.read(64)
+    if (len(header) != 64 or header[:7] != b"\x7fELF\x02\x01\x01"
+            or header[8:11] != b"AI\x02" or header[18:20] != b"\x3e\x00"):
+        raise DependencyError("vkQuake requires a type-2 Linux x86_64 ELF AppImage.")
+    missing = []
+    for library in ("fuse", "vulkan"):
+        found = ctypes.util.find_library(library)
+        if not found:
+            missing.append(library)
+            continue
+        try:
+            ctypes.CDLL(found)
+        except OSError:
+            missing.append(library)
+    return missing
 
 
 def _process_metadata(entry):

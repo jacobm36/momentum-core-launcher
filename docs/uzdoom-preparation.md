@@ -9,8 +9,14 @@ Detection prefers installed user scope, then default system scope. Both require
 the official Flathub remote, x86_64 stable app/ref and exact installer evidence
 for package digest, version and commit. Named system installations are not used.
 Missing software gets current-user-only remote/install commands after separate
-approval; no upgrades, system writes or elevation. Redetection after each command
-and durable active-command/detection-pending records guard uncertain transactions.
+approval; no system writes or elevation. When a package has exact commit
+evidence, the plan verifies that commit is still available from the selected
+Flathub remote, installs UZDoom for the current user, then deploys the recorded
+commit before game files are changed. Existing user or system installations are
+never downgraded, upgraded or replaced. If Flathub no longer serves the tested
+commit, preparation stops without falling back to the current build; new
+compatibility evidence is required. Redetection after each command and durable
+active-command/detection-pending records guard uncertain transactions.
 Cancellation waits for an active transaction. Unknown installed commits remain
 gated before game mutation; users never select an engine.
 

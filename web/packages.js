@@ -25,9 +25,9 @@ function openPackages() {
       <progress id="catalog-progress" aria-label="Installer download progress"></progress>
       <button type="button" id="catalog-cancel">Cancel download</button></div>
     <details id="catalog-advanced"><summary>Advanced</summary><div class="btns">
-      <button type="button" id="catalog-import">Import a local package...</button>
       <button type="button" id="catalog-manual">Add an existing game manually...</button></div></details>
-    <div class="btns"><button type="button" id="catalog-retry">Refresh games</button>
+    <div class="btns"><button type="button" id="catalog-import">Local packages / import...</button>
+      <button type="button" id="catalog-retry">Refresh games</button>
       <button type="button" id="pkg-close" autofocus>Close</button></div>`;
   d.onclick = e => {
     if (e.target.id === "pkg-close") d.close();
@@ -200,6 +200,32 @@ function packageInput(field, detail) {
       aria-label="${esc(label)}: choose folder">Choose folder...</button>` : ""}`;
 }
 
+function softwareLocation(facts) {
+  const where = facts.installed && facts.location
+    ? `<p class="bnote">Using your existing copy: <span class="pkg-path">${esc(facts.location)}</span></p>` : "";
+  const skipped = (facts.skipped || []).map(s => `<p class="bnote">Found <span class="pkg-path">${esc(s.path)}</span>: ${esc(s.reason)}
+    ${facts.installed ? "" : ` Momentum will install its tested copy at <span class="pkg-path">${esc(facts.executable || facts.root || "")}</span> instead.`}</p>`).join("");
+  return where + skipped;
+}
+
+function prerequisiteNotes(prerequisites) {
+  return (prerequisites || []).map(item => `<section class="pkg-warning">
+    <strong>${esc(item.title)}</strong><p>${esc(item.reason)}</p>
+    ${item.commands?.length ? `<p>${esc(item.instruction)}</p>${item.commands.map(command =>
+      `<pre><code>${esc(command.join(" "))}</code></pre>`).join("")}`
+      : `<p>${esc(item.instruction)}${item.packages?.length
+        ? ` Required packages: ${esc(item.packages.join(", "))}` : ""}</p>`}
+  </section>`).join("");
+}
+
+function softwareEvidenceNote(facts, target) {
+  if (!facts?.installed || !target?.commit || facts.commit === target.commit) return "";
+  return `<p class="pkg-warning">This existing copy is not the build covered by this package's evidence.
+    Momentum will leave it untouched and block this installation. Required: ${esc(target.version || "version unknown")}
+    (${esc(target.commit)}); found: ${esc(facts.version || "version unknown")}
+    (${esc(facts.commit || "commit unknown")}).</p>`;
+}
+
 async function selectPackage(id, version) {
   const d = $("#pdlg");
   try {
@@ -208,6 +234,7 @@ async function selectPackage(id, version) {
     selectedPackage = detail;
     const m = detail.manifest;
     const flatpak = detail.dependencies?.flycast || detail.dependencies?.uzdoom;
+    const flatpakId = detail.dependencies?.flycast ? "flycast" : "uzdoom";
     const native = detail.dependencies?.supermodel || detail.dependencies?.vkquake || detail.dependencies?.eduke32 || detail.dependencies?.ironwail;
     const source = m.inputs.find(f => f.id === "source_dir");
     const destination = m.inputs.find(f => f.id === "games_root");
@@ -221,6 +248,8 @@ async function selectPackage(id, version) {
         <p class="bnote">${!flatpak.flatpak_available ? "Flatpak is missing. Install it through your Ubuntu system tools first."
           : flatpak.installed ? `Required software is installed (${esc(flatpak.version || "version unknown")}). It will not be automatically upgraded.`
           : "Momentum will prepare the software this game needs. Review required downloads first; after compatibility checks, review the game files in the same setup job."}</p>
+        ${softwareLocation(flatpak)}
+        ${softwareEvidenceNote(flatpak, detail.dependency_targets?.[flatpakId])}
         <p class="pkg-warning">${detail.install_enabled
           ? "This game setup is supported by compatibility evidence. Installation still requires review and approval of this plan; confirm gameplay for your installation afterward."
           : "This package and software build need matching compatibility evidence. Momentum checks before changing game files."}</p>
@@ -230,8 +259,10 @@ async function selectPackage(id, version) {
           : detail.dependencies?.eduke32
             ? "Momentum will build the required software from pinned official source after your approval. Ubuntu build prerequisites must already be installed. Then review the game installation plan."
             : "Momentum will get the required software from its pinned official release after your approval. Then review the game installation plan."}</p>
+        ${softwareLocation(native)}
         <p class="pkg-warning">Installer checks do not certify gameplay. Confirm controls, display and saved progress for this installation.</p>
         <details><summary>Technical software details</summary>${packageJson(native)}</details>` : ""}
+      ${prerequisiteNotes(detail.host_prerequisites)}
       <form id="pkg-setup">
         <h3>Your game files</h3>
         ${detail.dependencies?.ironwail ? '<p class="bnote">QBJ3 is downloaded separately from its official-site-linked mirror because its assets cannot be bundled. The pinned download is about 2.7 GB; allow about 17 GiB free for a fresh download and installation. A complete existing qbj3 folder is reused read-only. Review source/software preparation first, then approve the separate game installation plan.</p>' : ""}

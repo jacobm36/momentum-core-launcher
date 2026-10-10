@@ -1,7 +1,61 @@
 {
   "evidence_version": 1,
-  "scope": "Installer and software prerequisite checks only. Game-specific gameplay remains required; no HOD2 gameplay evidence is transferred.",
+  "scope": "Exact installer/software checks plus explicitly scoped owner gameplay reports. Confirm each user's setup; no HOD2 gameplay evidence is transferred.",
+  "owner_acceptance": {
+    "date": "2026-10-09",
+    "star-wars-trilogy-arcade_0.2.1": "Owner reported SWTA works perfectly on the debug laptop.",
+    "l-a-machineguns_0.2.2": "Owner confirmed final 0.2.2 fresh install using r3 installed and played correctly with mouse aim and both triggers, without manual NVRAM copying. Seed restart persistence separately confirmed on reference laptop; final debug install restart persistence not separately confirmed.",
+    "limits": "Reports apply to the owner's tested systems and the exact packages/seed; not universal hardware, other ROM/build or bonus-stage certification."
+  },
   "packages": [
+    {
+      "id": "l-a-machineguns",
+      "version": "0.2.2",
+      "digest": "sha256:a6d1d7ca1110176d5d966f58938c9e356e4025c7fc3633f35e9b0ea44dadefad",
+      "runtime": "supermodel",
+      "software": {
+        "provider": "native",
+        "scope": "user",
+        "version": "v0.3a-20260928-git-8b4de23",
+        "sha256": "4497b72c682d22f29b45d33607e07651240c2222a1e95e4b3f77846c9a7c1311",
+        "games_xml_sha256": "48c56b24ea720fb66188c0b2d94579a110be24971ac215ea808c563c665cf655"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "2026-10-09: 0.2.2 build/intake and synthetic lifecycle tests passed. Bundled clean Japan lamachin calibration seed SHA256 f411adfb79f822eac65dfafa9f1ae3c15356a8343ec78c5de6a0194eda5e33b5 was created in fresh isolated state, calibrated to 0-255 on both axes, and owner-confirmed after restart for playfield aiming and both triggers. Owner confirmed transferring these exact seed bytes fixed aiming on the debug laptop. Native build and input/display recipe unchanged. Existing NVRAM is preserved. Manual evidence covers the seed and recipe, not gameplay of the final 0.2.2 ZIP or universal fresh-machine certification."
+    },
+    {
+      "id": "star-wars-trilogy-arcade",
+      "version": "0.2.1",
+      "digest": "sha256:3ce37cec1672d8dd96e842c418e7c890bebc89413b07c6d2aeb78eea7b67ac26",
+      "runtime": "supermodel",
+      "software": {
+        "provider": "native",
+        "scope": "user",
+        "version": "v0.3a-20260928-git-8b4de23",
+        "sha256": "4497b72c682d22f29b45d33607e07651240c2222a1e95e4b3f77846c9a7c1311",
+        "games_xml_sha256": "48c56b24ea720fb66188c0b2d94579a110be24971ac215ea808c563c665cf655"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "2026-10-09: exact local ZIP tested through real launcher intake, approval, package apply, receipt/catalog commit and repeat install in disposable homes with synthetic ROM media and copied verified native runtime. Host prerequisite checks run; no game launched. Package tests assert canonical fullscreen/input flags and seed-only configuration. Free play is not preconfigured. Not fresh-machine, real-ROM, graphics, input or gameplay certification."
+    },
+    {
+      "id": "l-a-machineguns",
+      "version": "0.2.1",
+      "digest": "sha256:c4325845c4075fc6a2fb279b737289f4588179f7cf44076d55766bbbaf585012",
+      "runtime": "supermodel",
+      "software": {
+        "provider": "native",
+        "scope": "user",
+        "version": "v0.3a-20260928-git-8b4de23",
+        "sha256": "4497b72c682d22f29b45d33607e07651240c2222a1e95e4b3f77846c9a7c1311",
+        "games_xml_sha256": "48c56b24ea720fb66188c0b2d94579a110be24971ac215ea808c563c665cf655"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "2026-10-09: exact local ZIP tested through real launcher intake, approval, package apply, receipt/catalog commit and repeat install in disposable homes with synthetic ROM media and copied verified native runtime. Host prerequisite checks run; no game launched. Canonical ordinary fullscreen at 1920x1080 with mouse axes/two triggers asserted by package tests. Fresh calibration, actual input/graphics and gameplay remain unverified. No shared NVRAM imported."
+    },
     {
       "id": "virtua-cop-2",
       "version": "0.1.0",

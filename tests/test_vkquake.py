@@ -107,7 +107,7 @@ class VkQuake(unittest.TestCase):
                 self.assertEqual(facts, {"provider": "appimage", "scope": "user",
                     "installed": True, "version": "1.36.0", "executable": str(path),
                     "sha256": hashlib.sha256(self.image).hexdigest(), "launch_argv": [str(path)],
-                    "capabilities_checked": False})
+                    "capabilities_checked": False, "location": str(path), "skipped": []})
                 self.approve()
                 with mock.patch("vkquake.download", side_effect=AssertionError("No upgrade")):
                     self.assertEqual(self.execute()[0], 0)
@@ -116,19 +116,44 @@ class VkQuake(unittest.TestCase):
                 self.assertFalse(self.journal.exists())
                 path.unlink()
 
-    def test_invalid_known_candidate_rejected_even_with_valid_fallback(self):
+    def assert_skipped_personal(self, facts, reason):
+        self.assertEqual(facts["executable"], str(vkquake.target_path()))
+        self.assertEqual([x["path"] for x in facts["skipped"]], [str(self.personal)])
+        self.assertIn(reason, facts["skipped"][0]["reason"])
+
+    def test_different_personal_build_left_untouched_and_managed_used(self):
         self.seed(vkquake.target_path())
         self.seed(data=b"wrong")
-        with self.assertRaisesRegex(vkquake.DependencyError, "Unverified"):
-            vkquake.detect()
-        self.assertEqual(self.execute()[0], 40)
+        facts = vkquake.detect()
+        self.assertTrue(facts["installed"])
+        self.assert_skipped_personal(facts, "left untouched")
+        self.approve()
+        with mock.patch("vkquake.download", side_effect=AssertionError("No replacement")):
+            self.assertEqual(self.execute()[0], 0)
         self.assertEqual(self.personal.read_bytes(), b"wrong")
         self.assertTrue(vkquake._verified(vkquake.target_path()))
         self.assertFalse(self.journal.exists())
-        self.seed()
+
+    def test_different_personal_build_plans_managed_download_only(self):
+        self.seed(data=b"wrong")
+        facts = vkquake.detect()
+        self.assertFalse(facts["installed"])
+        self.assert_skipped_personal(facts, "left untouched")
+        self.assertEqual(vkquake.make_plan(facts)["dependency_download"]["target"], str(vkquake.target_path()))
+        self.assertEqual(self.personal.read_bytes(), b"wrong")
+
+    def test_invalid_managed_copy_still_blocks(self):
+        vkquake.target_path().parent.mkdir(parents=True)
         vkquake.target_path().write_bytes(b"wrong managed")
+        vkquake.target_path().chmod(0o755)
         with self.assertRaisesRegex(vkquake.DependencyError, "Unverified"):
             vkquake.detect()
+        self.assertEqual(self.execute()[0], 40)
+        self.seed(data=b"wrong")
+        with self.assertRaisesRegex(vkquake.DependencyError, "Unverified"):
+            vkquake.detect()
+        self.seed()
+        self.assertEqual(vkquake.detect()["executable"], str(self.personal))
 
     def test_exact_owned_group_writable_guide_mode_reused_only_for_own_group(self):
         path = self.seed()
@@ -141,37 +166,45 @@ class VkQuake(unittest.TestCase):
             self.assertEqual(self.execute()[0], 0)
         self.assertEqual(path.stat().st_mode & 0o7777, 0o775)
         with mock.patch("vkquake.os.getgid", return_value=path.stat().st_gid + 1):
-            with self.assertRaisesRegex(vkquake.DependencyError, "Unverified"):
-                vkquake.detect()
+            self.assert_skipped_personal(vkquake.detect(), "left untouched")
         path.write_bytes(b"wrong")
         path.chmod(0o775)
-        with self.assertRaisesRegex(vkquake.DependencyError, "Unverified"):
-            vkquake.detect()
+        self.assert_skipped_personal(vkquake.detect(), "left untouched")
+        self.assertEqual(path.read_bytes(), b"wrong")
 
-    def test_candidate_modes_types_and_symlink_ancestors_rejected(self):
+    def test_candidate_modes_types_and_symlinks_skipped_untouched(self):
         path = self.seed()
         for mode in (0o644, 0o777, 0o757, 0o4755, 0o2755):
             path.chmod(mode)
-            with self.subTest(mode=mode), self.assertRaises(vkquake.DependencyError):
-                vkquake.detect()
+            with self.subTest(mode=mode):
+                self.assert_skipped_personal(vkquake.detect(), "left untouched")
+                self.assertEqual(path.stat().st_mode & 0o7777, mode)
         path.unlink()
         os.mkfifo(path)
-        with self.assertRaises(vkquake.DependencyError):
-            vkquake.detect()
+        self.assert_skipped_personal(vkquake.detect(), "left untouched")
         path.unlink()
         path.mkdir()
-        with self.assertRaises(vkquake.DependencyError):
-            vkquake.detect()
+        self.assert_skipped_personal(vkquake.detect(), "left untouched")
         path.rmdir()
         path.symlink_to(self.root / "missing")
-        with self.assertRaises(vkquake.DependencyError):
-            vkquake.detect()
+        self.assert_skipped_personal(vkquake.detect(), "left untouched")
+        self.assertTrue(path.is_symlink())
         path.unlink()
         path.parent.rmdir()
         (self.root / "real-applications").mkdir()
         path.parent.symlink_to(self.root / "real-applications", target_is_directory=True)
-        with self.assertRaises(vkquake.DependencyError):
-            vkquake.detect()
+        self.assert_skipped_personal(vkquake.detect(), "left untouched")
+        self.assertEqual(list((self.root / "real-applications").iterdir()), [])
+
+    def test_missing_host_prerequisites_are_reported_without_running_appimage(self):
+        self.seed(self.personal)
+        facts = vkquake.detect()
+        with mock.patch("vkquake.ctypes.util.find_library",
+                        side_effect=lambda name: None if name == "fuse" else "libvulkan.so.1"), \
+                mock.patch("vkquake.ctypes.CDLL", side_effect=lambda name: object()):
+            self.assertEqual(vkquake.missing_host_prerequisites(facts), ["fuse"])
+        with mock.patch("vkquake.ctypes.util.find_library", return_value=None):
+            self.assertEqual(vkquake.missing_host_prerequisites(facts), ["fuse", "vulkan"])
 
     def test_approved_download_durable_publication_and_detection(self):
         self.approve()

@@ -29,7 +29,7 @@ class Detection(unittest.TestCase):
         run.assert_not_called()
 
     def test_installed_version_commit_and_remote_are_read_only(self):
-        responses = ["flathub\thttps://dl.flathub.org/repo/\n", dependencies.APP + "\n",
+        responses = [dependencies.APP + "\n", "flathub\thttps://dl.flathub.org/repo/\n",
                      "   Version: v2.7\n Commit: abc123\n"]
         with mock.patch("dependencies.shutil.which", return_value="/usr/bin/flatpak"), \
                 mock.patch("dependencies.probe", side_effect=responses) as probe:
@@ -39,7 +39,32 @@ class Detection(unittest.TestCase):
         self.assertEqual(result["version"], "v2.7")
         self.assertEqual(result["commit"], "abc123")
         self.assertFalse(result["capabilities_checked"])
-        self.assertEqual([call.args[0] for call in probe.call_args_list], ["remotes", "list", "info"])
+        self.assertEqual([call.args[:2] for call in probe.call_args_list],
+                         [("list", "--user"), ("remotes", "--user"), ("info", "--user")])
+        self.assertEqual(result["location"], "Flatpak (your user account)")
+
+    def test_existing_system_wide_install_is_reused_in_place(self):
+        responses = ["", dependencies.APP + "\n", "flathub\thttps://dl.flathub.org/repo/\n",
+                     "   Version: v2.7\n Commit: abc123\n"]
+        with mock.patch("dependencies.shutil.which", return_value="/usr/bin/flatpak"), \
+                mock.patch("dependencies.probe", side_effect=responses) as probe:
+            result = dependencies.detect()
+        self.assertEqual(result["scope"], "system")
+        self.assertTrue(result["installed"])
+        self.assertEqual(result["launch_argv"], ["flatpak", "run", "--system", dependencies.APP])
+        self.assertEqual(result["location"], "Flatpak (system-wide)")
+        self.assertEqual([call.args[:2] for call in probe.call_args_list],
+                         [("list", "--user"), ("list", "--system"), ("remotes", "--system"), ("info", "--system")])
+        self.assertEqual(dependencies.make_plan(result)["dependency_commands"], [])
+
+    def test_missing_everywhere_prepares_user_scope_only(self):
+        with mock.patch("dependencies.shutil.which", return_value="/usr/bin/flatpak"), \
+                mock.patch("dependencies.probe", side_effect=["", "", ""]):
+            result = dependencies.detect()
+        self.assertEqual(result["scope"], "user")
+        self.assertFalse(result["installed"])
+        for command in dependencies.commands_for(result):
+            self.assertIn("--user", command)
 
     def test_unexpected_remote_is_not_silently_reused_or_replaced(self):
         with mock.patch("dependencies.shutil.which", return_value="flatpak"), \
@@ -64,6 +89,35 @@ class Detection(unittest.TestCase):
         self.assertTrue(all("--user" in command for command in commands))
         self.assertIn("--noninteractive", commands[1])
         self.assertEqual(len(dependencies.commands_for(facts(remote=True))), 1)
+
+    def test_package_evidence_pins_fresh_user_install_but_never_changes_existing_copy(self):
+        target = "a" * 64
+        commands = dependencies.commands_for(facts(remote=True), target, pin_fresh_install=True)
+        self.assertEqual(commands, [
+            ["flatpak", "install", "--user", "--noninteractive", "-y", "flathub", dependencies.APP],
+            ["flatpak", "update", "--user", "--noninteractive", "-y", "--commit=" + target, dependencies.APP],
+        ])
+        self.assertEqual(dependencies.commands_for(facts(True, True), target), [])
+        self.assertEqual(dependencies.commands_for(
+            facts(True, True), target, pin_fresh_install=True), [
+                ["flatpak", "update", "--user", "--noninteractive", "-y",
+                 "--commit=" + target, dependencies.APP]])
+        self.assertEqual(dependencies.commands_for(
+            dict(facts(True, True), scope="system"), target, pin_fresh_install=True), [])
+        with mock.patch("dependencies.probe", return_value=f"Commit: {target}\n") as probe:
+            plan = dependencies.make_plan(facts(remote=True), target)
+            existing_plan = dependencies.make_plan(facts(True, True), target)
+        self.assertEqual(plan["target_commit"], target)
+        self.assertEqual(len(plan["dependency_commands"]), 2)
+        self.assertEqual(existing_plan["dependency_commands"], [])
+        probe.assert_any_call("remote-info", "--user", "--commit=" + target,
+                              "flathub", dependencies.APP)
+        self.assertEqual(probe.call_count, 2)
+        with mock.patch("dependencies.probe", return_value="Commit: " + "b" * 64 + "\n"):
+            with self.assertRaisesRegex(dependencies.DependencyError, "did not confirm"):
+                dependencies.make_plan(facts(remote=True), target)
+        with self.assertRaisesRegex(dependencies.DependencyError, "Invalid"):
+            dependencies.make_plan(facts(remote=True), "not-a-commit")
 
 
 class Preparation(unittest.TestCase):
@@ -106,6 +160,7 @@ class Preparation(unittest.TestCase):
             code, result = self.execute()
         self.assertEqual(code, 20)
         self.assertIn("Ubuntu", result["message"])
+        self.assertIn("sudo apt install flatpak", result["message"])
 
     def test_approved_missing_dependency_install_and_durable_command_intent(self):
         initial = facts(remote=True)
@@ -127,6 +182,53 @@ class Preparation(unittest.TestCase):
         self.assertEqual(len(result["completed_transactions"]), 1)
         self.assertEqual(run.call_args.args[0][1], "install")
         self.assertIsNone(json.loads((self.root / "dependency-transactions.json").read_text())["active_command"])
+
+    def test_evidence_pinned_install_uses_user_scope_and_checks_final_commit(self):
+        target = "a" * 64
+        self.context["target_commit"] = target
+        initial, unpinned, pinned = facts(remote=True), facts(True, True), dict(facts(True, True), commit=target)
+        with mock.patch("dependencies.detect", return_value=initial), \
+                mock.patch("dependencies.probe", return_value=f"Commit: {target}\n"):
+            self.assertEqual(self.execute()[0], 0)
+        raw = Path(self.context["result_file"]).read_bytes()
+        approval = self.root / "pinned-plan.json"
+        approval.write_bytes(raw)
+        self.context.update(phase="apply", approved_plan_file=str(approval),
+                            approved_plan_digest="sha256:" + hashlib.sha256(raw).hexdigest())
+        with mock.patch("dependencies.detect", side_effect=[initial, unpinned, pinned, pinned]), \
+                mock.patch("dependencies.probe", return_value=f"Commit: {target}\n"), \
+                mock.patch("dependencies.subprocess.run", return_value=mock.Mock(returncode=0)) as run:
+            code, result = self.execute()
+        self.assertEqual(code, 0, result)
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args_list[0].args[0][1], "install")
+        self.assertEqual(run.call_args_list[1].args[0],
+                         ["flatpak", "update", "--user", "--noninteractive", "-y",
+                          "--commit=" + target, dependencies.APP])
+        self.assertEqual(result["dependencies"]["flycast"]["commit"], target)
+
+    def test_missing_user_remote_is_verified_before_app_install(self):
+        target = "a" * 64
+        self.context["target_commit"] = target
+        initial, with_remote, unpinned = facts(), facts(remote=True), facts(True, True)
+        pinned = dict(unpinned, commit=target)
+        self.approve(initial)
+        with mock.patch("dependencies.detect", side_effect=[
+                initial, with_remote, unpinned, pinned, pinned]), \
+                mock.patch("dependencies.probe", return_value=f"Commit: {target}\n") as probe, \
+                mock.patch("dependencies.subprocess.run", return_value=mock.Mock(returncode=0)) as run:
+            code, result = self.execute()
+        self.assertEqual(code, 0, result)
+        self.assertEqual([call.args[0][1] for call in run.call_args_list],
+                         ["remote-add", "install", "update"])
+        probe.assert_called_with("remote-info", "--user", "--commit=" + target,
+                                 "flathub", dependencies.APP)
+
+    def test_unavailable_tested_commit_stops_before_install(self):
+        target = "a" * 64
+        with mock.patch("dependencies.probe", side_effect=dependencies.DependencyError("commit unavailable")):
+            with self.assertRaisesRegex(dependencies.DependencyError, "commit unavailable"):
+                dependencies.make_plan(facts(remote=True), target)
 
     def test_remote_setup_and_install_are_separate_recorded_transactions(self):
         initial = facts()

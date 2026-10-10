@@ -48,7 +48,7 @@ class Detection(unittest.TestCase):
         with mock.patch("uzdoom.shutil.which", return_value="flatpak"), \
                 mock.patch("uzdoom.probe", side_effect=self.responses()) as probe:
             observed = uzdoom.detect()
-        self.assertEqual(observed, facts(True, True))
+        self.assertEqual(observed, facts(True, True, location="Flatpak (your user account)"))
         self.assertFalse(any("--system" in call.args for call in probe.call_args_list))
         self.assertEqual(probe.call_args.args, ("ps", "--columns=application"))
 
@@ -56,7 +56,7 @@ class Detection(unittest.TestCase):
         with mock.patch("uzdoom.shutil.which", return_value="flatpak"), \
                 mock.patch("uzdoom.probe", side_effect=self.responses("system")) as probe:
             observed = uzdoom.detect()
-        self.assertEqual(observed, facts(True, True, "system"))
+        self.assertEqual(observed, facts(True, True, "system", location="Flatpak (system-wide)"))
         self.assertEqual(uzdoom.commands_for(observed), [])
         self.assertTrue(all(call.args[0] in ("list", "remotes", "info", "ps")
                             for call in probe.call_args_list))
@@ -229,6 +229,7 @@ class Preparation(unittest.TestCase):
             code, result = self.execute()
         self.assertEqual(code, 20)
         self.assertIn("cannot elevate", result["message"])
+        self.assertIn("sudo apt install flatpak", result["message"])
 
     def test_commands_are_exact_missing_only_user_and_no_upgrades(self):
         self.assertEqual(uzdoom.commands_for(facts(True, True, "system")), [])
@@ -241,6 +242,37 @@ class Preparation(unittest.TestCase):
                                        "flathub", uzdoom.REF])
         with self.assertRaises(uzdoom.DependencyError):
             uzdoom.commands_for(facts(scope="system"))
+
+    def test_package_evidence_pins_fresh_user_install_only(self):
+        target = "a" * 64
+        expected = [
+            ["flatpak", "install", "--user", "--noninteractive", "-y",
+             "flathub", uzdoom.REF],
+            ["flatpak", "update", "--user", "--noninteractive", "-y",
+             "--commit=" + target, uzdoom.APP],
+        ]
+        self.assertEqual(uzdoom.commands_for(facts(remote=True), target, pin_fresh_install=True), expected)
+        self.assertEqual(uzdoom.commands_for(facts(True, True), target), [])
+        self.assertEqual(uzdoom.commands_for(
+            facts(True, True), target, pin_fresh_install=True), [
+                ["flatpak", "update", "--user", "--noninteractive", "-y",
+                 "--commit=" + target, uzdoom.APP]])
+        self.assertEqual(uzdoom.commands_for(
+            facts(True, True, "system"), target, pin_fresh_install=True), [])
+        with mock.patch("uzdoom.probe", return_value=f"Commit: {target}\n") as probe:
+            plan = uzdoom.make_plan(facts(remote=True), target)
+            existing_plan = uzdoom.make_plan(facts(True, True), target)
+        self.assertEqual(plan["target_commit"], target)
+        self.assertEqual(plan["dependency_commands"], expected)
+        self.assertEqual(existing_plan["dependency_commands"], [])
+        probe.assert_any_call("remote-info", "--user", "--commit=" + target,
+                              "flathub", uzdoom.REF)
+        self.assertEqual(probe.call_count, 2)
+        with mock.patch("uzdoom.probe", return_value="Commit: " + "b" * 64 + "\n"):
+            with self.assertRaisesRegex(uzdoom.DependencyError, "did not confirm"):
+                uzdoom.make_plan(facts(remote=True), target)
+        with self.assertRaisesRegex(uzdoom.DependencyError, "Invalid"):
+            uzdoom.make_plan(facts(remote=True), "not-a-commit")
 
     def test_separate_remote_and_install_transactions_redetect_before_and_after_each(self):
         initial, with_remote, installed = facts(), facts(remote=True), facts(True, True)
@@ -258,6 +290,44 @@ class Preparation(unittest.TestCase):
         self.assertIsNone(journal["active_command"])
         self.assertFalse(journal["detection_pending"])
         self.assertEqual(journal["after"], installed)
+
+    def test_evidence_pinned_install_applies_commit_before_success(self):
+        target = "a" * 64
+        self.context["target_commit"] = target
+        initial = facts(remote=True)
+        unpinned = facts(True, True)
+        pinned = facts(True, True)
+        pinned["commit"] = target
+        with mock.patch("uzdoom.probe", return_value=f"Commit: {target}\n"):
+            self.approve(initial)
+        with mock.patch("uzdoom.detect", side_effect=[initial, initial, unpinned, unpinned, pinned, pinned]), \
+                mock.patch("uzdoom.probe", return_value=f"Commit: {target}\n"), \
+                mock.patch("uzdoom.subprocess.run", side_effect=self.transaction) as command:
+            code, result = self.execute()
+        self.assertEqual(code, 0, result)
+        self.assertEqual(command.call_count, 2)
+        self.assertEqual(command.call_args_list[1].args[0],
+                         ["flatpak", "update", "--user", "--noninteractive", "-y",
+                          "--commit=" + target, uzdoom.APP])
+        self.assertEqual(result["dependencies"]["uzdoom"]["commit"], target)
+
+    def test_missing_remote_checks_commit_before_install(self):
+        target = "b" * 64
+        self.context["target_commit"] = target
+        initial, with_remote, unpinned = facts(), facts(remote=True), facts(True, True)
+        pinned = facts(True, True)
+        pinned["commit"] = target
+        self.approve(initial)
+        with mock.patch("uzdoom.detect", side_effect=[
+                initial, initial, with_remote, with_remote, unpinned, unpinned, pinned, pinned]), \
+                mock.patch("uzdoom.probe", return_value=f"Commit: {target}\n") as probe, \
+                mock.patch("uzdoom.subprocess.run", side_effect=self.transaction) as command:
+            code, result = self.execute()
+        self.assertEqual(code, 0, result)
+        self.assertEqual([call.args[0][1] for call in command.call_args_list],
+                         ["remote-add", "install", "update"])
+        probe.assert_called_with("remote-info", "--user", "--commit=" + target,
+                                 "flathub", uzdoom.REF)
 
     def test_existing_system_or_user_reused_without_any_commands(self):
         for scope in ("system", "user"):

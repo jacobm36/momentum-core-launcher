@@ -76,7 +76,8 @@ def detect():
         if candidates:
             if candidates != [[APP, ARCH, BRANCH, "flathub"]]:
                 raise DependencyError(f"Unexpected UZDoom ref/origin in {scope}; reconcile manually.")
-            facts.update(scope=scope, installed=True, launch_argv=["flatpak", "run", "--" + scope, APP])
+            facts.update(scope=scope, installed=True, launch_argv=["flatpak", "run", "--" + scope, APP],
+                         location=f"Flatpak ({'your user account' if scope == 'user' else 'system-wide'})")
             break
     scope = "--" + facts["scope"]
     remotes = [line.split("\t") for line in probe("remotes", scope, "--columns=name,url").splitlines()]
@@ -139,26 +140,58 @@ def check_host(facts):
             "content_access_checked": False, "graphics_checked": False, "note": NOTE}
 
 
-def commands_for(facts):
+def commands_for(facts, target_commit=None, pin_fresh_install=False):
     _validate(facts)
-    if not facts["flatpak_available"] or facts["installed"]:
+    if not facts["flatpak_available"]:
         return []
+    if facts["installed"]:
+        if (not pin_fresh_install or facts["scope"] != "user" or not target_commit
+                or facts.get("commit") == target_commit):
+            return []
+        return [["flatpak", "update", "--user", "--noninteractive", "-y",
+                 "--commit=" + target_commit, APP]]
     commands = []
     if not facts["remote_present"]:
         commands.append(["flatpak", "remote-add", "--user", "--if-not-exists", "flathub", REMOTE_DESCRIPTOR])
     commands.append(["flatpak", "install", "--user", "--noninteractive", "-y",
                      "flathub", REF])
+    if target_commit:
+        commands.append(["flatpak", "update", "--user", "--noninteractive", "-y",
+                         "--commit=" + target_commit, APP])
     return commands
 
 
-def make_plan(facts):
+def make_plan(facts, target_commit=None):
+    if target_commit is not None and (
+            not isinstance(target_commit, str) or not re.fullmatch(r"[a-f0-9]{64}", target_commit)):
+        raise DependencyError("Invalid evidence-backed UZDoom commit.")
+    _verify_remote_commit(facts, target_commit)
+    commands = commands_for(facts, target_commit,
+                            pin_fresh_install=bool(target_commit) and not facts["installed"])
+    notes = ["No named installations, system writes, elevation or upgrades.",
+             "Shared UZDoom and its runtime remain installed if game installation later fails.",
+             "Cancellation waits for an active transaction to finish.", NOTE]
+    if target_commit and commands:
+        notes.append("Fresh user-scope install is pinned to evidence-backed commit " + target_commit
+                     + "; the exact commit is verified before installation. Existing copies are never changed.")
     return {"plan_version": 1, "operation": "prepare-dependency", "dependency": APP,
             "scope": facts["scope"], "dependencies": {"uzdoom": facts}, "actions": [],
-            "dependency_commands": commands_for(facts),
+            "target_commit": target_commit, "dependency_commands": commands,
             "manual_actions": [{"action_id": "uzdoom-capability-check", "message": NOTE}],
-            "notes": ["No named installations, system writes, elevation or upgrades.",
-                      "Shared UZDoom and its runtime remain installed if game installation later fails.",
-                      "Cancellation waits for an active Flatpak transaction to finish.", NOTE]}
+            "notes": notes}
+
+
+def _verify_remote_commit(facts, target_commit):
+    if target_commit and facts["remote_present"]:
+        try:
+            info = _metadata(probe(
+                "remote-info", "--" + facts["scope"], "--commit=" + target_commit, "flathub", REF))
+        except DependencyError as e:
+            raise DependencyError(
+                f"Required tested UZDoom commit {target_commit} is unavailable from the selected Flathub remote: {e}") from e
+        if info.get("Commit") != target_commit:
+            raise DependencyError(
+                f"Flathub did not confirm the exact required UZDoom commit {target_commit}.")
 
 
 def _journal(path, job_id):
@@ -198,14 +231,20 @@ def run(context):
         else:
             attempts = _journal(journal, context["job_id"])
             facts = detect()
+            target_commit = context.get("target_commit")
+            if target_commit is not None and (
+                    not isinstance(target_commit, str) or not re.fullmatch(r"[a-f0-9]{64}", target_commit)):
+                raise DependencyError("Invalid evidence-backed UZDoom commit.")
             if not facts["flatpak_available"]:
                 code, outcome, message = 20, "needs_action", (
-                    "Flatpak is missing. Install it with Ubuntu system tools, then retry; Momentum cannot elevate.")
+                    "Flatpak is missing. On Ubuntu 24.04, run `sudo apt update` then "
+                    "`sudo apt install flatpak`; retry after installation. Momentum cannot elevate.")
             elif facts.get("running"):
                 code, outcome, message = 20, "needs_action", "Close UZDoom before dependency preparation."
             elif phase == "preflight":
-                plan = make_plan(facts)
-                message = "Review exact user-only dependency commands; existing UZDoom is never upgraded."
+                plan = make_plan(facts, target_commit)
+                message = ("Review exact user-only dependency commands. Existing UZDoom is never changed; "
+                           "a fresh install is pinned only when package evidence supplies a tested commit.")
             else:
                 approved = Path(context["approved_plan_file"])
                 if approved.parent != result_path.parent or approved in (result_path, cancel, journal):
@@ -218,7 +257,8 @@ def run(context):
                 if (envelope.get("result_version") != 1 or envelope.get("job_id") != context["job_id"]
                         or envelope.get("operation") != "prepare-dependency"
                         or envelope.get("outcome") != "succeeded" or envelope.get("phase") != "preflight"
-                        or envelope.get("dependencies") != {"uzdoom": facts} or plan != make_plan(facts)):
+                        or envelope.get("dependencies") != {"uzdoom": facts}
+                        or plan != make_plan(facts, target_commit)):
                     code, outcome, message = 30, "conflicted", "Dependency facts/envelope changed; review a new preflight."
                 else:
                     for index, argv in enumerate(plan["dependency_commands"]):
@@ -226,7 +266,9 @@ def run(context):
                             code, outcome, message = 130, "cancelled", "Cancelled between dependency transactions."
                             break
                         fresh = detect()
-                        if fresh != facts or commands_for(fresh) != plan["dependency_commands"][index:]:
+                        if (fresh != facts or commands_for(
+                                fresh, target_commit, pin_fresh_install=bool(target_commit))
+                                != plan["dependency_commands"][index:]):
                             facts = fresh
                             code, outcome, message = 30, "conflicted", (
                                 "Dependency facts changed during preparation; review a fresh plan. No upgrade attempted.")
@@ -246,6 +288,8 @@ def run(context):
                         facts = detect()
                         transaction["observed"] = facts
                         save(active_command=None, detection_pending=False, after=facts)
+                        if transaction_result.returncode == 0 and argv[1] == "remote-add" and target_commit:
+                            _verify_remote_commit(facts, target_commit)
                         if cancel.exists():
                             code, outcome, message = 130, "cancelled", (
                                 "Cancellation acknowledged after Flatpak finished; dependency changes retained.")
@@ -266,6 +310,10 @@ def run(context):
                             code, outcome, message = 30, "conflicted", "Dependency changed after preparation; review again."
                         elif not facts["installed"]:
                             raise DependencyError("Flatpak returned success but the exact UZDoom app was not detected.")
+                        elif target_commit and facts.get("commit") != target_commit:
+                            raise DependencyError(
+                                f"UZDoom did not reach required tested commit {target_commit}; "
+                                f"observed {facts.get('commit') or 'unknown'}. No game files were installed.")
                         elif cancel.exists():
                             code, outcome, message = 130, "cancelled", "Cancellation acknowledged; dependency retained."
     except (DependencyError, OSError, ValueError, KeyError, TypeError, AttributeError) as exc:

@@ -11,12 +11,14 @@ import catalog
 import installs
 import packages
 import picker
+from window_handoff import KioskHandoff
 from jobs import Jobs, RunnerBusy
 
 HERE = Path(__file__).resolve().parent
 PORT = int(os.environ.get("MCL_PORT", 47615))
 TOKEN = secrets.token_urlsafe(24)
 LAST_SEEN = time.time()
+HANDOFF = KioskHandoff(PORT)
 
 
 class CatalogLock:
@@ -101,6 +103,9 @@ def track(gid, p, t0):
         failed[gid] = rc
     while alive(p):
         time.sleep(2)
+    with lock:
+        if not any(alive(game) for game in running.values()):
+            HANDOFF.restore()
     # A quick relaunch may already have replaced started[gid]; only close out our own session.
     if started.get(gid) == t0:
         del started[gid]
@@ -351,7 +356,8 @@ class Handler(SimpleHTTPRequestHandler):
             LAST_SEEN = time.time()
             with lock:
                 state = {k for k, p in running.items() if alive(p)}
-            return self._json({"token": TOKEN, "running": sorted(state), "failed": dict(failed), "games": load_games(), "stats": load_stats(), "jobs": JOBS.list()})
+            return self._json({"token": TOKEN, "running": sorted(state), "failed": dict(failed), "games": load_games(), "stats": load_stats(), "jobs": JOBS.list(),
+                               "window_warning": HANDOFF.warning})
         if path == "/api/id":
             return self._json({"app": "momentum-core-launcher"})
         if path == "/api/backups":
@@ -403,11 +409,14 @@ class Handler(SimpleHTTPRequestHandler):
                 except OSError:
                     log = subprocess.DEVNULL
                 try:
+                    HANDOFF.release()
                     running[gid] = subprocess.Popen(
                         shlex.split(game["exec"]), cwd=game.get("cwd") or None,
                         stdin=subprocess.DEVNULL, stdout=log,
                         stderr=subprocess.STDOUT, start_new_session=True)
                 except Exception as e:
+                    if not any(alive(game) for game in running.values()):
+                        HANDOFF.restore()
                     if log is not subprocess.DEVNULL:
                         log.close()
                         (LOGS / f"{gid}.log").write_text(f"Launch failed: {e}\n")
@@ -573,9 +582,14 @@ class Handler(SimpleHTTPRequestHandler):
                     f"import time,sys\nfor i in range({int(secs * 4)}):\n    print('{name}', i, flush=True); time.sleep(.25)\nsys.exit({code})"]}
                 steps = [step("Download files", 3), step("Unpack", 2), step("Configure", 3, 1 if data.get("fail") else 0), step("Create shortcut", 1)]
                 return self._json({"id": JOBS.submit(str(data.get("title") or "Demo install"), steps)})
-            m = re.fullmatch(r"/api/jobs/(j[0-9a-f]{8})/(cancel|retry|dismiss|approve)", path)
+            m = re.fullmatch(r"/api/jobs/(j[0-9a-f]{8})/(cancel|retry|dismiss|approve|reconcile)", path)
             if m:
-                r = INSTALLS.approve(m[1], str(data.get("plan_digest") or "")) if m[2] == "approve" else getattr(JOBS, m[2])(m[1])
+                if m[2] == "approve":
+                    r = INSTALLS.approve(m[1], str(data.get("plan_digest") or ""))
+                elif m[2] == "reconcile":
+                    r = INSTALLS.reconcile_install(m[1])
+                else:
+                    r = getattr(JOBS, m[2])(m[1])
                 return self._json({"status": m[2]}) if r is True else self._json({"error": r or f"cannot {m[2]} this job"}, 409)
             if path == "/api/packages/import":
                 src = data.get("path")

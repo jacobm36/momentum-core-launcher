@@ -16,6 +16,8 @@ per-game launch logs, and artwork/trailer fetching.
 
 - Linux with Python 3.9+ (3.12 tested)
 - Google Chrome or Chromium (falls back to `xdg-open`)
+- X11 kiosk game handoff: `wmctrl` and `xprop` (Ubuntu packages `wmctrl` and
+  `x11-utils`); alternatively use `MCL_WINDOWED=1 ./launch.sh`.
 
 ## Quick start
 

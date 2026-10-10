@@ -135,8 +135,15 @@ class Native(unittest.TestCase):
         with mock.patch("supermodel.download", side_effect=AssertionError("No upgrade")):
             self.assertEqual(self.execute()[0], 0)
         self.assertFalse(self.journal.exists())
+        self.assertEqual(supermodel.detect()["skipped"], [])
+        self.assertEqual(supermodel.detect()["location"], str(existing))
         (existing / "Assets/p1crosshair.bmp").write_bytes(b"modified")
-        self.assertFalse(supermodel.detect()["installed"])
+        facts = supermodel.detect()
+        self.assertFalse(facts["installed"])
+        self.assertEqual(facts["root"], str(supermodel.target_root()))
+        self.assertEqual([x["path"] for x in facts["skipped"]], [str(existing)])
+        self.assertIn("left untouched", facts["skipped"][0]["reason"])
+        self.assertEqual((existing / "Assets/p1crosshair.bmp").read_bytes(), b"modified")
         self.assertTrue((existing / "Config/Supermodel.ini").is_symlink())
 
     def test_wrong_permissions_symlinks_or_unsupported_platform_not_reused(self):

@@ -12,6 +12,7 @@ import time
 import sys
 import shlex
 import fcntl
+import platform
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -33,6 +34,36 @@ RUNTIME_RESOLVERS = {
     "flycast": dependencies, "supermodel": supermodel, "vkquake": vkquake, "uzdoom": uzdoom,
     "eduke32": eduke32, "ironwail": ironwail,
 }
+UBUNTU_2404_RUNTIME_PACKAGES = {
+    "libSDL2-2.0.so.0": "libsdl2-2.0-0", "libSDL2_net-2.0.so.0": "libsdl2-net-2.0-0",
+    "libGL.so.1": "libgl1", "libGLU.so.1": "libglu1-mesa",
+    "libasound.so.2": "libasound2t64", "libpulse.so.0": "libpulse0",
+    "libsamplerate.so.0": "libsamplerate0", "libX11.so.6": "libx11-6",
+    "libXext.so.6": "libxext6", "libXcursor.so.1": "libxcursor1",
+    "libXi.so.6": "libxi6", "libXfixes.so.3": "libxfixes3",
+    "libXrandr.so.2": "libxrandr2", "libXss.so.1": "libxss1",
+    "libdrm.so.2": "libdrm2", "libgbm.so.1": "libgbm1",
+    "libwayland-egl.so.1": "libwayland-egl1", "libwayland-client.so.0": "libwayland-client0",
+    "libwayland-cursor.so.0": "libwayland-cursor0", "libxkbcommon.so.0": "libxkbcommon0",
+    "libdecor-0.so.0": "libdecor-0-0", "libGLdispatch.so.0": "libglvnd0",
+    "libGLX.so.0": "libglx0", "libOpenGL.so.0": "libopengl0",
+    "libXrender.so.1": "libxrender1", "libX11-xcb.so.1": "libx11-xcb1",
+    "libxcb.so.1": "libxcb1", "libXau.so.6": "libxau6", "libXdmcp.so.6": "libxdmcp6",
+    "libexpat.so.1": "libexpat1", "libffi.so.8": "libffi8",
+    "libsndfile.so.1": "libsndfile1", "libsystemd.so.0": "libsystemd0",
+    "libdbus-1.so.3": "libdbus-1-3", "libasyncns.so.0": "libasyncns0",
+    "libapparmor.so.1": "libapparmor1", "libFLAC.so.12": "libflac12t64",
+    "libvorbis.so.0": "libvorbis0a", "libvorbisenc.so.2": "libvorbisenc2",
+    "libopus.so.0": "libopus0", "libogg.so.0": "libogg0", "libmpg123.so.0": "libmpg123-0t64",
+    "libcap.so.2": "libcap2", "libgcrypt.so.20": "libgcrypt20",
+    "liblz4.so.1": "liblz4-1", "liblzma.so.5": "liblzma5",
+    "libzstd.so.1": "libzstd1", "libbsd.so.0": "libbsd0",
+    "libgpg-error.so.0": "libgpg-error0", "libmd.so.0": "libmd0",
+    "libgcc_s.so.1": "libgcc-s1", "libstdc++.so.6": "libstdc++6",
+    "libc.so.6": "libc6", "libz.so.1": "zlib1g",
+    "libopenal.so.1": "libopenal1", "libvulkan.so.1": "libvulkan1",
+    "libfuse.so.2": "libfuse2t64",
+}
 
 
 class InstallError(ValueError):
@@ -45,6 +76,67 @@ def _safe_abs(p):
 
 def _json_copy(v):
     return json.loads(json.dumps(v))
+
+
+def _ubuntu_apt_prerequisite(title, reason, packages):
+    try:
+        release = platform.freedesktop_os_release()
+    except OSError:
+        release = {}
+    if release.get("ID") == "ubuntu" and release.get("VERSION_ID", "").startswith("24.04"):
+        commands = [["sudo", "apt", "update"],
+                    ["sudo", "apt", "install", "-y", *packages]]
+        instruction = "Run these commands in a terminal yourself, then retry. Momentum never requests elevation."
+    else:
+        commands = []
+        instruction = "Install the listed host packages with your operating system's package manager, then retry."
+    return {"title": title, "reason": reason, "packages": packages,
+            "commands": commands, "instruction": instruction}
+
+
+def _library_prerequisite(title, reason, libraries):
+    libraries = sorted(set(libraries))
+    packages = sorted({UBUNTU_2404_RUNTIME_PACKAGES[name] for name in libraries
+                       if name in UBUNTU_2404_RUNTIME_PACKAGES})
+    unknown = sorted(set(libraries) - UBUNTU_2404_RUNTIME_PACKAGES.keys())
+    if unknown:
+        return {"title": title, "reason": reason + " No safe Ubuntu 24.04 package mapping is known for: "
+                + ", ".join(unknown), "packages": packages, "commands": [],
+                "instruction": "Use Ubuntu's package search to identify the exact provider, then retry."}
+    return _ubuntu_apt_prerequisite(title, reason, packages)
+
+
+def _runtime_prerequisite(runtime, error):
+    if runtime == "supermodel":
+        missing = re.search(r"error while loading shared libraries:\s*([^:\s]+)", error)
+        if missing:
+            return _library_prerequisite(
+                "Supermodel host libraries are missing",
+                "Ubuntu needs to provide the missing runtime library before Supermodel can start.",
+                [missing.group(1)])
+    elif runtime == "ironwail":
+        if "readelf and ldconfig" in error or "binutils/libc-bin" in error:
+            return _ubuntu_apt_prerequisite(
+                "Ironwail host-check tools are missing",
+                "Read-only compatibility checks require readelf and ldconfig.", ["binutils", "libc-bin"])
+        missing = re.search(r"Ironwail host libraries missing:\s*(.*?)\.\s*Install prerequisites", error)
+        if missing:
+            return _library_prerequisite(
+                "Ironwail host libraries are missing",
+                "Ubuntu needs to provide the missing runtime libraries before Ironwail can start.",
+                [name.strip() for name in missing.group(1).split(",") if name.strip()])
+    elif runtime == "eduke32":
+        if "Host checks require readelf and ldconfig" in error:
+            return _ubuntu_apt_prerequisite(
+                "EDuke32 host-check tools are missing",
+                "Read-only compatibility checks require readelf and ldconfig.", ["binutils", "libc-bin"])
+        missing = re.search(r"Missing linked library ([^\s;]+)", error)
+        if missing:
+            return _library_prerequisite(
+                "EDuke32 host library is missing",
+                "Ubuntu needs to provide the missing runtime library before EDuke32 can start.",
+                [missing.group(1)])
+    return None
 
 
 def _hash_file(p):
@@ -202,10 +294,18 @@ class Installs:
         summary = packages.check(snap)
         man = json.loads((snap / "package.json").read_text())
         facts = {}
+        dependency_targets = {}
+        host_prerequisites = []
+        flatpak_prerequisite_added = False
         for req in man["requires"]:
             runtime = req["id"]
             if runtime == "flycast":
                 facts[runtime] = self._flycast_facts(req)
+                if facts[runtime].get("flatpak_available") is False:
+                    host_prerequisites.append(_ubuntu_apt_prerequisite(
+                        "Flatpak is required", "Momentum needs the Ubuntu Flatpak client before it can prepare Flycast.",
+                        ["flatpak"]))
+                    flatpak_prerequisite_added = True
                 continue
             if runtime == "supermodel":
                 if (req.get("provider"), req.get("scope"), req.get("source"), req.get("tested_version")) != (
@@ -234,6 +334,20 @@ class Installs:
                 facts[runtime] = RUNTIME_RESOLVERS[runtime].detect()
             except dependencies.DependencyError as e:
                 raise InstallError(str(e)) from e
+            if runtime == "uzdoom" and facts[runtime].get("flatpak_available") is False:
+                host_prerequisites.append(_ubuntu_apt_prerequisite(
+                    "Flatpak is required", "Momentum needs the Ubuntu Flatpak client before it can prepare UZDoom.",
+                    ["flatpak"]))
+                flatpak_prerequisite_added = True
+            elif runtime == "eduke32" and not facts[runtime].get("installed"):
+                missing = eduke32.missing_build_prerequisites()
+                if missing["tools"] or missing["libraries"]:
+                    host_prerequisites.append(_ubuntu_apt_prerequisite(
+                        "EDuke32 build prerequisites are missing",
+                        "The pinned source build requires a compiler, NASM, pkg-config and these development libraries: "
+                        + ", ".join(missing["libraries"] or eduke32.BUILD_LIBRARIES),
+                        ["build-essential", "nasm", "pkg-config", "libsdl2-dev", "libgl-dev",
+                         "libvpx-dev", "libflac-dev", "libgtk2.0-dev"]))
         evidence = json.loads((Path(__file__).parent / "docs/hod2-target-evidence.json").read_text())
         flycast = facts.get("flycast", {})
         approved_packages = [(evidence["package_version"], evidence["package_digest"])]
@@ -246,9 +360,15 @@ class Installs:
             and flycast.get("installed") is True
             and flycast.get("version") == evidence["emulator_version"]
             and flycast.get("commit") == evidence["emulator_commit"])
+        if supported:
+            dependency_targets["flycast"] = {
+                "version": evidence["emulator_version"], "commit": evidence["emulator_commit"]}
         if enabled:
             flycast["capabilities_checked"] = True
+            revision = next((p for p in evidence.get("derived_packages", [])
+                             if (p["version"], p["digest"]) == (version, summary["digest"])), {})
             flycast["capability_note"] = (
+                revision["basis"] if revision.get("gameplay") == "not-tested-for-this-package" else
                 "HOD2 gameplay was validated on this Flycast build. Approved artwork-only package revisions "
                 "inherit unchanged executable-code evidence; confirm gameplay for each installation.")
             flycast["capability_evidence"] = "docs/hod2-target-evidence.json"
@@ -272,31 +392,63 @@ class Installs:
                 runtime = record["runtime"]
                 current = facts.get(runtime, {})
                 expected = record["software"]
+                if isinstance(expected.get("commit"), str):
+                    dependency_targets[runtime] = {
+                        key: expected[key] for key in ("version", "commit") if key in expected}
                 enabled = (len(facts) == 1 and current.get("installed") is True
                            and all(current.get(k) == v for k, v in expected.items()))
                 if enabled:
                     if runtime in ("supermodel", "vkquake", "uzdoom", "eduke32", "ironwail"):
+                        if runtime == "vkquake":
+                            missing = vkquake.missing_host_prerequisites(current)
+                            package_by_loader = {"fuse": "libfuse2t64", "vulkan": "libvulkan1"}
+                            if missing:
+                                host_prerequisites.append(_ubuntu_apt_prerequisite(
+                                    "vkQuake host libraries are missing",
+                                    "The pinned AppImage requires the FUSE2 and Vulkan loader libraries.",
+                                    [package_by_loader[name] for name in missing]))
+                                enabled = False
+                    if enabled and runtime in ("supermodel", "vkquake", "uzdoom", "eduke32", "ironwail"):
                         try:
                             current["host_checks"] = RUNTIME_RESOLVERS[runtime].check_host(current)
                         except dependencies.DependencyError as e:
-                            raise InstallError(str(e)) from e
-                    current["capabilities_checked"] = True
-                    current["capability_note"] = record["limits"]
-                    current["capability_evidence"] = str(path.relative_to(Path(__file__).parent))
+                            requirement = _runtime_prerequisite(runtime, str(e))
+                            if requirement is None:
+                                raise InstallError(str(e)) from e
+                            host_prerequisites.append(requirement)
+                            enabled = False
+                    if enabled:
+                        current["capabilities_checked"] = True
+                        current["capability_note"] = record["limits"]
+                        current["capability_evidence"] = str(path.relative_to(Path(__file__).parent))
+        if not flatpak_prerequisite_added:
+            for runtime in ("flycast", "uzdoom"):
+                current = facts.get(runtime)
+                if isinstance(current, dict) and current.get("flatpak_available") is False:
+                    host_prerequisites.append(_ubuntu_apt_prerequisite(
+                        "Flatpak is required", f"Momentum needs the Ubuntu Flatpak client before it can prepare {runtime}.",
+                        ["flatpak"]))
+                    break
         return dict(summary, manifest=man, home_games=str(Path.home() / "Games"), dependencies=facts,
+                    dependency_targets=dependency_targets,
+                    host_prerequisites=host_prerequisites,
                     install_enabled=enabled, package_supported=supported)
 
     @staticmethod
-    def _dependency_steps(runtime="flycast"):
+    def _dependency_steps(runtime="flycast", target=None):
         if runtime not in RUNTIME_RESOLVERS:
             raise InstallError(f"Unsupported dependency resolver: {runtime}")
         helper = str(Path(__file__).with_name(RUNTIME_RESOLVERS[runtime].__name__ + ".py"))
-        return [{"name": name, "protocol": True, "approve_after": phase == "preflight",
+        steps = [{"name": name, "protocol": True, "approve_after": phase == "preflight",
                  "declared_steps": ["resolve"],
                  "argv": [sys.executable, helper, "--context", "{context_file}"],
                  "context": {"operation": "prepare-dependency", "phase": phase}}
                 for name, phase in [("Check required game software", "preflight"),
                                     ("Prepare required game software", "apply")]]
+        if runtime in ("flycast", "uzdoom") and target and target.get("commit"):
+            for step in steps:
+                step["context"]["target_commit"] = target["commit"]
+        return steps
 
     def before_step(self, job, index):
         meta = job.get("meta") or {}
@@ -341,7 +493,7 @@ class Installs:
         with self.submit_lock:
             self._check_active_operations()
             steps = self._dependency_steps()
-            return self.jobs.submit("Prepare user-scope Flycast", steps, meta={"kind": "dependency"})
+            return self.jobs.submit("Prepare Flycast", steps, meta={"kind": "dependency"})
 
     def submit_install(self, package_id, version, source_dir=None, games_root=None, catalog_entry_id=None,
                        trusted_digest=None, inputs=None):
@@ -393,10 +545,15 @@ class Installs:
                 if not any(g["id"] == catalog_entry_id for g in self.read_raw_games()):
                     raise InstallError("The selected library entry no longer exists")
         self._check_active_operations()
-        game_dir = str(Path(inputs["games_root"]) / man["destination_name"])
         deps = detail["dependencies"]
         prev = self._load_receipt(package_id)
         paths = prev["paths"] if prev else self._defaults_path(package_id)
+        if prev:
+            # Upgrades and repairs stay in the recorded folder even if the package's default folder name changed.
+            game_dir = prev["game_directory"]
+            inputs["games_root"] = str(Path(game_dir).parent)
+        else:
+            game_dir = str(Path(inputs["games_root"]) / man["destination_name"])
         if prev:
             associated = prev.get("catalog", {}).get("entry_id")
             if catalog_entry_id is not None and catalog_entry_id != associated:
@@ -442,7 +599,7 @@ class Installs:
             if mod is not None:
                 inputs["mod_dir"] = str(mod)
         if detail["package_supported"] and runtime and (not deps[runtime].get("installed") or prepare_source):
-            steps = self._dependency_steps(runtime) + steps
+            steps = self._dependency_steps(runtime, detail.get("dependency_targets", {}).get(runtime)) + steps
             if runtime == "ironwail":
                 for step in steps[:2]:
                     step["context"].update(package_root=str(snap), package_digest=base["package_digest"],
@@ -491,8 +648,37 @@ class Installs:
                 return f"Installation approval checks failed: {e}"
         return self.jobs.approve(jid, digest)
 
-    def _validate_result(self, j, res):
-        ownership.reconcile(j, res, self.jobs.paths(j["id"]))
+    def _missing_user_state(self, j):
+        paths = self.jobs.paths(j["id"])
+        raw = paths["approved_plan_file"].read_bytes()
+        if ownership.digest(raw) != j.get("approved_plan_digest"):
+            raise InstallError("Approved plan changed; recovery evidence is retained")
+        envelope = json.loads(raw)
+        if envelope.get("phase") != "preflight" or envelope.get("outcome") != "succeeded":
+            raise InstallError("Only a successful approved plan can be reconciled")
+        plan = envelope.get("plan") or {}
+        owners = plan.get("media_ownership") or {}
+        game = ownership.safe_path(j["meta"]["game_directory"])
+        missing = set()
+        for row in plan.get("media_inventory") or []:
+            if not isinstance(row, dict) or owners.get(row.get("relative_path")) != "user-state":
+                continue
+            relative = Path(row.get("relative_path", ""))
+            if relative.is_absolute() or ".." in relative.parts or not relative.parts:
+                raise InstallError("Approved media inventory contains an unsafe path")
+            path = ownership.safe_path(str(game / relative))
+            if not path.exists():
+                missing.add(str(path))
+        return missing
+
+    def _validate_result(self, j, res, missing_user_state=()):
+        res = copy.deepcopy(res)
+        missing_user_state = set(missing_user_state)
+        ownership.reconcile(j, res, self.jobs.paths(j["id"]), missing_user_state=missing_user_state)
+        if missing_user_state:
+            res["resources"] = [r for r in res["resources"] if r["path"] not in missing_user_state]
+            res["recovery_notes"].append(
+                "User-approved reconciliation omitted missing optional user-state media; no managed package file was omitted.")
         m = j.get("meta") or {}
         defaults = res["catalog_proposal"].get("defaults")
         expected = _json_copy(m["catalog_defaults"])
@@ -526,6 +712,8 @@ class Installs:
             if not isinstance(r, dict):
                 raise InstallError("resource must be an object")
             p = r.get("path")
+            if p in missing_user_state:
+                continue
             if not _safe_abs(p):
                 raise InstallError("resource path must be absolute")
             if p in seen:
@@ -548,6 +736,7 @@ class Installs:
                     raise InstallError(f"missing managed directory: {p}")
             else:
                 raise InstallError(f"invalid resource kind for {p}")
+        return res
 
     def busy_for_game(self, entry_id):
         with self.jobs.lock:
@@ -597,7 +786,7 @@ class Installs:
                                                   "gameplay": "not-tested"},
         }
 
-    def _commit_catalog(self, rec, res, journal=None):
+    def _commit_catalog(self, rec, res, journal=None, recovery_policy=None):
         proposal = res.get("catalog_proposal") or {}
         defaults = _json_copy(proposal.get("defaults") or {})
         if not isinstance(defaults, dict):
@@ -625,8 +814,10 @@ class Installs:
                 rec["catalog"]["entry_id"] = gid
             # Allocate an association durably before publication. Crash recovery must not pick a new slug.
             if journal is not None:
-                _write_atomic(journal, (json.dumps({"commit_version": 1, "job_id": rec["last_job_id"],
-                    "receipt": rec, "result": res}, indent=2) + "\n").encode())
+                marker = {"commit_version": 1, "job_id": rec["last_job_id"], "receipt": rec, "result": res}
+                if recovery_policy:
+                    marker["recovery_policy"] = recovery_policy
+                _write_atomic(journal, (json.dumps(marker, indent=2) + "\n").encode())
                 _write_atomic(self._receipt_path(rec["package_id"]), (json.dumps(rec, indent=2) + "\n").encode())
             if existing.get("installation_id") == rec["installation_id"] and existing.get("install_job_id") == rec["last_job_id"]:
                 # Catalog replacement succeeded before a crash. Never replay defaults over subsequent UI edits.
@@ -647,8 +838,10 @@ class Installs:
                 # Persist the resolved media URL before catalog publication as part of the same commit.
                 res["catalog_proposal"]["defaults"] = _json_copy(defaults)
                 if journal:
-                    _write_atomic(journal, (json.dumps({"commit_version": 1, "job_id": rec["last_job_id"],
-                        "receipt": rec, "result": res}, indent=2) + "\n").encode())
+                    marker = {"commit_version": 1, "job_id": rec["last_job_id"], "receipt": rec, "result": res}
+                    if recovery_policy:
+                        marker["recovery_policy"] = recovery_policy
+                    _write_atomic(journal, (json.dumps(marker, indent=2) + "\n").encode())
             merged = _merge_catalog(existing, defaults, rec["catalog"]["previous_defaults"], first_association=first)
             if rec.get("installation") == "installed":
                 argv = proposal.get("launch_argv") or []
@@ -692,9 +885,9 @@ class Installs:
             j["manual"] = True
             return str(e)
 
-    def _complete_commit(self, job, rec, result):
+    def _complete_commit(self, job, rec, result, recovery_policy=None):
         journal = self.jobs.paths(job["id"])["job_dir"] / "catalog-pending.json"
-        self._commit_catalog(rec, result, journal=journal)
+        self._commit_catalog(rec, result, journal=journal, recovery_policy=recovery_policy)
         _write_atomic(self._receipt_path(rec["package_id"]), (json.dumps(rec, indent=2) + "\n").encode())
         job.update(installation=rec["installation"], readiness=rec["readiness"],
                    actions=_json_copy(rec["pending_actions"]), manual=False, commit_completed=True)
@@ -707,6 +900,44 @@ class Installs:
             os.fsync(fd)
         finally:
             os.close(fd)
+
+    def reconcile_install(self, jid):
+        """Finish a failed package receipt commit after explicit user reconciliation."""
+        with self.submit_lock:
+            job = self.jobs.jobs.get(jid)
+            if not job or (job.get("meta") or {}).get("kind") != "install":
+                return "only a package installation can be reconciled"
+            if job.get("status") not in ("failed", "interrupted") or not job.get("manual"):
+                return "this installation is not awaiting manual reconciliation"
+            if job.get("surviving"):
+                return "installation processes are still running"
+            if self.jobs.dependency_uncertain(jid):
+                return "dependency transaction must be reconciled first"
+            paths = self.jobs.paths(jid)
+            if (paths["job_dir"] / "catalog-pending.json").exists():
+                return "catalog receipt recovery is already pending; restart Momentum to resume it"
+            if not self.jobs._intents_recorded(jid):
+                return "this job has no package mutation journal to reconcile"
+            try:
+                result_path = paths["results_dir"] / f"step-{len(job['steps']) - 1}.json"
+                raw = result_path.read_bytes()
+                if ownership.digest(raw) != job["steps"][-1].get("result_digest"):
+                    raise InstallError("Saved apply result changed; journal retained")
+                result = json.loads(raw)
+                if result.get("phase") != "apply" or result.get("outcome") != "succeeded":
+                    raise InstallError("The package apply did not produce a successful proposal; journal retained")
+                missing = self._missing_user_state(job)
+                result = self._validate_result(job, result, missing_user_state=missing)
+                previous = job["steps"][-1]["context"].get("previous_receipt")
+                with self._receipt_guard(job["meta"]["package_id"]):
+                    if self._load_receipt(job["meta"]["package_id"]) != previous:
+                        raise InstallError("Installation receipt changed; journal retained")
+                    receipt = self._receipt_from(job, result)
+                    policy = {"kind": "omit-missing-user-state", "paths": sorted(missing)} if missing else None
+                    self._complete_commit(job, receipt, result, recovery_policy=policy)
+                return True
+            except (InstallError, ownership.OwnershipError, OSError, ValueError, KeyError, TypeError) as e:
+                return f"Recovery stopped safely: {e}. The journal is retained."
 
     def recover_pending_catalog(self):
         for d in (self.here / "jobs").glob("j*/catalog-pending.json"):
@@ -722,7 +953,17 @@ class Installs:
                     raise InstallError("Unsupported or damaged catalog recovery journal")
                 rec, result = marker["receipt"], marker["result"]
                 with self._receipt_guard(job["meta"]["package_id"]):
-                    self._validate_result(job, result)
+                    policy = marker.get("recovery_policy")
+                    missing = set()
+                    if policy is not None:
+                        if (not isinstance(policy, dict) or policy.get("kind") != "omit-missing-user-state"
+                                or not isinstance(policy.get("paths"), list)
+                                or not all(isinstance(p, str) for p in policy["paths"])):
+                            raise InstallError("Unsupported recovery policy; evidence retained")
+                        missing = set(policy["paths"])
+                        if self._missing_user_state(job) != missing:
+                            raise InstallError("Optional media changed after recovery approval; evidence retained")
+                    self._validate_result(job, result, missing_user_state=missing)
                     if rec.get("last_job_id") != jid or rec.get("package_id") != result["package_id"]:
                         raise InstallError("Receipt recovery identity mismatch")
                     for key in ("package_version", "package_digest", "paths", "game_directory", "resources",
@@ -734,7 +975,7 @@ class Installs:
                     if current != previous and (not current or current.get("last_job_id") != jid
                             or current.get("installation_id") != rec.get("installation_id")):
                         raise InstallError("A newer receipt exists; recovery will not overwrite it")
-                    self._complete_commit(job, rec, result)
+                    self._complete_commit(job, rec, result, recovery_policy=policy)
             except (InstallError, ownership.OwnershipError, OSError, ValueError, KeyError, TypeError) as e:
                 with self.jobs.lock:
                     job["manual"] = True

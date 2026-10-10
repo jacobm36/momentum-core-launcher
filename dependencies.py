@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""User-scope Flycast detection and approval-bound preparation; never launches an emulator."""
+"""Flycast detection and approved user-scope preparation; never launches an emulator."""
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -34,6 +35,7 @@ def probe(*args):
 
 
 def detect():
+    """Prefer an existing user install, then an existing system-wide install; prepare only in user scope."""
     facts = {"provider": "flatpak", "scope": "user", "app_id": APP,
              "flatpak_available": bool(shutil.which("flatpak")), "installed": False,
              "remote_present": False, "version": None, "commit": None,
@@ -41,16 +43,20 @@ def detect():
              "capability_note": "Installation metadata alone does not verify CLI flags, CUE launch or lightgun behavior."}
     if not facts["flatpak_available"]:
         return facts
-    for line in probe("remotes", "--user", "--columns=name,url").splitlines():
+    for scope in ("user", "system"):
+        if APP in probe("list", "--" + scope, "--app", "--columns=application").splitlines():
+            facts.update(scope=scope, installed=True, launch_argv=["flatpak", "run", "--" + scope, APP],
+                         location=f"Flatpak ({'your user account' if scope == 'user' else 'system-wide'})")
+            break
+    scope = "--" + facts["scope"]
+    for line in probe("remotes", scope, "--columns=name,url").splitlines():
         parts = line.split("\t")
         if parts[0] == "flathub":
             if len(parts) != 2 or parts[1] not in ALLOWED_REMOTE_URLS:
-                raise DependencyError("The user Flathub remote has an unexpected URL; resolve it manually.")
+                raise DependencyError(f"The {facts['scope']} Flathub remote has an unexpected URL; resolve it manually.")
             facts["remote_present"] = True
-    apps = probe("list", "--user", "--app", "--columns=application").splitlines()
-    facts["installed"] = APP in apps
     if facts["installed"]:
-        info = probe("info", "--user", APP)
+        info = probe("info", scope, APP)
         for line in info.splitlines():
             key, sep, value = line.strip().partition(":")
             if sep and key in ("Version", "Commit"):
@@ -58,25 +64,65 @@ def detect():
     return facts
 
 
-def commands_for(facts):
-    if not facts["flatpak_available"] or facts["installed"]:
+def commands_for(facts, target_commit=None, pin_fresh_install=False):
+    if not facts["flatpak_available"]:
         return []
+    if facts["installed"]:
+        if (not pin_fresh_install or facts["scope"] != "user" or not target_commit
+                or facts.get("commit") == target_commit):
+            return []
+        return [["flatpak", "update", "--user", "--noninteractive", "-y",
+                 "--commit=" + target_commit, APP]]
     commands = []
     if not facts["remote_present"]:
         commands.append(["flatpak", "remote-add", "--user", "--if-not-exists", "flathub", REMOTE_DESCRIPTOR])
     commands.append(["flatpak", "install", "--user", "--noninteractive", "-y", "flathub", APP])
+    if target_commit:
+        commands.append(["flatpak", "update", "--user", "--noninteractive", "-y",
+                         "--commit=" + target_commit, APP])
     return commands
 
 
-def make_plan(facts):
+def _validate_target_commit(target_commit):
+    if target_commit is not None and (
+            not isinstance(target_commit, str) or not re.fullmatch(r"[a-f0-9]{64}", target_commit)):
+        raise DependencyError("Invalid evidence-backed Flycast commit.")
+
+
+def _verify_remote_commit(facts, target_commit):
+    if target_commit and facts["remote_present"]:
+        try:
+            info = probe("remote-info", "--" + facts["scope"], "--commit=" + target_commit, "flathub", APP)
+        except DependencyError as e:
+            raise DependencyError(
+                f"Required tested Flycast commit {target_commit} is unavailable from the selected Flathub remote: {e}") from e
+        commits = []
+        for line in info.splitlines():
+            key, sep, value = line.strip().partition(":")
+            if sep and key == "Commit":
+                commits.append(value.strip())
+        if commits != [target_commit]:
+            raise DependencyError(
+                f"Flathub did not confirm the exact required Flycast commit {target_commit}.")
+
+
+def make_plan(facts, target_commit=None):
+    _validate_target_commit(target_commit)
+    _verify_remote_commit(facts, target_commit)
+    commands = commands_for(facts, target_commit,
+                            pin_fresh_install=bool(target_commit) and not facts["installed"])
+    notes = ["No system remotes, elevation or upgrades.",
+             "Shared Flycast and its runtime remain installed if game installation later fails.",
+             "Cancellation waits for an active Flatpak transaction to finish."]
+    if target_commit and commands:
+        notes.append("Fresh user-scope install is pinned to evidence-backed commit " + target_commit
+                     + "; the exact commit is verified before installation. Existing copies are never changed.")
     return {"plan_version": 1, "operation": "prepare-dependency", "dependency": APP,
             "scope": "user", "dependencies": {"flycast": facts}, "actions": [],
-            "dependency_commands": commands_for(facts),
+            "target_commit": target_commit, "dependency_commands": commands,
             "manual_actions": [{"action_id": "flycast-capability-check",
                                 "message": "Momentum must check software compatibility before installing game files."}],
-            "notes": ["No system remotes, elevation or emulator upgrades.",
-                      "Shared Flycast and its runtime remain installed if game installation later fails.",
-                      "Cancellation waits for an active Flatpak transaction to finish."]}
+            "notes": notes}
 
 
 def emit(kind, message, **fields):
@@ -87,7 +133,7 @@ def run(context):
     """Execute only an approved dependency plan; persist facts even on a transaction failure."""
     phase = context["phase"]
     facts, completed = None, []
-    code, outcome, message = 0, "succeeded", "User-scope Flycast preparation complete; capability checks remain."
+    code, outcome, message = 0, "succeeded", "Flycast preparation complete; capability checks remain."
     plan = None
     try:
         if phase not in ("preflight", "apply"):
@@ -96,12 +142,16 @@ def run(context):
             code, outcome, message = 130, "cancelled", "Cancelled before dependency work."
         else:
             facts = detect()
+            target_commit = context.get("target_commit")
+            _validate_target_commit(target_commit)
             if not facts["flatpak_available"]:
                 code, outcome, message = 20, "needs_action", (
-                    "Flatpak is missing. Install it using your Ubuntu system tools, then retry. Momentum cannot elevate.")
+                    "Flatpak is missing. On Ubuntu 24.04, run `sudo apt update` then "
+                    "`sudo apt install flatpak`; retry after installation. Momentum cannot elevate.")
             elif phase == "preflight":
-                plan = make_plan(facts)
-                message = "Review the exact user-scope dependency commands before proceeding."
+                plan = make_plan(facts, target_commit)
+                message = ("Review the exact dependency commands before proceeding. Momentum installs Flycast only "
+                           "for your user account and does not change existing copies.")
             else:
                 raw = Path(context["approved_plan_file"]).read_bytes()
                 if "sha256:" + hashlib.sha256(raw).hexdigest() != context["approved_plan_digest"]:
@@ -109,7 +159,7 @@ def run(context):
                 envelope = json.loads(raw)
                 plan = envelope.get("plan")
                 if (envelope.get("job_id") != context["job_id"] or envelope.get("outcome") != "succeeded"
-                        or envelope.get("phase") != "preflight" or plan != make_plan(facts)):
+                        or envelope.get("phase") != "preflight" or plan != make_plan(facts, target_commit)):
                     code, outcome, message = 30, "conflicted", "Dependency facts changed; rerun preflight and review a new plan."
                 else:
                     journal = Path(context["result_file"]).parent / "dependency-transactions.json"
@@ -125,7 +175,7 @@ def run(context):
                         if Path(context["cancel_file"]).exists():
                             code, outcome, message = 130, "cancelled", "Cancellation acknowledged between dependency transactions."
                             break
-                        if commands_for(facts) != plan["dependency_commands"][index:]:
+                        if commands_for(facts, target_commit, pin_fresh_install=bool(target_commit)) != plan["dependency_commands"][index:]:
                             code, outcome, message = 30, "conflicted", (
                                 "Dependency facts changed during preparation; review a fresh plan. No upgrade was attempted.")
                             break
@@ -146,6 +196,8 @@ def run(context):
                         _write_durable(journal, (json.dumps({"job_id": context["job_id"],
                             "attempts": attempts, "completed": completed, "active_command": None, "after": facts},
                             sort_keys=True) + "\n").encode())
+                        if result.returncode == 0 and argv[1] == "remote-add" and target_commit:
+                            _verify_remote_commit(facts, target_commit)
                         if result.returncode:
                             code, outcome, message = 40, "failed", (
                                 f"Flatpak transaction failed (exit {result.returncode}); completed dependency work is retained.")
@@ -154,7 +206,11 @@ def run(context):
                     if code == 0:
                         facts = detect()
                         if not facts["installed"]:
-                            raise DependencyError("Flatpak returned success but user-scope Flycast was not detected.")
+                            raise DependencyError("Flatpak returned success but Flycast was not detected.")
+                        if target_commit and facts.get("commit") != target_commit:
+                            raise DependencyError(
+                                f"Flycast did not reach required tested commit {target_commit}; "
+                                f"observed {facts.get('commit') or 'unknown'}. No game files were installed.")
                         if Path(context["cancel_file"]).exists():
                             code, outcome, message = 130, "cancelled", (
                                 "Cancellation acknowledged after the transaction. Installed dependency is retained.")

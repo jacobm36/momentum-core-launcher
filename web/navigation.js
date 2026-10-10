@@ -77,8 +77,13 @@ function jump(d) { // previous/next category
   select(cs[(ci + d + cs.length) % cs.length].items[0].id); sfx("cat");
 }
 
+let windowWarning = null;
 async function refresh(first) {
   const j = await (await fetch("/api/games")).json();
+  if (j.window_warning && j.window_warning !== windowWarning && typeof notify === "function") {
+    notify(j.window_warning, { kind: "error", title: "Launcher window handoff" });
+  }
+  windowWarning = j.window_warning || null;
   token = j.token; games = j.games; stats = j.stats || {}; running = new Set(j.running); failed = j.failed || {};
   if (typeof handleJobs === "function") handleJobs(j.jobs);
   if (first) { const last = localStorage.getItem("mcl-last"); sel = games.some(g => g.id === last) ? last : flat()[0]?.id; }
