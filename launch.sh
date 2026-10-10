@@ -1,23 +1,30 @@
 #!/usr/bin/env bash
 # Starts the server if needed and opens the launcher in an app-style window.
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+if ! command -v python3 >/dev/null; then
+  echo "Momentum requires Python 3. Install python3 using your system tools before launching." >&2
+  exit 1
+fi
 PORT="${MCL_PORT:-47615}"
 URL="http://127.0.0.1:$PORT/"
 CACHE="$HOME/.cache/momentum-core-launcher"
 mkdir -p "$CACHE"
 # Our server answers /api/id; a server from before that endpoint is recognised by its page title.
-ours() { curl -fs "${URL}api/id" 2>/dev/null | grep -q '"momentum-core-launcher"' \
-  || curl -fs "$URL" 2>/dev/null | grep -q '<title>Momentum Core Launcher</title>'; }
+ours() { python3 "$DIR/launcher_probe.py" ours "$PORT"; }
 # One launch at a time, so two quick clicks can't start two servers.
 exec 9>"$CACHE/launch.lock"
-flock 9
+flock 9 || exit 1
 if ! ours; then
-  if curl -fs -o /dev/null "$URL"; then
+  if python3 "$DIR/launcher_probe.py" responding "$PORT"; then
     echo "Port $PORT is in use by another program. Try: MCL_PORT=48000 $0" >&2
     exit 1
   fi
-  nohup python3 "$DIR/server.py" >/dev/null 2>&1 9>&- &
+  nohup python3 "$DIR/server.py" >"$CACHE/server.log" 2>&1 9>&- &
   for _ in $(seq 50); do ours && break; sleep 0.1; done
+  if ! ours; then
+    echo "Momentum did not start. Check $CACHE/server.log for the error." >&2
+    exit 1
+  fi
 fi
 exec 9>&-
 PROFILE="$CACHE/profile"

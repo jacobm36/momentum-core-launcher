@@ -17,6 +17,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import packages
+import compatibility
 import dependencies
 import supermodel
 import vkquake
@@ -295,6 +296,7 @@ class Installs:
         man = json.loads((snap / "package.json").read_text())
         facts = {}
         dependency_targets = {}
+        supported_software = {}
         host_prerequisites = []
         flatpak_prerequisite_added = False
         for req in man["requires"]:
@@ -361,6 +363,8 @@ class Installs:
             and flycast.get("version") == evidence["emulator_version"]
             and flycast.get("commit") == evidence["emulator_commit"])
         if supported:
+            supported_software["flycast"] = {
+                "version": evidence["emulator_version"], "commit": evidence["emulator_commit"]}
             dependency_targets["flycast"] = {
                 "version": evidence["emulator_version"], "commit": evidence["emulator_commit"]}
         if enabled:
@@ -383,15 +387,14 @@ class Installs:
                 "duke-nukem-3d": "docs/duke-installer-evidence.json"
             }.get(package_id, "docs/arcade-installer-evidence.json")
             path = Path(__file__).parent / evidence_file
-            records = json.loads(path.read_text()) if path.exists() else {"packages": []}
-            record = next((r for r in records["packages"] if r["id"] == package_id
-                           and r["version"] == version and r["digest"] == summary["digest"]), None)
+            record = compatibility.find_record(Path(__file__).parent, package_id, version, summary["digest"])
             supported = bool(record and record.get("installer_validated") is True and not summary["platform_issues"])
             enabled = False
             if supported:
                 runtime = record["runtime"]
                 current = facts.get(runtime, {})
                 expected = record["software"]
+                supported_software[runtime] = expected
                 if isinstance(expected.get("commit"), str):
                     dependency_targets[runtime] = {
                         key: expected[key] for key in ("version", "commit") if key in expected}
@@ -431,7 +434,10 @@ class Installs:
                     break
         return dict(summary, manifest=man, home_games=str(Path.home() / "Games"), dependencies=facts,
                     dependency_targets=dependency_targets,
+                    supported_software=supported_software,
                     host_prerequisites=host_prerequisites,
+                    compatibility=compatibility.guidance(summary["platform_issues"], supported, enabled,
+                                                         host_prerequisites, facts),
                     install_enabled=enabled, package_supported=supported)
 
     @staticmethod
@@ -587,6 +593,8 @@ class Installs:
                 "package_digest": base["package_digest"], "operation": "install",
                 "game_directory": game_dir, "paths": paths, "manifest": {"name": man["name"]},
                 "install_enabled": detail["install_enabled"],
+                "compatibility": detail.get("compatibility"),
+                "supported_software": detail.get("supported_software", {}),
                 "catalog_defaults": {**man["catalog"], "name": man["name"], "icon": paths["icon"]}}
         runtime = next(iter(deps), None)
         prepare_source = False
@@ -629,6 +637,8 @@ class Installs:
                 if preparing and not detail["package_supported"]:
                     return "This game package lacks matching target evidence"
                 if not preparing and (not meta.get("install_enabled") or not detail["install_enabled"]):
+                    if detail.get("compatibility"):
+                        return detail["compatibility"]["title"] + ": " + detail["compatibility"]["message"]
                     return "This exact game package/software build lacks matching installer capability evidence"
                 if self._load_receipt(meta["package_id"]) != previous:
                     return "Installation receipt changed since preflight; cancel and review a new job"
@@ -901,33 +911,61 @@ class Installs:
         finally:
             os.close(fd)
 
-    def reconcile_install(self, jid):
+    def _reconciliation_proposal(self, jid):
+        job = self.jobs.jobs.get(jid)
+        if not job or (job.get("meta") or {}).get("kind") != "install":
+            raise InstallError("only a package installation can be reconciled")
+        if job.get("status") not in ("failed", "interrupted") or not job.get("manual"):
+            raise InstallError("this installation is not awaiting manual reconciliation")
+        if job.get("surviving"):
+            raise InstallError("installation processes are still running")
+        if self.jobs.dependency_uncertain(jid):
+            raise InstallError("dependency transaction must be reconciled first")
+        paths = self.jobs.paths(jid)
+        if (paths["job_dir"] / "catalog-pending.json").exists():
+            raise InstallError("catalog receipt recovery is already pending; restart Momentum to resume it")
+        if not self.jobs._intents_recorded(jid):
+            raise InstallError("this job has no package mutation journal to reconcile")
+        result_path = paths["results_dir"] / f"step-{len(job['steps']) - 1}.json"
+        raw = result_path.read_bytes()
+        if ownership.digest(raw) != job["steps"][-1].get("result_digest"):
+            raise InstallError("Saved apply result changed; journal retained")
+        result = json.loads(raw)
+        if result.get("phase") != "apply" or result.get("outcome") != "succeeded":
+            raise InstallError("The package apply did not produce a successful proposal; journal retained")
+        missing = self._missing_user_state(job)
+        result = self._validate_result(job, result, missing_user_state=missing)
+        previous = job["steps"][-1]["context"].get("previous_receipt")
+        if self._load_receipt(job["meta"]["package_id"]) != previous:
+            raise InstallError("Installation receipt changed; journal retained")
+        return job, result, missing
+
+    def recovery_details(self, jid):
+        """Read-only recovery review; committing always repeats these checks."""
+        with self.submit_lock:
+            try:
+                job, _, missing = self._reconciliation_proposal(jid)
+                return {"eligible": True, "title": "Finish installation registration",
+                        "message": "The package finished changing files, but registration did not complete. "
+                                   "Momentum can verify the saved plan and journal, then finish the receipt and library entry. "
+                                   "It will not reinstall the game or reset settings.",
+                        "missing_user_state": sorted(missing),
+                        "journal": str(self.jobs.paths(job["id"])["job_dir"])}
+            except (InstallError, ownership.OwnershipError, OSError, ValueError, KeyError, TypeError) as error:
+                return {"eligible": False, "title": "Automatic recovery cannot safely finish",
+                        "message": str(error),
+                        "instruction": "Keep this job and its journal. Do not delete files to unblock it. "
+                                       "Open the log for the failure details; pending catalog recovery requires "
+                                       "closing and restarting Momentum, while other failures need the recorded "
+                                       "file/process issue resolved before reviewing recovery again."}
+
+    def reconcile_install(self, jid, expected_missing=None):
         """Finish a failed package receipt commit after explicit user reconciliation."""
         with self.submit_lock:
-            job = self.jobs.jobs.get(jid)
-            if not job or (job.get("meta") or {}).get("kind") != "install":
-                return "only a package installation can be reconciled"
-            if job.get("status") not in ("failed", "interrupted") or not job.get("manual"):
-                return "this installation is not awaiting manual reconciliation"
-            if job.get("surviving"):
-                return "installation processes are still running"
-            if self.jobs.dependency_uncertain(jid):
-                return "dependency transaction must be reconciled first"
-            paths = self.jobs.paths(jid)
-            if (paths["job_dir"] / "catalog-pending.json").exists():
-                return "catalog receipt recovery is already pending; restart Momentum to resume it"
-            if not self.jobs._intents_recorded(jid):
-                return "this job has no package mutation journal to reconcile"
             try:
-                result_path = paths["results_dir"] / f"step-{len(job['steps']) - 1}.json"
-                raw = result_path.read_bytes()
-                if ownership.digest(raw) != job["steps"][-1].get("result_digest"):
-                    raise InstallError("Saved apply result changed; journal retained")
-                result = json.loads(raw)
-                if result.get("phase") != "apply" or result.get("outcome") != "succeeded":
-                    raise InstallError("The package apply did not produce a successful proposal; journal retained")
-                missing = self._missing_user_state(job)
-                result = self._validate_result(job, result, missing_user_state=missing)
+                job, result, missing = self._reconciliation_proposal(jid)
+                if expected_missing is not None and set(expected_missing) != missing:
+                    raise InstallError("Optional media changed after review; review recovery again")
                 previous = job["steps"][-1]["context"].get("previous_receipt")
                 with self._receipt_guard(job["meta"]["package_id"]):
                     if self._load_receipt(job["meta"]["package_id"]) != previous:

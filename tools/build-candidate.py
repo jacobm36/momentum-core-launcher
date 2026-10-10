@@ -22,6 +22,8 @@ CANDIDATES = {
 NEW_FILES = (
     "start-candidate.sh", "window_handoff.py", "tests/test_window_handoff.py",
     "tests/test_priority_candidates.py", "tools/build-candidate.py",
+    "compatibility.py", "tools/check-release.py", "tests/test_release_check.py",
+    "launcher_probe.py", "tests/test_launcher_probe.py",
 )
 PRIVATE_ROOTS = {"jobs", "packages", "media", "backups", ".git", "__pycache__"}
 PRIVATE_FILES = {"games.json", "stats.json"}

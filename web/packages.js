@@ -226,6 +226,18 @@ function softwareEvidenceNote(facts, target) {
     (${esc(facts.commit || "commit unknown")}).</p>`;
 }
 
+function compatibilityNotice(detail) {
+  const guidance = detail.compatibility;
+  if (!guidance) return "";
+  return `<section class="pkg-warning"><strong>${esc(guidance.title)}</strong>
+    <p>${esc(guidance.message)}</p>${guidance.reason === "missing-evidence"
+      ? '<p><a href="https://github.com/jacobm36/momentum-distribution/releases/latest" target="_blank" rel="noopener noreferrer">Get the latest Momentum launcher</a></p><p>Close this launcher before starting the updated copy. Keep your old folders and journals.</p>'
+      : ""}${guidance.reason === "software-mismatch"
+        ? `<details><summary>Required build and detected software</summary>${packageJson({
+            required: detail.supported_software || {}, detected: detail.dependencies || {}
+          })}</details>` : ""}</section>`;
+}
+
 async function selectPackage(id, version) {
   const d = $("#pdlg");
   try {
@@ -262,6 +274,7 @@ async function selectPackage(id, version) {
         ${softwareLocation(native)}
         <p class="pkg-warning">Installer checks do not certify gameplay. Confirm controls, display and saved progress for this installation.</p>
         <details><summary>Technical software details</summary>${packageJson(native)}</details>` : ""}
+      ${compatibilityNotice(detail)}
       ${prerequisiteNotes(detail.host_prerequisites)}
       <form id="pkg-setup">
         <h3>Your game files</h3>
@@ -381,7 +394,7 @@ async function reviewPackagePlan(id) {
       <h3>Manual setup after installation</h3>
       <ul>${(plan.manual_actions || []).map(a => `<li>${esc(a.message || a.action_id)}</li>`).join("") || "<li>No manual actions listed.</li>"}</ul>
       <details><summary>Complete saved plan (including hashes and inventories)</summary>${packageJson(plan)}</details>
-      ${job.approval_blocked ? `<p class="pkg-warning">${esc(job.approval_blocked)}</p>` : ""}
+      ${job.approval_blocked ? (compatibilityNotice(job) || `<p class="pkg-warning">${esc(job.approval_blocked)}</p>`) : ""}
       <label class="pkg-check"><input type="checkbox" id="plan-consent" ${job.approval_blocked ? "disabled" : ""}>I approve the listed changes.</label>
       <div class="btns"><button type="button" id="plan-close" autofocus>Close</button><button type="button" id="plan-cancel">Cancel job</button>
         <button type="button" id="plan-approve" class="primary" disabled>${plan.operation === "prepare-dependency" ? (plan.downloads ? "Approve software / source preparation" : "Approve required software") : "Approve and install"}</button></div>`;

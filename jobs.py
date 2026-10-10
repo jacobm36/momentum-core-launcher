@@ -292,8 +292,13 @@ class Jobs:
                     out["plan_error"] = f"Cannot review this plan: {e}"
             if ((j.get("meta") or {}).get("kind") == "install" and not j["meta"].get("install_enabled")
                     and (out.get("plan") or {}).get("operation") != "prepare-dependency"):
-                out["approval_blocked"] = ("This exact package/software build lacks matching installer compatibility evidence. "
-                                           "Review the package's supported platform and software requirements.")
+                guidance = j["meta"].get("compatibility")
+                out["compatibility"] = guidance
+                out["supported_software"] = j["meta"].get("supported_software", {})
+                out["dependencies"] = (out.get("plan") or {}).get("dependencies", {})
+                out["approval_blocked"] = (guidance["message"] if guidance else
+                    "This exact package/software build lacks matching installer compatibility evidence. "
+                    "Check for a launcher update and review the supported platform/software; do not bypass approval.")
             if (j.get("meta") or {}).get("kind") == "dependency" and j["status"] in FINISHED:
                 try:
                     out["dependency_result"] = json.loads((self.paths(jid)["results_dir"] /

@@ -12,6 +12,7 @@ function notify() {}
 let submitted = [], failApprove = false, blockApproval = true, importFailed = false;
 let catalogOffline = false, installerReady = true, downloadStatus = "succeeded";
 let pickerPath = "/home/test/Game Files", pickerFailed = false;
+let recoveryEligible = true, recoveryFails = false;
 const digest = "sha256:" + "a".repeat(64), jobDigest = "sha256:" + "b".repeat(64);
 const summary = { id: "test-game", version: "1.0.0", name: "<img src=x onerror='throw 1'> Test", digest, platform_issues: [] };
 const detail = { ...summary, home_games: "/home/test/Games",
@@ -22,7 +23,7 @@ const detail = { ...summary, home_games: "/home/test/Games",
     { id: "optional", type: "boolean", default: false }],
   destination_name: "Test", platform: {}, actions: { network: [], privileges: [] }, requires: [], testing: {}
 }};
-const job = { id: "j00000001", title: "Install Test", status: "awaiting-approval", done: 1, total: 2,
+const job = { id: "j00000001", kind: "install", title: "Install Test", status: "awaiting-approval", done: 1, total: 2,
   plan_digest: jobDigest, actions: [], surviving: 0, manual: false };
 const plan = { ...job, plan: { game_directory: "/home/test/Games/Test",
   actions: [{ op: "replace", ownership: "managed", path: "/home/test/bin/game",
@@ -31,6 +32,11 @@ const plan = { ...job, plan: { game_directory: "/home/test/Games/Test",
   state_destinations: ["/home/test/state"], manual_actions: [{ message: "Confirm aiming and fullscreen" }] }};
 function reply(data, status = 200) { return Promise.resolve(new Response(JSON.stringify(data), { status })); }
 fetch = async path => {
+  if (path.endsWith("/recovery")) return reply({
+    eligible: recoveryEligible, title: recoveryEligible ? "Finish installation registration" : "Automatic recovery cannot safely finish",
+    message: "Saved files will be verified.", missing_user_state: ["/home/test/Game/<optional>.txt"],
+    journal: "/home/test/launcher/jobs/j00000001", instruction: "Keep this job and its journal."
+  });
   if (path === "/api/packages") return reply({ packages: installerReady ? [summary] : [] });
   if (path === "/api/catalog") return catalogOffline ? reply({ error: "Cannot load available games: offline" }, 502)
     : reply({ catalog_version: 1, games: [{
@@ -53,6 +59,7 @@ async function post(path, body, raw) {
   if (path === "/api/packages/download") return reply({ id: "j00000002" });
   if (path === "/api/dependencies/flycast/prepare") return reply({ id: job.id });
   if (path.endsWith("/approve")) return failApprove ? reply({ error: "The plan changed; review it again" }, 409) : reply({ status: "approve" });
+  if (path.endsWith("/reconcile")) return recoveryFails ? reply({ error: "Optional media changed after review" }, 409) : reply({ status: "reconcile" });
   if (path.endsWith("/cancel")) { if (path === "/api/jobs/j00000002/cancel") downloadStatus = "cancelled"; return reply({ status: "cancel" }); }
   throw new Error("Unexpected POST " + path);
 }
@@ -161,7 +168,12 @@ async function until(fn) {
   check($("#pdlg").textContent.includes("CUE file and all matching BIN tracks together"), "HOD file requirements visible");
   check($("#pdlg").textContent.includes("package ZIP does not contain the game"), "package versus game explained");
   detail.id = "test-game";
+  detail.compatibility = { reason: "missing-evidence", title: "Update Momentum or check package support",
+    message: "A newer package may require a launcher update." };
   await selectPackage("test-game", "1.0.0");
+  check($("#pdlg a").textContent.includes("latest Momentum"), "missing evidence has actionable update link");
+  check($("#pdlg").textContent.includes("Keep your old folders"), "update guidance preserves old state");
+  detail.compatibility = null;
   check($("#pkg-input-mode").value === "careful", "choice default retained");
   check($("#pdlg").textContent.includes("v2.7"), "detected dependency version shown");
   check($("#pdlg").textContent.includes("not be automatically upgraded"), "dependency reuse promise shown");
@@ -199,6 +211,29 @@ async function until(fn) {
   check($("#plan-approve").disabled && !$("#plan-consent").checked, "stale consent reset");
   failApprove = false; $("#plan-consent").click(); $("#plan-approve").click(); await until(() => !$("#rdlg").open);
   check(!$("#rdlg").open, "successful approval closes review");
+  job.status = "failed"; job.manual = true;
+  handleJobs([job]);
+  check($("#idlg [data-a=recovery]"), "manual failures have recovery review");
+  check(!$("#idlg [data-a=dismiss]"), "manual failures do not suggest dismissing the journal");
+  await reviewInstallRecovery(job.id);
+  check($("#recovery-finish").disabled, "recovery requires explicit consent");
+  check($("#rdlg").textContent.includes("<optional>.txt"), "exact recovery exclusions escaped and displayed");
+  $("#recovery-consent").click(); recoveryFails = true; $("#recovery-finish").click();
+  await until(() => !$("#rdlg .pkg-error").hidden);
+  check($("#recovery-finish").disabled && !$("#recovery-consent").checked, "recovery drift resets consent");
+  $("#recovery-close").click(); recoveryFails = false;
+  await reviewInstallRecovery(job.id);
+  $("#recovery-consent").click(); $("#recovery-finish").click();
+  await until(() => !$("#rdlg").open);
+  const reconciliation = submitted.find(s => s.path.endsWith("/reconcile"));
+  check(reconciliation.body.missing_user_state[0] === "/home/test/Game/<optional>.txt", "recovery posts only reviewed exclusions");
+  recoveryEligible = false;
+  await reviewInstallRecovery(job.id);
+  check(!$("#recovery-finish"), "unsafe recovery has no commit button");
+  check($("#rdlg").textContent.includes("Keep this job"), "unsafe recovery explains preservation");
+  $("#recovery-close").click();
+  job.status = "awaiting-approval"; job.manual = false;
+  handleJobs([job]);
   check(jobPct({ status: "running", done: 1, total: 2, progress: { current: 10, total: 40 } }) === 25, "progress is step-local");
   check(jobPct({ status: "running", done: 1, total: 2 }) === 0, "unknown totals do not invent percentage");
   check(jobSub({ installation: "installed", readiness: "setup-required", actions: [] }).includes("setup required"), "readiness is separate from success");

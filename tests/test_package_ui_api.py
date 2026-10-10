@@ -156,10 +156,11 @@ class PackageUiApi(Base):
         server.JOBS = self.runner
         status, detail = self.request(f"/api/jobs/{jid}")
         self.assertEqual(detail["plan"]["game_directory"], str(self.t / "Games" / "Test Game (USA)"))
-        self.assertIn("matching installer compatibility evidence", detail["approval_blocked"])
+        self.assertIn("launcher update", detail["approval_blocked"])
+        self.assertEqual(detail["compatibility"]["reason"], "missing-evidence")
         status, failure = self.request(f"/api/jobs/{jid}/approve", {"plan_digest": detail["plan_digest"]})
         self.assertEqual(status, 409)
-        self.assertIn("capability", failure["error"])
+        self.assertIn("launcher update", failure["error"])
         self.assertFalse((self.app / "jobs" / jid / "approved-plan.json").exists())
         self.assertFalse(self.catalog)
         self.assertEqual(self.request(f"/api/jobs/{jid}/cancel", {})[0], 200)
@@ -254,9 +255,18 @@ class PackageUiApi(Base):
 
     def test_reconcile_install_endpoint_is_explicit(self):
         with mock.patch.object(self.inst, "reconcile_install", return_value=True) as reconcile:
-            status, response = self.request("/api/jobs/j12345678/reconcile", {})
+            self.assertEqual(self.request("/api/jobs/j12345678/reconcile", {})[0], 400)
+            status, response = self.request("/api/jobs/j12345678/reconcile", {"missing_user_state": []})
         self.assertEqual((status, response), (200, {"status": "reconcile"}))
-        reconcile.assert_called_once_with("j12345678")
+        reconcile.assert_called_once_with("j12345678", expected_missing=[])
+
+    def test_recovery_preview_is_read_only_and_unknown_job_is_reported(self):
+        self.assertEqual(self.request("/api/jobs/j12345678/recovery")[0], 404)
+        data = self.upload()
+        jid = self.inst.submit_install(data["id"], data["version"], str(self.t), trusted_digest=data["digest"])
+        with mock.patch.object(self.inst, "recovery_details", return_value={"eligible": False}) as preview:
+            self.assertEqual(self.request(f"/api/jobs/{jid}/recovery"), (200, {"eligible": False}))
+            preview.assert_called_once_with(jid)
 
     def test_duplicate_work_and_changed_plan_are_not_silently_accepted(self):
         data = self.upload()

@@ -304,6 +304,32 @@ class InstallsTests(unittest.TestCase):
         self.assertTrue(job["manual"])
         self.assertFalse(job.get("commit_completed", False))
 
+    def test_recovery_review_is_read_only_and_commit_rechecks_exclusions(self):
+        job, _ = self.fixture()
+        job.update(status="failed", manual=True)
+        optional = Path(job["meta"]["game_directory"]) / "momentum-core-launcher-main.zip"
+        before = self.jobs.paths(job["id"])["intent_file"].read_bytes()
+        preview = self.inst.recovery_details(job["id"])
+        self.assertTrue(preview["eligible"])
+        self.assertEqual(preview["missing_user_state"], [])
+        self.assertIsNone(self.inst._load_receipt(job["meta"]["package_id"]))
+        self.assertEqual(self.jobs.paths(job["id"])["intent_file"].read_bytes(), before)
+        optional.unlink()
+        self.assertIn("changed after review", self.inst.reconcile_install(job["id"], expected_missing=[]))
+        self.assertIsNone(self.inst._load_receipt(job["meta"]["package_id"]))
+        preview = self.inst.recovery_details(job["id"])
+        self.assertEqual(preview["missing_user_state"], [str(optional)])
+        self.assertIs(self.inst.reconcile_install(job["id"], expected_missing=preview["missing_user_state"]), True)
+
+    def test_recovery_review_reports_managed_mismatch_without_committing(self):
+        job, _ = self.fixture()
+        job.update(status="failed", manual=True)
+        Path(job["meta"]["paths"]["launcher"]).unlink()
+        preview = self.inst.recovery_details(job["id"])
+        self.assertFalse(preview["eligible"])
+        self.assertIn("Keep this job", preview["instruction"])
+        self.assertIsNone(self.inst._load_receipt(job["meta"]["package_id"]))
+
     def test_reconcile_refuses_changed_apply_proposal(self):
         job, result = self.fixture()
         job.update(status="failed", manual=True)

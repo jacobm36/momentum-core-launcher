@@ -16,8 +16,36 @@ per-game launch logs, and artwork/trailer fetching.
 
 - Linux with Python 3.9+ (3.12 tested)
 - Google Chrome or Chromium (falls back to `xdg-open`)
+- `flock` (usually supplied by `util-linux`); startup HTTP checks use Python,
+  not `curl`. Shortcut installation checks Python and `flock` before writing.
 - X11 kiosk game handoff: `wmctrl` and `xprop` (Ubuntu packages `wmctrl` and
   `x11-utils`); alternatively use `MCL_WINDOWED=1 ./launch.sh`.
+
+## Release consistency check
+
+Run the read-only release checker from this repository:
+
+```bash
+python3 tools/check-release.py \
+  ../momentum-packages/dist/star-wars-trilogy-arcade-0.2.1.zip \
+  ../momentum-packages/dist/l-a-machineguns-0.2.2.zip \
+  --launcher-archive /path/to/final-launcher.zip --public
+```
+
+It verifies final ZIP/source bytes and executable modes, immutable package tags
+using the existing builder, package self-checks/tests, exact launcher evidence,
+declared software, proposed catalog fields and checksum sidecars. `--public`
+also anonymously downloads and verifies uploaded game assets; omit it before
+upload. `--launcher-archive` checks the evidence in the actual launcher delivery
+instead of only the working source. Override sibling paths with
+`--package-repo` and `--distribution` when needed.
+
+The final line is exactly `RELEASE CHECK: PASS` (exit 0) or
+`RELEASE CHECK: FAIL` (exit 1). It never commits, uploads, updates the catalog,
+changes evidence, or claims gameplay acceptance. Package tests run in temporary
+copies with temporary home directories. Existing emulator/hardware support
+still requires its own evidence. Publish only after human approval; verify
+uploaded assets before promoting the catalog.
 
 ## Quick start
 

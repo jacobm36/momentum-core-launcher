@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 set -e
+for tool in python3 flock; do
+  if ! command -v "$tool" >/dev/null; then
+    echo "Momentum requires $tool. Install it with your system package manager before creating shortcuts." >&2
+    exit 1
+  fi
+done
 # Adds Momentum Core Launcher to the app menu and Desktop.
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 chmod +x "$DIR/launch.sh" "$DIR/server.py"

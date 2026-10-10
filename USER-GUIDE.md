@@ -2,7 +2,43 @@
 
 One window to launch all your games.
 
+The supported public catalog currently contains SWTA 0.2.1 and L.A. Machineguns
+0.2.2 only. Other historical installers are withdrawn pending current-standard
+acceptance; their downloads remain for reference. Existing installations are
+not removed. Startup no longer needs `curl`: Python performs bounded local
+server checks. Missing Python or `flock` must be installed through your system
+tools; Momentum never elevates itself automatically. Failed startup reports
+the server log at `~/.cache/momentum-core-launcher/server.log`.
+
 ## Local acceptance candidate
+
+### When approval is blocked
+
+Setup and plan review distinguish missing package evidence, unsupported
+platforms, host prerequisites and installed-software mismatches. Missing
+evidence includes **Get the latest Momentum launcher**: a newer package may
+require a newer launcher. This is not proof that updating will approve arbitrary
+package bytes. If the latest launcher still blocks them, the publisher must
+validate the exact package/build. Never bypass approval.
+
+Close the old launcher before starting an updated copy; keep its folders and
+journals. Missing host packages or an incompatible emulator require the shown
+prerequisite/software guidance, not just a launcher update.
+
+### Recovering an incomplete installation
+
+Failed or interrupted package jobs requiring manual attention show **Review
+recovery**, not a misleading retry or dismiss shortcut. The review is read-only.
+If package apply completed successfully and the saved evidence/files still
+match, it offers **Finish registration** after displaying the exact missing
+optional user-state paths that will be excluded from the receipt.
+
+Check the consent box to finish the receipt/library entry; this does not reinstall
+the game or reset settings. The server rechecks evidence and the reviewed
+exclusion list before committing. Managed-file changes, incomplete apply or
+uncertain dependency transactions block automatic recovery. The screen explains
+the reason and tells you to retain the journal and consult the log. Pending
+catalog recovery resumes on restart. Do not delete journals to unblock installs.
 
 The October 9 public launcher release contains the same exact-build evidence
 and runtime/recovery helpers as the accepted local candidate. Game ZIPs are

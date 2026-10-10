@@ -375,6 +375,11 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(INSTALLS.package_details(*m.groups()))
             except (packages.PackageError, installs.InstallError, OSError, ValueError) as e:
                 return self._json({"error": str(e)}, 400)
+        m = re.fullmatch(r"/api/jobs/(j[0-9a-f]{8})/recovery", path)
+        if m:
+            if not JOBS.get(m[1], 0):
+                return self._json({"error": "unknown job"}, 404)
+            return self._json(INSTALLS.recovery_details(m[1]))
         m = re.fullmatch(r"/api/jobs/(j[0-9a-f]{8})", path)
         if m:
             tail = int((urllib.parse.parse_qs(self.path.partition("?")[2]).get("tail") or ["8000"])[0] or 8000)
@@ -587,7 +592,10 @@ class Handler(SimpleHTTPRequestHandler):
                 if m[2] == "approve":
                     r = INSTALLS.approve(m[1], str(data.get("plan_digest") or ""))
                 elif m[2] == "reconcile":
-                    r = INSTALLS.reconcile_install(m[1])
+                    exclusions = data.get("missing_user_state")
+                    if not isinstance(exclusions, list) or not all(isinstance(p, str) for p in exclusions):
+                        return self._json({"error": "Review recovery and approve its exact missing-file list first"}, 400)
+                    r = INSTALLS.reconcile_install(m[1], expected_missing=exclusions)
                 else:
                     r = getattr(JOBS, m[2])(m[1])
                 return self._json({"status": m[2]}) if r is True else self._json({"error": r or f"cannot {m[2]} this job"}, 409)

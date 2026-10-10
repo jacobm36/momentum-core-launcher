@@ -46,11 +46,12 @@ function renderJobs(force) {
       : jobActive(j) ? `<button type="button" data-a="cancel">Cancel</button>`
       : j.status === "awaiting-approval" ? `<button type="button" data-a="review">Review plan</button><button type="button" data-a="cancel">Cancel</button>`
       : j.surviving ? ""
-      : `${j.kind === "download" && j.status === "succeeded" ? '<button type="button" data-a="setup">Continue setup</button>' : ""}${j.kind === "install" && j.manual && j.status === "failed" ? '<button type="button" data-a="reconcile">Reconcile install</button>' : ""}${j.status === "succeeded" || j.manual ? "" : '<button type="button" data-a="retry">Retry</button>'}<button type="button" data-a="dismiss">Dismiss</button>`;
+      : `${j.kind === "download" && j.status === "succeeded" ? '<button type="button" data-a="setup">Continue setup</button>' : ""}${j.kind === "install" && j.manual && ["failed", "interrupted"].includes(j.status) ? '<button type="button" data-a="recovery">Review recovery</button>' : ""}${j.status === "succeeded" || j.manual ? "" : '<button type="button" data-a="retry">Retry</button>'}${j.manual ? "" : '<button type="button" data-a="dismiss">Dismiss</button>'}`;
     return `<div class="job ${esc(j.status)}" data-id="${esc(j.id)}">
       <div class="jhead"><b>${esc(j.title)}</b><span class="jstat">${esc(jobLabel(j.status))}</span></div>
       <div class="jbar ${jobActive(j) && !(j.progress?.total > 0) ? "indeterminate" : ""}" aria-label="Current step progress"><i style="width:${jobPct(j)}%"></i></div>
       <div class="jsub">${esc(jobSub(j))}</div>
+      ${j.manual ? '<p class="pkg-warning">This job needs recovery review before more installs. Its journal is retained; dismissing a message would not undo file changes.</p>' : ""}
       <div class="jbtns"><button type="button" data-a="log">${openLog === j.id ? "Hide log" : "Log"}</button>${acts}</div>
       ${openLog === j.id ? '<pre class="jlog"></pre>' : ""}</div>`;
   }).join("") : '<p class="sempty">No installs or background jobs yet.</p>';
@@ -83,9 +84,7 @@ function openJobs() {
     const id = b.closest(".job").dataset.id, a = b.dataset.a;
     if (a === "log") { openLog = openLog === id ? null : id; return renderJobs(); }
     if (a === "review") return reviewPackagePlan(id);
-    if (a === "reconcile" && !globalThis.confirm(
-      "Reconcile this install using its saved plan and file-change journal? Missing optional user-state files will be left out of the receipt. Managed package files must still match exactly; otherwise recovery stops and keeps the journal."
-    )) return;
+    if (a === "recovery") return reviewInstallRecovery(id);
     if (a === "setup") {
       const job = jobs.find(j => j.id === id);
       openPackages();
@@ -105,3 +104,39 @@ function openJobs() {
   d.showModal(); sfx("open");
 }
 if ($("#jobsbtn")) $("#jobsbtn").onclick = e => { e.currentTarget.blur(); openJobs(); };
+
+async function reviewInstallRecovery(id) {
+  const d = $("#rdlg");
+  if (d.open) return;
+  d.innerHTML = '<h2>Review recovery</h2><p class="pkg-error" role="alert" hidden></p><p>Checking saved installation evidence...</p><button type="button" id="recovery-close">Close</button>';
+  d.onclick = e => { if (e.target.id === "recovery-close") d.close(); };
+  d.showModal();
+  try {
+    const review = await packageResponse(await fetch(`/api/jobs/${id}/recovery`));
+    if (!d.open) return;
+    d.innerHTML = `<h2>${esc(review.title)}</h2><p class="pkg-error" role="alert" hidden></p>
+      <p>${esc(review.message)}</p>
+      ${review.eligible ? `<p>Managed package files must still match exactly. These missing optional user-state files will be excluded from the receipt:</p>
+        <ul>${review.missing_user_state.map(path => `<li class="pkg-path">${esc(path)}</li>`).join("") || "<li>None.</li>"}</ul>
+        <p>The journal is retained. If files change after this review, recovery may stop rather than overwrite them.</p>
+        <p class="pkg-path">Journal: ${esc(review.journal)}</p>
+        <label class="pkg-check"><input type="checkbox" id="recovery-consent">I approve finishing registration with the exclusions listed above.</label>`
+        : `<p class="pkg-warning">${esc(review.instruction)}</p>`}
+      <div class="btns"><button type="button" id="recovery-close" autofocus>Close</button>
+        ${review.eligible ? '<button type="button" id="recovery-finish" disabled>Finish registration</button>' : ""}</div>`;
+    const finish = d.querySelector("#recovery-finish");
+    if (finish) d.querySelector("#recovery-consent").onchange = e => { finish.disabled = !e.target.checked; };
+    d.onclick = async e => {
+      if (e.target.id === "recovery-close") return d.close();
+      if (e.target.id !== "recovery-finish" || finish.disabled) return;
+      finish.disabled = true;
+      try {
+        await packageResponse(await post(`/api/jobs/${id}/reconcile`, { missing_user_state: review.missing_user_state }));
+        d.close(); await refresh();
+      } catch (error) {
+        packageError(d, error);
+        d.querySelector("#recovery-consent").checked = false;
+      }
+    };
+  } catch (error) { packageError(d, error); }
+}
