@@ -9,7 +9,10 @@
 <script>
 function sfx() {}
 function notify() {}
+let manualOpened = false;
+function editor(game, manual) { manualOpened = game === null && manual; }
 let submitted = [], failApprove = false, blockApproval = true, importFailed = false;
+let discoveryFailed = false, discoveryImportFailed = false;
 let catalogOffline = false, installerReady = true, downloadStatus = "succeeded";
 let pickerPath = "/home/test/Game Files", pickerFailed = false;
 let recoveryEligible = true, recoveryFails = false;
@@ -52,6 +55,18 @@ fetch = async path => {
 };
 async function post(path, body, raw) {
   submitted.push({ path, body, raw });
+  if (path === "/api/library/discover") return discoveryFailed ? reply({error:"Cannot read shortcuts"}, 400) : reply({
+    directory: "/home/test/.local/share/applications", ignored: 2,
+    candidates: [
+      {source:"steam.desktop",sha256:"1".repeat(64),entry:{name:"Steam Game",exec:"steam steam://rungameid/123"},reason:null},
+      {source:"native.desktop",sha256:"2".repeat(64),entry:{name:"<Native Game>",exec:"'/games with spaces/run'",cwd:"/games with spaces"},reason:null},
+      {source:"existing.desktop",sha256:"3".repeat(64),entry:{name:"Edited Game",exec:"original-command"},reason:"Already in your library; existing entry preserved"}
+    ], skipped:[{name:"Broken Game",reason:"Missing launch command"}]
+  });
+  if (path === "/api/library/import") return discoveryImportFailed ? reply({error:"Shortcut changed; scan again"},409) : reply({
+    added:[{id:"steam-game",name:"Steam Game"}],
+    skipped:[{name:"<Native Game>",reason:"Already in your library; existing entry preserved"}], warnings:[]
+  });
   if (path === "/api/picker/directory") return pickerFailed ? reply({ error: "Cannot open folder picker" }, 400) : reply({ path: pickerPath });
   if (path === "/api/packages/import-upload") return importFailed ? reply({ error: "Invalid ZIP" }, 400) : reply(summary);
   if (path === "/api/packages/import") return reply(summary);
@@ -75,12 +90,40 @@ async function until(fn) {
   throw new Error("Timed out waiting for UI");
 }
 (async () => {
+  openAddGame();
+  check($("#add-installed").getClientRects().length && $("#add-manual").getClientRects().length &&
+    $("#add-store").getClientRects().length, "three visible add-game choices");
+  $("#add-manual").click(); check(manualOpened, "manual choice opens existing editor");
+  openAddGame(); discoveryFailed = true; $("#add-installed").click();
+  await until(() => !$("#pdlg .pkg-error").hidden);
+  check($("#pdlg .pkg-error").textContent.includes("Cannot read"), "discovery errors visible");
+  $("#discover-back").click(); discoveryFailed = false; $("#add-installed").click();
+  await until(() => $("#discover-import"));
+  check(topDlg().id === "pdlg", "discovery uses existing controller dialog");
+  check($("#discover-import").disabled, "no automatic import or preselection");
+  check($("[data-candidate='2']").disabled, "existing entries cannot be selected");
+  check($("#pdlg").textContent.includes("Missing launch command"), "skipped shortcut reason shown");
+  check($("#pdlg").textContent.includes("<Native Game>") && !$("#pdlg Native"), "shortcut names escaped");
+  $("#discover-all").click(); check(!$("#discover-import").disabled, "select all available enables import");
+  $("#discover-none").click(); check($("#discover-import").disabled, "select none disables import");
+  $("#discover-all").click(); discoveryImportFailed = true; $("#discover-form").requestSubmit();
+  await until(() => !$("#pdlg .pkg-error").hidden);
+  check($("#pdlg .pkg-error").textContent.includes("changed"), "changed shortcut error visible");
+  check($("[data-candidate='2']").disabled, "failed import does not enable existing entries");
+  discoveryImportFailed = false; $("#discover-form").requestSubmit();
+  await until(() => $("#discover-again"));
+  check($("#pdlg").textContent.includes("1 game(s) added; 1 selected game(s) skipped"), "import reports additions and skips");
+  const importRequest = submitted.find(s => s.path === "/api/library/import");
+  check(importRequest.body.selection.length === 2 && Object.keys(importRequest.body.selection[0]).join(",") === "source,sha256",
+    "only selected reviewed identities sent, never launch commands");
+  $("#discover-again").click(); await until(() => $("#discover-import")); $("#discover-close").click();
   games = [{ id: "existing", name: "My existing entry" }];
-  openJobs(); $("#ipackages").click(); await tick();
+  openJobs(); $("#ipackages").click(); $("#add-store").click(); await tick();
   check(!$("#iprepare"), "no standalone emulator decision");
   check(topDlg().id === "pdlg", "package dialog has controller focus");
   await until(() => $("[data-game]"));
-  check(!$("#catalog-advanced").open, "manual import and existing-game editor are advanced options");
+  check($("#catalog-manual").getClientRects().length && $("#catalog-installed").getClientRects().length,
+    "manual entry and installed-game import are visible");
   check($("#catalog-games h3").textContent === summary.name, "catalog metadata escaped");
   check($("#catalog-games img").getAttribute("src") === "/web/icon.svg", "catalog card artwork only");
   check($("[data-game]").textContent.includes("Continue setup"), "validated imported installer reuses setup");
@@ -119,7 +162,6 @@ async function until(fn) {
   check($("#catalog-import"), "offline retains manual import");
   catalogOffline = false; installerReady = true;
   await until(() => $("#catalog-import"));
-  $("#catalog-advanced").open = true;
   $("#catalog-import").click(); await tick();
   check(!$("#pdlg img"), "package metadata is escaped");
   $("#pkg-path").value = "/home/test/package-folder"; $("#pkg-import-path").click();

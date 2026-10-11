@@ -85,8 +85,15 @@ function renderDetailInner() {
   const g = games.find(x => x.id === sel), el = $("#detail"), bg = $("#bg"), art = $("#art");
   if (!g) {
     el.innerHTML = games.length ? '<p class="empty">No games found.</p>'
-      : `<div class="welcome"><h1>Welcome to Momentum</h1><p>Your library is empty. Add your first game, or import every game that already has a <code>.desktop</code> shortcut.</p><button id="welcome-add" class="primary">+ Add a game</button><p class="hint">Or run <code>./import_games.py</code> in the launcher folder, then reopen this window.</p></div>`;
-    $("#welcome-add")?.addEventListener("click", () => editor());
+      : `<div class="welcome"><h1>Welcome to Momentum</h1><p>Your Linux games, together: Steam shortcuts, native games, and emulator launches.</p>
+        <p>Import existing game shortcuts, add a launch command, or get a game installer from the store.</p>
+        <div class="btns"><button id="welcome-import" class="primary">Import installed games</button>
+          <button id="welcome-manual">Add a game manually</button>
+          <button id="welcome-store">Browse the package store</button></div>
+        <p class="hint">Import finds game shortcuts in your user applications folder. It does not scan every Steam library or install games.</p></div>`;
+    $("#welcome-import")?.addEventListener("click", openInstalledGames);
+    $("#welcome-manual")?.addEventListener("click", () => editor(null, true));
+    $("#welcome-store")?.addEventListener("click", openPackages);
     return;
   }
   const on = running.has(g.id);

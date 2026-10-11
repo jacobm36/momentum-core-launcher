@@ -8,6 +8,7 @@ from pathlib import Path
 
 import backup
 import catalog
+import game_import
 import installs
 import packages
 import picker
@@ -394,6 +395,26 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if not self._host_ok() or self.headers.get("X-Token") != TOKEN:
             return self.send_error(403)
+        if self.path in ("/api/library/discover", "/api/library/import"):
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                if not 0 <= n <= 1 << 20:
+                    return self._json({"error": "Import request is too large"}, 400)
+                data = json.loads(self.rfile.read(n) or b"{}")
+                if not isinstance(data, dict):
+                    return self._json({"error": "Invalid import request"}, 400)
+                with lock:
+                    games = read_raw()
+                    scan = game_import.discover(games)
+                    if self.path == "/api/library/discover":
+                        return self._json(scan)
+                    candidates = game_import.selected(scan, data.get("selection"))
+                    output, result = game_import.add(games, candidates, HERE)
+                    if result["added"]:
+                        write_games(output)
+                    return self._json(result)
+            except (game_import.ImportError, OSError, ValueError) as exc:
+                return self._json({"error": str(exc)}, 400)
         if self.path.startswith("/api/launch/"):
             gid = self.path.rsplit("/", 1)[1]
             game = next((g for g in load_games() if g["id"] == gid), None)

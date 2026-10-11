@@ -13,19 +13,125 @@ const packageJson = value => `<pre class="pkg-json">${esc(JSON.stringify(value, 
 let selectedPackage = null;
 let downloadPoll = null;
 
+function openAddGame() {
+  const d = $("#pdlg");
+  if (d.open) return;
+  d.innerHTML = `<h2>Add games to Momentum</h2>
+    <p class="bnote">Your Linux games, together: Steam shortcuts, native games, and emulator launches. The store is optional.</p>
+    <div class="add-game-choices">
+      <button type="button" id="add-installed" class="primary">Import installed games</button>
+      <p class="bnote">Review game shortcuts already on this computer. Nothing is launched or installed.</p>
+      <button type="button" id="add-manual">Add a game manually</button>
+      <p class="bnote">Use an existing launch command, script, or emulator wrapper.</p>
+      <button type="button" id="add-store">Browse the package store</button>
+      <p class="bnote">Get a game installer; provide any required original game files.</p>
+    </div><div class="btns"><button type="button" id="add-close" autofocus>Close</button></div>`;
+  d.onclick = e => {
+    const id = e.target.id;
+    if (!["add-installed", "add-manual", "add-store", "add-close"].includes(id)) return;
+    d.close();
+    if (id === "add-installed") openInstalledGames();
+    if (id === "add-manual") editor(null, true);
+    if (id === "add-store") openPackages();
+  };
+  d.showModal(); sfx("open");
+}
+
+async function openInstalledGames() {
+  const d = $("#pdlg");
+  if (d.open) return;
+  d.innerHTML = `<h2>Import installed games</h2>
+    <p class="bnote">Review game shortcuts in your user applications folder. This includes Steam games with shortcuts there, not every installed Steam game.
+      No game is launched or installed. Existing entries and edited launch commands stay unchanged.</p>
+    <p class="pkg-error" role="alert" hidden></p>
+    <div id="discovered-games"><p role="status">Finding game shortcuts...</p></div>
+    <div class="btns"><button type="button" id="discover-back">Back</button>
+      <button type="button" id="discover-close" autofocus>Close</button></div>`;
+  d.onclick = e => {
+    if (e.target.id === "discover-close") d.close();
+    if (e.target.id === "discover-back") { d.close(); openAddGame(); }
+  };
+  d.showModal(); sfx("open");
+  const panel = d.querySelector("#discovered-games");
+  try {
+    const scan = await packageResponse(await post("/api/library/discover"));
+    if (!d.open || !panel.isConnected) return;
+    const skipped = scan.skipped;
+    panel.innerHTML = `<p class="bnote">Scanned: ${esc(scan.directory)}</p>
+      <p role="status">${scan.candidates.length} game shortcut(s) found; ${skipped.length} skipped; ${scan.ignored} unrelated shortcut(s) ignored.</p>
+      <form id="discover-form">
+        <div class="btns"><button type="button" id="discover-all">Select all available</button>
+          <button type="button" id="discover-none">Select none</button></div>
+        <div class="discovered-list">${scan.candidates.map((c, i) => `<label class="discovered-game">
+          <span><input type="checkbox" data-candidate="${i}" ${c.reason ? "disabled" : ""}> ${esc(c.entry.name)}</span>
+          <small>${esc(c.source)}</small><code>${esc(c.entry.exec)}</code>
+          ${c.entry.cwd ? `<small>Working directory: ${esc(c.entry.cwd)}</small>` : ""}
+          ${c.reason ? `<small>${esc(c.reason)}</small>` : ""}</label>`).join("") || '<p>No importable game shortcuts found. You can add a game manually instead.</p>'}</div>
+        ${skipped.length ? `<details><summary>Skipped shortcuts (${skipped.length})</summary><ul>${skipped.map(
+          c => `<li>${esc(c.name)}: ${esc(c.reason)}</li>`).join("")}</ul></details>` : ""}
+        <p class="bnote">Only import shortcuts you trust. Their launch commands will run as your user when you press Play.</p>
+        <button type="submit" id="discover-import" class="primary" disabled>Import selected games</button>
+      </form>`;
+    const form = panel.querySelector("#discover-form"), button = panel.querySelector("#discover-import");
+    const inputs = () => [...form.querySelectorAll("input[data-candidate]:not(:disabled)")];
+    const update = () => { button.disabled = !inputs().some(input => input.checked); };
+    form.onchange = update;
+    panel.querySelector("#discover-all").onclick = () => { inputs().forEach(input => input.checked = true); update(); };
+    panel.querySelector("#discover-none").onclick = () => { inputs().forEach(input => input.checked = false); update(); };
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const selection = inputs().filter(input => input.checked).map(input => {
+        const c = scan.candidates[Number(input.dataset.candidate)];
+        return { source: c.source, sha256: c.sha256 };
+      });
+      button.disabled = true;
+      form.querySelectorAll("input,button").forEach(input => input.disabled = true);
+      d.querySelector(".pkg-error").hidden = true;
+      try {
+        const result = await packageResponse(await post("/api/library/import", { selection }));
+        if (!d.open || !panel.isConnected) return;
+        panel.innerHTML = `<p role="status">${result.added.length} game(s) added; ${result.skipped.length} selected game(s) skipped.
+          Existing entries were preserved.</p>
+          <ul>${result.added.map(g => `<li>Added: ${esc(g.name)}</li>`).join("")}
+          ${[...result.skipped, ...result.warnings].map(g => `<li>${esc(g.name)}: ${esc(g.reason)}</li>`).join("")}</ul>
+          <button type="button" id="discover-again">Scan again</button>`;
+        panel.querySelector("#discover-again").onclick = () => { d.close(); openInstalledGames(); };
+        try { await refresh(true); }
+        catch (error) {
+          if (d.open && panel.isConnected) packageError(d, new Error(`Import finished, but the library could not refresh: ${error.message}. Reopen the launcher to see the saved entries.`));
+        }
+      } catch (error) {
+        if (!d.open || !panel.isConnected) return;
+        packageError(d, error);
+        form.querySelectorAll("input,button").forEach(input => input.disabled = false);
+        form.querySelectorAll("input[data-candidate]").forEach(input => {
+          input.disabled = !!scan.candidates[Number(input.dataset.candidate)].reason;
+        });
+        update();
+      }
+    };
+  } catch (error) {
+    if (d.open && panel.isConnected) {
+      panel.innerHTML = '<p>Discovery did not finish. Go back and try again, or add a game manually.</p>';
+      packageError(d, error);
+    }
+  }
+}
+
 function openPackages() {
   const d = $("#pdlg");
   if (d.open) return;
   selectedPackage = null;
-  d.innerHTML = `<h2>Add game</h2>
+  d.innerHTML = `<h2>Browse the package store</h2>
     <p class="bnote">Choose a game. Momentum gets its installer; you provide your game files.</p>
     <p class="pkg-error" role="alert" hidden></p>
     <div id="catalog-games"><p class="bnote">Loading available games...</p></div>
     <div id="catalog-download" hidden><p id="catalog-status" role="status"></p>
       <progress id="catalog-progress" aria-label="Installer download progress"></progress>
       <button type="button" id="catalog-cancel">Cancel download</button></div>
-    <details id="catalog-advanced"><summary>Advanced</summary><div class="btns">
-      <button type="button" id="catalog-manual">Add an existing game manually...</button></div></details>
+    <div id="catalog-advanced" class="btns">
+      <button type="button" id="catalog-installed">Import installed games</button>
+      <button type="button" id="catalog-manual">Add a game manually</button></div>
     <div class="btns"><button type="button" id="catalog-import">Local packages / import...</button>
       <button type="button" id="catalog-retry">Refresh games</button>
       <button type="button" id="pkg-close" autofocus>Close</button></div>`;
@@ -34,6 +140,7 @@ function openPackages() {
     if (e.target.id === "catalog-retry") loadGameCatalog();
     if (e.target.id === "catalog-import") { d.close(); openImportedPackages(); }
     if (e.target.id === "catalog-manual") { d.close(); editor(null, true); }
+    if (e.target.id === "catalog-installed") { d.close(); openInstalledGames(); }
   };
   d.onclose = () => { clearTimeout(downloadPoll); selectedPackage = null; };
   d.showModal(); sfx("open");

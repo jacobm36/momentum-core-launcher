@@ -88,7 +88,19 @@ cp games.example.json games.json   # or run ./import_games.py to import .desktop
 ```
 
 Handy keys: **↑/↓** select, **Enter** play, **F** favorite, **R** jump to recent games, **Shift+F** jump to favorites, **S** change sort order, **T** playtime summary, **Ctrl+Q** quit.
-An empty library shows a welcome screen with an **Add a game** button. See [USER-GUIDE.md](USER-GUIDE.md) for everything else.
+An empty library and **+ Add game** offer three visible choices: **Import installed
+games**, **Add a game manually**, and **Browse the package store**. Momentum can
+launch existing Steam shortcuts, native games and emulator commands; the store
+is optional. See [USER-GUIDE.md](USER-GUIDE.md) for everything else.
+
+**Import installed games** reads `~/.local/share/applications/*.desktop` game
+shortcuts without executing them. Review names and launch commands, select the
+games you trust, and import only those entries. Results report additions,
+duplicates, invalid/unsupported shortcuts and icon-copy warnings. Existing
+entries, artwork and edited commands are preserved; changed shortcuts require a
+new scan. This is shortcut discovery, not recursive disk scanning, Steam library
+enumeration, or automatic artwork scraping. Terminal-only shortcuts can be added
+manually with an appropriate terminal command.
 
 ## Meet Momentum Packages
 

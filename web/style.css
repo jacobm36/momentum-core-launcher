@@ -371,3 +371,13 @@ body.noanim .toastc,body.noanim #jobsbtn{animation:none}
 #gdlg .gbar button{padding:8px 20px;border-radius:8px;border:1px solid var(--line);background:#161a33;color:var(--fg);cursor:pointer}
 #gdlg .gbar .gcount{color:var(--dim);font-size:13px}
 body.noanim .gallery button{transition:none}
+
+.add-game-choices{display:grid;gap:8px}
+.add-game-choices button{text-align:left}
+#pdlg .btns{flex-wrap:wrap}
+.discovered-list{display:grid;gap:10px;margin:12px 0}
+#pdlg .discovered-game{display:grid;gap:5px;border:1px solid var(--line);border-radius:8px;padding:12px;overflow-wrap:anywhere}
+.discovered-game input[type=checkbox]{width:auto}
+.discovered-game small{color:var(--dim)}
+.discovered-game code{white-space:pre-wrap;overflow-wrap:anywhere}
+.welcome .btns{flex-wrap:wrap;justify-content:flex-start}

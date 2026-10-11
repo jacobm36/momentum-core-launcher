@@ -47,7 +47,7 @@ async function sendMedia(id, kind, p) {
 }
 
 function editor(g, manual = false) {
-  if (!g && !manual) return openPackages();
+  if (!g && !manual) return openAddGame();
   const isNew = !g, d = $("#dlg"), f = $("#form"), pending = {}, blobs = [], shots = [];
   g = g || { tags: [] };
   const cats = [...new Set(games.map(x => x.category).filter(Boolean))];

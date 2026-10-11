@@ -101,6 +101,50 @@ class PackageUiApi(Base):
         with mock.patch("picker.choose_directory", side_effect=server.picker.PickerError("No desktop picker")):
             self.assertEqual(self.request("/api/picker/directory", {}), (400, {"error": "No desktop picker"}))
 
+    def test_installed_game_import_reviews_selection_and_preserves_concurrent_edits(self):
+        apps = self.t / "shortcuts"
+        apps.mkdir()
+        shortcut = apps / "my-game.desktop"
+        shortcut.write_text("[Desktop Entry]\nName=My Game\nExec=steam steam://rungameid/123\nCategories=Game;\n")
+        second = apps / "other.desktop"
+        second.write_text("[Desktop Entry]\nName=Other Game\nExec=/other/game\nCategories=Game;\n")
+        with mock.patch("game_import.applications", return_value=apps):
+            status, scan = self.request("/api/library/discover", {})
+            self.assertEqual(status, 200, scan)
+            self.assertFalse((self.app / "games.json").exists())
+            candidate = next(c for c in scan["candidates"] if c["source"] == shortcut.name)
+            selection = [{"source": candidate["source"], "sha256": candidate["sha256"]}]
+            status, result = self.request("/api/library/import", {"selection": selection})
+            self.assertEqual(status, 200, result)
+            self.assertEqual(len(result["added"]), 1)
+            games = json.loads((self.app / "games.json").read_text())
+            self.assertEqual([g["id"] for g in games], ["my-game"])
+            games[0].update(exec="my edited command", favorite=True)
+            (self.app / "games.json").write_text(json.dumps(games))
+            status, result = self.request("/api/library/import", {"selection": selection})
+            self.assertEqual(status, 200, result)
+            self.assertFalse(result["added"])
+            self.assertEqual(len(result["skipped"]), 1)
+            self.assertEqual(json.loads((self.app / "games.json").read_text()), games)
+            shortcut.write_text(shortcut.read_text().replace("rungameid/123", "rungameid/456"))
+            self.assertEqual(self.request("/api/library/import", {"selection": selection})[0], 400)
+            self.assertEqual(json.loads((self.app / "games.json").read_text()), games)
+            self.assertFalse(self.runner.list())
+
+    def test_installed_game_import_requires_token_and_rejects_unreviewed_input(self):
+        for path in ("/api/library/discover", "/api/library/import"):
+            request = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}", b"{}")
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request)
+            self.assertEqual(error.exception.code, 403)
+        with mock.patch("game_import.discover", return_value={"candidates": []}):
+            for data in ({}, {"selection": [{"source": "/arbitrary/file", "sha256": "0" * 64}]}, []):
+                self.assertEqual(self.request("/api/library/import", data)[0], 400)
+        with mock.patch("game_import.discover", side_effect=OSError("cannot read shortcuts")):
+            self.assertEqual(self.request("/api/library/discover", {}),
+                             (400, {"error": "cannot read shortcuts"}))
+        self.assertFalse((self.app / "games.json").exists())
+
     def test_zip_import_details_no_execution_and_corrupt_upload(self):
         data = self.upload()
         self.assertEqual(data["id"], "test-game")

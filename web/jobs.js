@@ -79,7 +79,7 @@ function openJobs() {
     <div class="btns"><button type="button" id="ipackages">Add game...</button><button type="button" id="iclose" class="primary" autofocus>Close</button></div>`;
   d.onclick = async e => {
     if (e.target.id === "iclose") return d.close();
-    if (e.target.id === "ipackages") return openPackages();
+    if (e.target.id === "ipackages") return openAddGame();
     const b = e.target.closest("[data-a]"); if (!b) return;
     const id = b.closest(".job").dataset.id, a = b.dataset.a;
     if (a === "log") { openLog = openLog === id ? null : id; return renderJobs(); }

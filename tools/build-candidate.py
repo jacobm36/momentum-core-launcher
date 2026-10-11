@@ -37,6 +37,7 @@ NEW_FILES = (
     "tests/test_managed_real.py",
     "tools/managed-flatpak-prototype.py", "tools/check-managed-flatpak-prototype.py",
     "tests/test_managed_flatpak_prototype.py",
+    "game_import.py", "tests/test_game_import.py",
 )
 PRIVATE_ROOTS = {"jobs", "packages", "media", "backups", "logs", ".git", "__pycache__"}
 PRIVATE_FILES = {"games.json", "stats.json", "playstats.json"}
@@ -97,7 +98,13 @@ def main(argv=None):
                 "Close the old Momentum launcher/server. Extract into a NEW folder, then run\n"
                 "bash start-candidate.sh from the extracted folder. Do not overwrite old folders\n"
                 "or delete journals. No desktop shortcuts change until you run bash install.sh.\n\n"
-                "Use Add game > Local packages for the bundled candidates. The online Store\n"
+                "Add game offers Import installed games, Add a game manually, and Browse\n"
+                "the package store. Import reviews user .desktop game shortcuts, lets you\n"
+                "select entries, and preserves existing library edits. It does not enumerate\n"
+                "all Steam libraries, download games, or launch discovered commands.\n"
+                "Use normal start-candidate.sh to find this user's installed game shortcuts.\n"
+                "Isolated test mode sees only the separate acceptance HOME's shortcuts.\n\n"
+                "Use Add game > Browse the package store > Local packages for bundled candidates. The online Store\n"
                 "still lists only the two publicly accepted arcade games. Supply your own\n"
                 "original media; source and destination must not overlap. Missing host\n"
                 "prerequisites have manual system commands; no automatic administrator access.\n"
