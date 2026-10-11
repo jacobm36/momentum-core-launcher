@@ -21,6 +21,6 @@
     "docs/eduke32-preparation.md", "docs/ironwail-preparation.md",
     "docs/openbor.md", "docs/shared-engine-fallback.md",
     "docs/uzdoom-preparation.md", "docs/screenshot.png", "docs/stats.png",
-    "docs/delivery-layout.md"
+    "docs/delivery-layout.md", "docs/development.md"
   ]
 }

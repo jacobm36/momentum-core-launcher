@@ -72,5 +72,5 @@ Normal `start-candidate.sh` retains existing-engine reuse. See
 [the user guide](../USER-GUIDE.md#notifications-installs-and-backups) for approvals
 and recovery. Source-checkout tests use `tests/test_managed_installs.py` and
 `tests/test_managed_flatpak.py`; opt-in real lifecycle checks are documented in
-the repository README. No broader provider or automatic cleanup framework is
+[the development guide](development.md#validation). No broader provider or automatic cleanup framework is
 implemented.

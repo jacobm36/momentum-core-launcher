@@ -10,6 +10,7 @@ File count in a checkout is not the application's installed footprint.
 | Runtime evidence and runtime index JSON in `docs/` | Exact package/build gating and OpenBOR file verification | Included; not optional |
 | User guide, README and current supporting documentation/images | Instructions and references | Included |
 | `docs/acceptance-history.md`, `docs/history/` | Historical developer context | Acceptance bundles only |
+| `docs/development.md` | Current engineering reference; commands require the source checkout | Included as documentation, not tooling |
 | `tests/` | Regression suites and fixtures | Acceptance bundles only |
 | `tools/` | Builders, release checks and prototypes | Acceptance bundles only |
 | `.github/`, Git history | Contributor instructions and development metadata | Not needed by the runtime |

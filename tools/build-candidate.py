@@ -44,6 +44,7 @@ NEW_FILES = (
     "tests/fixtures/library-media.html",
     "docs/delivery-layout.md", "docs/acceptance-history.md", "tools/runtime-files.json",
     "docs/history/shared-engine-fallback-design.md",
+    "docs/development.md",
 )
 PRIVATE_ROOTS = {"jobs", "packages", "media", "backups", "logs", ".git", "__pycache__"}
 PRIVATE_FILES = {"games.json", "stats.json", "playstats.json"}
