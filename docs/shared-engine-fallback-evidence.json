@@ -10,6 +10,13 @@
     "limits": "Owner-reported successful candidate test; individual per-game fullscreen, input, audio, exit and game-earned save checks were not separately described. Exact target environment was not supplied. No public publication inferred."
   },
   "production_enabled": false,
+  "public_package_release": {
+    "date": "2026-10-10",
+    "owner_requested": true,
+    "packages": ["the-house-of-the-dead-2 0.3.0", "brutal-doom 0.3.0"],
+    "verification": "Exact immutable source, package tests, helper binding, catalog/checksums and anonymous public ZIP downloads passed tools/check-release.py --public.",
+    "frontend": "Remains private; no new public launcher release. candidate/production fields describe frontend deployment, not package download visibility."
+  },
   "candidate_enabled_for": [
     "the-house-of-the-dead-2 0.3.0",
     "brutal-doom 0.3.0"
@@ -88,6 +95,6 @@
     "UZDoom real save/reload is vanilla Doom II, not Brutal Doom gameplay or save acceptance.",
     "Known Brutal Doom voxel script diagnostics remain explicit; matching them is content-init evidence only.",
     "Install-then-pin retained an extra Flycast runtime; no automatic slot/runtime cleanup or update policy.",
-    "No new package, launcher or catalog publication."
+    "Exact 0.3.0 game packages publicly released on owner approval; no new public frontend release or additional hardware certification."
   ]
 }

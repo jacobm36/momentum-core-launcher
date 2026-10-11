@@ -126,10 +126,12 @@ untouched. Local package ZIPs can also be imported through **Advanced**.
 
 **Bring your games; Momentum brings the setup.** Commercial base-game data, ROMs and BIOS
 files come from you. Mod packages can include their complete distributable mod.
-The current public catalog contains *Star Wars Trilogy Arcade* 0.2.1 and
-*L.A. Machineguns* 0.2.2. HOD2 remains a local candidate until publication.
-The owner accepted all five first-wave games on the debug laptop; Enyo and
-Brutal Doom remain private pending content redistribution permission.
+The current public package catalog contains *Star Wars Trilogy Arcade* 0.2.1,
+*L.A. Machineguns* 0.2.2, *The House of the Dead 2* 0.3.0, *Brutal Doom* 0.3.0,
+and *Episode Enyo* 0.3.0. The owner approved publication on October 10, 2026.
+The frontend remains private; historical public launcher downloads do not
+support the three new revisions. Enyo 0.3.0 downloads its mod directly from
+the publisher or reuses verified source instead of bundling it.
 Other historical game releases are withdrawn pending
 acceptance under the current standard; private candidates can be tested through
 Local packages. Installer verification is separate from gameplay confirmation.
