@@ -4,6 +4,42 @@
   "packages": [
     {
       "id": "quake-slave-zero-x",
+      "version": "0.3.0",
+      "digest": "sha256:17788bc4fee296ce399bf148b747eea6ee1cb89cb817ca8919ed9e4465defb4f",
+      "runtime": "vkquake",
+      "software": {
+        "provider": "appimage",
+        "scope": "user",
+        "version": "1.36.0",
+        "sha256": "f1824b12744b6b343c6155cf5f775df225b9e6c9ee606c95c9363f63f124992a"
+      },
+      "installer_validated": true,
+      "gameplay": "target-confirmation-required-for-new-installer",
+      "limits": "2026-10-10: exact source-only ZIP passed 21 lifecycle tests. Real anonymous publisher download acquired archive 45ddd187 and PAK 93b1fcc3 with exact size/hash/layout checks through the real launcher runner, separate source/game approvals, apply, receipt/catalog commit and repeat install. Synthetic Quake base PAKs and verified existing vkQuake were used; no game was launched. The approved source cache was retained and reused without redownload or engine modification. Original source stayed unchanged. Fullscreen launch settings and mod bytes match privately accepted 0.2.2, but this revised installer has not yet been tested on the debug laptop."
+    },
+    {
+      "id": "quake-slave-zero-x",
+      "version": "0.2.2",
+      "digest": "sha256:233fc78d92556c3798a674a1ea1090ef766e98db80caa50336891e76ffb562f4",
+      "runtime": "vkquake",
+      "software": {
+        "provider": "appimage",
+        "scope": "user",
+        "version": "1.36.0",
+        "sha256": "f1824b12744b6b343c6155cf5f775df225b9e6c9ee606c95c9363f63f124992a"
+      },
+      "installer_validated": true,
+      "gameplay": "user-confirmed-debug-laptop-private",
+      "user_acceptance": {
+        "date": "2026-10-10",
+        "delivery": "Momentum-First-Wave-Three-Candidates-20261010-r4.zip",
+        "report": "All three games install and work perfectly.",
+        "limits": "Owner-reported result. Bundled mod/art redistribution permission remains unresolved; no public package publication."
+      },
+      "limits": "2026-10-10: exact ZIP through real launcher intake, separate game approval, apply, receipt/catalog commit and repeat install in disposable homes with synthetic base PAKs and copied verified AppImage. Package lifecycle tests verify -fullscreen startup, explicit -window forwarding, cwd/exit and unchanged root configuration. Pinned upstream 1.36.0 video initialization recognizes -fullscreen and gives -window precedence. No configuration or resolution is imposed. Graphical fullscreen, FUSE mounting, GPU presentation, controls and gameplay remain target acceptance checks; no old gameplay evidence is inherited."
+    },
+    {
+      "id": "quake-slave-zero-x",
       "version": "0.2.1",
       "digest": "sha256:4692c5f01afd03f0ed13c7dc3e72e9c1359e8f4f50e4a1784fcc788698b57d41",
       "runtime": "vkquake",
@@ -15,7 +51,7 @@
       },
       "installer_validated": true,
       "gameplay": "not-tested-for-this-package",
-      "limits": "2026-10-09: complete local ZIP/payload through real launcher intake, approval, package apply, receipt/catalog commit and repeat install in disposable homes with synthetic base PAKs and copied verified AppImage. Read-only host loader checks; no engine invocation or game launch. Root vkQuake.cfg is not imported and display is not forced. Not fresh-machine, FUSE mounting, GPU, input or gameplay certification."
+      "limits": "2026-10-09: complete local ZIP/payload through real launcher intake, approval, package apply, receipt/catalog commit and repeat install in disposable homes with synthetic base PAKs and copied verified AppImage. Exact 0.2.1 also passed actual missing-AppImage download/preparation with separate software/game approvals, plus repair, retained-save removal/reinstall and recovery in isolated homes. Read-only host loader checks; no engine invocation or game launch. Root vkQuake.cfg is not imported and display is not forced. Not fresh-machine, FUSE mounting, GPU, input or gameplay certification."
     },
     {
       "id": "quake-slave-zero-x",

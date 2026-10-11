@@ -13,7 +13,7 @@ import unittest
 from unittest import mock
 
 import compatibility
-from tests.test_packages import package_files, write_tree, write_zip
+from tests.test_packages import package_files, sums_for, write_tree, write_zip
 
 spec = importlib.util.spec_from_file_location("release_check", Path(__file__).parents[1] / "tools/check-release.py")
 release = importlib.util.module_from_spec(spec)
@@ -61,6 +61,19 @@ class Diagnostics(unittest.TestCase):
                 self.assertEqual(release.main(["game.zip", "--launcher-archive", str(invalid)]), 1)
             check.assert_not_called()
             self.assertIn("RELEASE CHECK: FAIL", output.getvalue())
+
+    def test_brutal_doom_additional_build_is_specific_not_inherited_by_other_packages(self):
+        records = compatibility.records(Path(__file__).parents[1])
+        record = next(r for r in records if r["id"] == "brutal-doom" and r["version"] == "0.2.0")
+        builds = compatibility.software_builds(record)
+        self.assertEqual([b["version"] for b in builds], ["5.0.1", "5.0.3"])
+        self.assertEqual(builds[1]["commit"],
+                         "6c574decab62fc97a68c5c23daacafcab37fa1f1cb9362e85c2f6b285cfd3a19")
+        for other in records:
+            if other["id"] == "brutal-doom" and other["version"] == "0.3.0":
+                self.assertEqual(compatibility.software_builds(other), builds)
+            elif other is not record and other["runtime"] == "uzdoom":
+                self.assertEqual(len(compatibility.software_builds(other)), 1)
 
 
 class ReleaseFailures(unittest.TestCase):
@@ -133,6 +146,24 @@ class ReleaseFailures(unittest.TestCase):
                 self.entry[key] = original
         self.save_catalog()
 
+    def test_unspecified_manifest_version_uses_exact_evidence_build(self):
+        manifest = json.loads(self.files["package.json"])
+        manifest["requires"][0]["tested_version"] = None
+        self.files["package.json"] = json.dumps(manifest).encode()
+        self.files["SHA256SUMS"] = sums_for(self.files)
+        write_tree(self.source, self.files)
+        self.archive = write_zip(self.root / "test-game-1.0.0.zip", self.files)
+        self.info = release.packages.check(self.archive)
+        evidence = json.loads(self.evidence_path.read_text())
+        evidence["packages"][-1]["digest"] = self.info["digest"]
+        self.evidence_path.write_text(json.dumps(evidence))
+        self.entry.update(digest=self.info["digest"], size=self.archive.stat().st_size,
+                          sha256=hashlib.sha256(self.archive.read_bytes()).hexdigest())
+        self.save_catalog()
+        (self.distribution / "test-game-1.0.0.zip.sha256").write_text(
+            self.entry["sha256"] + "  test-game-1.0.0.zip\n")
+        self.assertEqual(self.check(), "test-game-1.0.0")
+
     def test_missing_evidence_and_wrong_software_stop(self):
         evidence = json.loads(self.evidence_path.read_text())
         record = evidence["packages"][-1]
@@ -144,6 +175,41 @@ class ReleaseFailures(unittest.TestCase):
         self.evidence_path.write_text(json.dumps(evidence))
         with self.assertRaisesRegex(ValueError, "lacks approved evidence"):
             self.check()
+
+    def test_managed_helper_and_package_evidence_must_match_delivery(self):
+        helper = self.launcher / "managed_flatpak.py"
+        helper.write_bytes(b"retained helper")
+        helper_sha = hashlib.sha256(helper.read_bytes()).hexdigest()
+        manifest = json.loads(self.files["package.json"])
+        manifest["extensions"] = {
+            "managed_engine": "momentum-flatpak-1", "managed_helper_sha256": helper_sha}
+        self.files["package.json"] = json.dumps(manifest).encode()
+        self.files["SHA256SUMS"] = sums_for(self.files)
+        write_tree(self.source, self.files)
+        self.archive = write_zip(self.root / "test-game-1.0.0.zip", self.files)
+        self.info = release.packages.check(self.archive)
+        evidence = json.loads(self.evidence_path.read_text())
+        evidence["packages"][-1]["digest"] = self.info["digest"]
+        self.evidence_path.write_text(json.dumps(evidence))
+        managed_path = self.launcher / "docs/shared-engine-fallback-evidence.json"
+        managed = {"retained_helper_sha256": helper_sha,
+                   "candidate_enabled_for": ["test-game 1.0.0"]}
+        managed_path.write_text(json.dumps(managed))
+        self.entry.update(digest=self.info["digest"], size=self.archive.stat().st_size,
+                          sha256=hashlib.sha256(self.archive.read_bytes()).hexdigest())
+        self.save_catalog()
+        (self.distribution / "test-game-1.0.0.zip.sha256").write_text(
+            self.entry["sha256"] + "  test-game-1.0.0.zip\n")
+        self.assertEqual(self.check(), "test-game-1.0.0")
+        helper.write_bytes(b"changed helper")
+        with self.assertRaisesRegex(ValueError, "helper differs"):
+            self.check()
+        helper.write_bytes(b"retained helper")
+        for field, value in (("retained_helper_sha256", "0" * 64), ("candidate_enabled_for", [])):
+            with self.subTest(field=field):
+                managed_path.write_text(json.dumps({**managed, field: value}))
+                with self.assertRaisesRegex(ValueError, "matching managed helper/package evidence"):
+                    self.check()
 
     def test_modified_source_modes_and_public_wrong_bytes_stop(self):
         source = self.source / "install.sh"

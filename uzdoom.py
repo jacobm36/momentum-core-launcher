@@ -61,6 +61,16 @@ def _validate(facts):
 
 def detect():
     """Prefer installed user, then default system; never inspect named installations."""
+    return _detect(("user", "system"))
+
+
+def discover():
+    """Inspect both default scopes; invalid metadata remains an explicit error."""
+    return [facts for scope in ("user", "system")
+            if (facts := _detect((scope,)))["installed"]]
+
+
+def _detect(scopes):
     facts = {"provider": "flatpak", "scope": "user", "app_id": APP,
              "arch": ARCH, "branch": BRANCH, "origin": "flathub",
              "flatpak_available": bool(shutil.which("flatpak")), "installed": False,
@@ -69,7 +79,7 @@ def detect():
              "running": False, "capability_note": NOTE}
     if not facts["flatpak_available"]:
         return facts
-    for scope in ("user", "system"):
+    for scope in scopes:
         rows = [line.split("\t") for line in probe(
             "list", "--" + scope, "--app", "--columns=application,arch,branch,origin").splitlines()]
         candidates = [row for row in rows if row[0] == APP]
@@ -107,6 +117,8 @@ def check_host(facts):
     if not facts["installed"]:
         raise DependencyError("UZDoom is not installed; prepare the dependency first.")
     observed = detect()
+    if facts["scope"] == "system" and observed.get("scope") == "user":
+        observed = _detect((facts["scope"],))
     if observed != facts:
         raise DependencyError("UZDoom facts/version/commit changed; rerun detection and preflight.")
     scope = "--" + facts["scope"]

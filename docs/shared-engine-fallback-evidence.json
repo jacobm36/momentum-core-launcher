@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "date": "2026-10-10",
+  "status": "private-integrated-candidate",
+  "owner_acceptance": {
+    "reported_at": "2026-10-10T19:58:43.561-07:00",
+    "delivery": "Momentum-Shared-Engine-Candidate-20261010-r6.zip",
+    "delivery_sha256": "b2e3720fb3418ff14022ed57abca3b87bc807d71fe327e84ab6156d52b42fa64",
+    "report": "It works marvelously. i would say that i am blown away right now. this is fantastic work, truly. i am very pleased with the results!",
+    "limits": "Owner-reported successful candidate test; individual per-game fullscreen, input, audio, exit and game-earned save checks were not separately described. Exact target environment was not supplied. No public publication inferred."
+  },
+  "production_enabled": false,
+  "candidate_enabled_for": [
+    "the-house-of-the-dead-2 0.3.0",
+    "brutal-doom 0.3.0"
+  ],
+  "managed_contract": "momentum-flatpak-1",
+  "retained_helper_sha256": "b5798de5056f7c3976fc1acc953fc044405e8b5656e9e2f8f2c34440aa004399",
+  "integrated_checks": {
+    "fresh_real_final_helper_slot_provisioning": true,
+    "exact_new_package_install_and_no_change_repeat": true,
+    "separate_software_and_game_approvals": true,
+    "receipt_binds_slot_helper_profile": true,
+    "descriptor_drift_blocks_approval": true,
+    "ordinary_receipts_not_automatically_migrated": true,
+    "retained_helper_standalone_launch": true,
+    "exact_repair_remove_reinstall_preserves_shared_engine_and_profile": true,
+    "acceptance_startup_separate_home_without_personal_state_copy": true,
+    "target_acceptance": "owner-reported successful candidate test; per-action checklist not supplied"
+  },
+  "host": {
+    "flatpak": "1.14.6",
+    "display": "X11",
+    "arch": "x86_64"
+  },
+  "software": {
+    "flycast": {
+      "app_id": "org.flycast.Flycast",
+      "version": "v2.7",
+      "commit": "86ec4d845a66ff07cdba8e003d8549e93cd7a814b519766e1f744e530c5d3e5b",
+      "runtime": "org.freedesktop.Platform/x86_64/25.08",
+      "runtime_commit": "d27f7a6a974e40b061070bec1be9e1b52a7a6872b271e6a45c2c34a48bf6fedf",
+      "graphics": "OpenGL 4.6, Mesa Intel Iris Xe",
+      "software_storage_approx_gib": 3.2
+    },
+    "uzdoom": {
+      "app_id": "org.zdoom.UZDoom",
+      "version": "5.0.1",
+      "commit": "d7b8ce76e5480a28d1e07400093a20d47f56c201fd974b0a5dbfa3b26bbd587e",
+      "runtime": "org.freedesktop.Platform/x86_64/25.08",
+      "runtime_commit": "d27f7a6a974e40b061070bec1be9e1b52a7a6872b271e6a45c2c34a48bf6fedf",
+      "graphics": "Vulkan, NVIDIA T500",
+      "software_storage_approx_gib": 2.2
+    }
+  },
+  "checks": {
+    "fresh_final_path_provisioning": true,
+    "sandbox_app_and_runtime_paths_use_own_slot": true,
+    "normal_related_graphics_extensions_installed": true,
+    "managed_app_masks_verified": true,
+    "two_profiles_share_one_engine_slot": true,
+    "home_and_all_xdg_sentinels_persist_on_relaunch": true,
+    "other_profile_inaccessible_in_sandbox": true,
+    "media_read_only": true,
+    "hod2_windowed_opengl_hle_boot": true,
+    "flycast_separate_vmu_creation_and_idle_relaunch_persistence": true,
+    "uzdoom_vanilla_doom2_separate_saves_and_profile_a_reload": true,
+    "other_profile_files_unchanged_during_engine_runs": true,
+    "brutal_doom_canonical_content_order": true,
+    "brutal_doom_original_script_diagnostics_match": true,
+    "normal_installs_remotes_profile_files_unchanged": true,
+    "original_reference_media_and_mods_unchanged": true,
+    "no_test_engine_left_running": true
+  },
+  "brutal_doom_norun_exit": 57,
+  "retained_experiment_reports": [
+    "normal-before.json",
+    "sandbox-profile-checks.json",
+    "sandbox-deployment-checks.json",
+    "engine-state-checks.json",
+    "brutal-content-check.json"
+  ],
+  "limits": [
+    "Prototype descriptors are metadata-only and must not be adopted by production selection.",
+    "Integrated helper/package approvals are private-candidate only. Partial or uncertain slots stop with retained evidence; no automatic recovery, migration, update or cleanup.",
+    "Owner reported successful candidate testing; no independently observed or separately described fullscreen, Start, aim, fire, reload or gameplay checklist.",
+    "Flycast VMU check is idle persistence, not a game-earned save.",
+    "UZDoom real save/reload is vanilla Doom II, not Brutal Doom gameplay or save acceptance.",
+    "Known Brutal Doom voxel script diagnostics remain explicit; matching them is content-init evidence only.",
+    "Install-then-pin retained an extra Flycast runtime; no automatic slot/runtime cleanup or update policy.",
+    "No new package, launcher or catalog publication."
+  ]
+}

@@ -36,6 +36,16 @@ def probe(*args):
 
 def detect():
     """Prefer an existing user install, then an existing system-wide install; prepare only in user scope."""
+    return _detect(("user", "system"))
+
+
+def discover():
+    """Inspect both default scopes without changing either installation."""
+    return [facts for scope in ("user", "system")
+            if (facts := _detect((scope,)))["installed"]]
+
+
+def _detect(scopes):
     facts = {"provider": "flatpak", "scope": "user", "app_id": APP,
              "flatpak_available": bool(shutil.which("flatpak")), "installed": False,
              "remote_present": False, "version": None, "commit": None,
@@ -43,7 +53,7 @@ def detect():
              "capability_note": "Installation metadata alone does not verify CLI flags, CUE launch or lightgun behavior."}
     if not facts["flatpak_available"]:
         return facts
-    for scope in ("user", "system"):
+    for scope in scopes:
         if APP in probe("list", "--" + scope, "--app", "--columns=application").splitlines():
             facts.update(scope=scope, installed=True, launch_argv=["flatpak", "run", "--" + scope, APP],
                          location=f"Flatpak ({'your user account' if scope == 'user' else 'system-wide'})")

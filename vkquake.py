@@ -17,6 +17,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+import zipfile
 from pathlib import Path
 
 from dependencies import DependencyError, emit
@@ -238,8 +239,8 @@ def running(facts):
         raise DependencyError(f"Cannot inspect vkQuake processes: {e}") from e
 
 
-def make_plan(facts):
-    return {"plan_version": 1, "operation": "prepare-dependency", "dependency": "vkquake",
+def make_plan(facts, context=None):
+    plan = {"plan_version": 1, "operation": "prepare-dependency", "dependency": "vkquake",
             "scope": "user", "dependencies": {"vkquake": facts}, "actions": [],
             "dependency_commands": [], "dependency_download": None if facts["installed"] else {
                 "url": ASSET_URL, "version": VERSION, "size": ASSET_SIZE,
@@ -249,6 +250,14 @@ def make_plan(facts):
             "notes": ["No upgrades, elevation, engine execution or personal/game file changes.",
                       "Only exact pinned official AppImage bytes are reused.",
                       "Host prerequisites do not establish gameplay readiness."]}
+    if context is not None and context.get("package_root"):
+        import enyo
+        if enyo.enabled(context["package_root"], context["package_digest"]):
+            plan["source_download"] = enyo.download_plan(context)
+            plan["downloads"] = [download for download in (
+                plan["dependency_download"], plan["source_download"]) if download is not None]
+            plan["notes"].append("Episode Enyo is obtained from its publisher, never bundled by Momentum.")
+    return plan
 
 
 def _cancel(context):
@@ -349,7 +358,7 @@ def run(context):
         if not supported():
             code, outcome, message = 20, "needs_action", "The pinned vkQuake AppImage requires Linux x86_64."
         elif phase == "preflight":
-            plan = make_plan(facts)
+            plan = make_plan(facts, context)
             message = "Review the exact pinned user-scope AppImage download or verified reuse."
         else:
             raw = Path(context["approved_plan_file"]).read_bytes()
@@ -360,7 +369,7 @@ def run(context):
                 raise DependencyError("Invalid approved dependency envelope.")
             plan = envelope.get("plan")
             if (envelope.get("job_id") != context["job_id"] or envelope.get("phase") != "preflight"
-                    or envelope.get("outcome") != "succeeded" or plan != make_plan(facts)):
+                    or envelope.get("outcome") != "succeeded" or plan != make_plan(facts, context)):
                 code, outcome, message = 30, "conflicted", "Dependency facts changed; review a new preflight plan."
             elif not facts["installed"]:
                 target = target_path()
@@ -400,6 +409,9 @@ def run(context):
                 _write_durable(journal, (json.dumps(record, sort_keys=True) + "\n").encode())
                 emit("step_completed", "Verified AppImage published; no engine was launched.", step="resolve")
                 _cancel(context)
+            if code == 0 and plan.get("source_download"):
+                import enyo
+                enyo.prepare(context, journal, attempts, completed, facts)
     except Cancelled as e:
         code, outcome, message = 130, "cancelled", str(e)
         if stage is not None:
@@ -408,7 +420,7 @@ def run(context):
             _fsync_dir(target.parent)
             record.update(active_command=None, detection_pending=False)
             _write_durable(journal, (json.dumps(record, sort_keys=True) + "\n").encode())
-    except (DependencyError, OSError, ValueError, KeyError) as e:
+    except (DependencyError, OSError, ValueError, KeyError, zipfile.BadZipFile) as e:
         code, outcome, message = 40, "failed", str(e)
         print(message, file=sys.stderr)
     finally:

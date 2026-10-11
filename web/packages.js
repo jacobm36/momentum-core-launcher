@@ -202,7 +202,7 @@ function packageInput(field, detail) {
 
 function softwareLocation(facts) {
   const where = facts.installed && facts.location
-    ? `<p class="bnote">Using your existing copy: <span class="pkg-path">${esc(facts.location)}</span></p>` : "";
+    ? `<p class="bnote">${facts.managed ? "Using Momentum's tested isolated engine" : "Using your existing copy"}: <span class="pkg-path">${esc(facts.location)}</span></p>` : "";
   const skipped = (facts.skipped || []).map(s => `<p class="bnote">Found <span class="pkg-path">${esc(s.path)}</span>: ${esc(s.reason)}
     ${facts.installed ? "" : ` Momentum will install its tested copy at <span class="pkg-path">${esc(facts.executable || facts.root || "")}</span> instead.`}</p>`).join("");
   return where + skipped;
@@ -227,6 +227,16 @@ function softwareEvidenceNote(facts, target) {
 }
 
 function compatibilityNotice(detail) {
+  if (detail.managed_fallback) {
+    const fallback = detail.managed_fallback;
+    return `<section class="pkg-warning"><strong>Prepare a tested engine for this game</strong>
+      <p>${fallback.test_mode ? "Isolated-engine test mode is enabled." : "No tested existing copy was found."}
+      Momentum can prepare ${esc(fallback.target.version)}
+      separately, leaving your current engine untouched. Review and approve this first, then approve the game installation.</p>
+      <p>Allow at least ${Math.ceil(fallback.space_required_bytes / 1073741824)} GiB free.
+      This game will use separate settings and saves; existing profiles are not imported.</p>
+      <details><summary>Engine and state locations</summary>${packageJson(fallback)}</details></section>`;
+  }
   const guidance = detail.compatibility;
   if (!guidance) return "";
   return `<section class="pkg-warning"><strong>${esc(guidance.title)}</strong>
@@ -261,7 +271,7 @@ async function selectPackage(id, version) {
           : flatpak.installed ? `Required software is installed (${esc(flatpak.version || "version unknown")}). It will not be automatically upgraded.`
           : "Momentum will prepare the software this game needs. Review required downloads first; after compatibility checks, review the game files in the same setup job."}</p>
         ${softwareLocation(flatpak)}
-        ${softwareEvidenceNote(flatpak, detail.dependency_targets?.[flatpakId])}
+        ${detail.managed_fallback ? "" : softwareEvidenceNote(flatpak, detail.dependency_targets?.[flatpakId])}
         <p class="pkg-warning">${detail.install_enabled
           ? "This game setup is supported by compatibility evidence. Installation still requires review and approval of this plan; confirm gameplay for your installation afterward."
           : "This package and software build need matching compatibility evidence. Momentum checks before changing game files."}</p>
@@ -275,6 +285,8 @@ async function selectPackage(id, version) {
         <p class="pkg-warning">Installer checks do not certify gameplay. Confirm controls, display and saved progress for this installation.</p>
         <details><summary>Technical software details</summary>${packageJson(native)}</details>` : ""}
       ${compatibilityNotice(detail)}
+      ${detail.engine_selection ? `<details><summary>Engine selection and supported builds</summary>
+        ${packageJson(detail.engine_selection)}</details>` : ""}
       ${prerequisiteNotes(detail.host_prerequisites)}
       <form id="pkg-setup">
         <h3>Your game files</h3>
@@ -384,6 +396,10 @@ async function reviewPackagePlan(id) {
         ${packageJson(plan.downloads)}
         <p class="pkg-warning">Shared software and verified source caches remain after removal. QBJ3 source download is about 2.7 GB; allow about 17 GiB free for a fresh setup.</p>` : ""}
       ${Array.isArray(plan.dependency_commands) ? `<h3>Software required for this game</h3>
+        ${plan.managed_engine ? `<p class="pkg-warning"><strong>Prepare a tested isolated engine</strong>
+          Your existing engine is not changed. This download goes into a separate Momentum-owned installation,
+          with separate settings and saves for this game. Allow at least ${Math.ceil(plan.space_required_bytes / 1073741824)} GiB free.</p>
+          <p class="pkg-path">${esc(plan.slot)}</p>` : ""}
         <p class="bnote">${plan.dependency_download
           ? "Momentum will download the required software from its pinned official GitHub release for your account. No administrator access or automatic upgrade is requested."
           : plan.dependency_commands.length ? "Momentum will download the required software from Flathub for your account. No administrator access or automatic upgrade is requested."
@@ -395,9 +411,12 @@ async function reviewPackagePlan(id) {
       <ul>${(plan.manual_actions || []).map(a => `<li>${esc(a.message || a.action_id)}</li>`).join("") || "<li>No manual actions listed.</li>"}</ul>
       <details><summary>Complete saved plan (including hashes and inventories)</summary>${packageJson(plan)}</details>
       ${job.approval_blocked ? (compatibilityNotice(job) || `<p class="pkg-warning">${esc(job.approval_blocked)}</p>`) : ""}
+      ${prerequisiteNotes(job.host_prerequisites)}
+      ${job.engine_selection ? `<details><summary>Engine selection and supported builds</summary>
+        ${packageJson(job.engine_selection)}</details>` : ""}
       <label class="pkg-check"><input type="checkbox" id="plan-consent" ${job.approval_blocked ? "disabled" : ""}>I approve the listed changes.</label>
       <div class="btns"><button type="button" id="plan-close" autofocus>Close</button><button type="button" id="plan-cancel">Cancel job</button>
-        <button type="button" id="plan-approve" class="primary" disabled>${plan.operation === "prepare-dependency" ? (plan.downloads ? "Approve software / source preparation" : "Approve required software") : "Approve and install"}</button></div>`;
+        <button type="button" id="plan-approve" class="primary" disabled>${plan.managed_engine ? "Prepare tested isolated engine" : plan.operation === "prepare-dependency" ? (plan.downloads ? "Approve software / source preparation" : "Approve required software") : "Approve and install"}</button></div>`;
     const approve = d.querySelector("#plan-approve");
     d.querySelector("#plan-consent").onchange = e => { approve.disabled = !e.target.checked || Boolean(job.approval_blocked); };
     d.onclick = async e => {

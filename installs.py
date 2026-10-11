@@ -21,6 +21,9 @@ import compatibility
 import dependencies
 import supermodel
 import vkquake
+import enyo
+import engines
+import managed_flatpak
 import uzdoom
 import eduke32
 import ironwail
@@ -297,7 +300,9 @@ class Installs:
         facts = {}
         dependency_targets = {}
         supported_software = {}
+        engine_selection = {}
         host_prerequisites = []
+        managed_fallback = None
         flatpak_prerequisite_added = False
         for req in man["requires"]:
             runtime = req["id"]
@@ -357,20 +362,29 @@ class Installs:
         supported = (
             package_id == evidence["package_id"] and (version, summary["digest"]) in approved_packages
             and not summary["platform_issues"])
+        revision = next((p for p in evidence.get("derived_packages", [])
+                         if (p["version"], p["digest"]) == (version, summary["digest"])), {})
+        flycast_builds = [{"version": evidence["emulator_version"], "commit": evidence["emulator_commit"]},
+                         *[{key: build[key] for key in ("version", "commit")}
+                           for build in revision.get("additional_software", [])]]
+        selection = engines.select(flycast, flycast_builds, dependencies.discover if supported else None)
+        expected_flycast = selection.build
+        if supported:
+            flycast = selection.facts
+            facts["flycast"] = flycast
+            engine_selection["flycast"] = selection.details()
         enabled = (
             supported
             and flycast.get("installed") is True
-            and flycast.get("version") == evidence["emulator_version"]
-            and flycast.get("commit") == evidence["emulator_commit"])
+            and flycast.get("version") == expected_flycast["version"]
+            and flycast.get("commit") == expected_flycast["commit"])
         if supported:
             supported_software["flycast"] = {
-                "version": evidence["emulator_version"], "commit": evidence["emulator_commit"]}
+                "version": expected_flycast["version"], "commit": expected_flycast["commit"]}
             dependency_targets["flycast"] = {
-                "version": evidence["emulator_version"], "commit": evidence["emulator_commit"]}
+                "version": expected_flycast["version"], "commit": expected_flycast["commit"]}
         if enabled:
             flycast["capabilities_checked"] = True
-            revision = next((p for p in evidence.get("derived_packages", [])
-                             if (p["version"], p["digest"]) == (version, summary["digest"])), {})
             flycast["capability_note"] = (
                 revision["basis"] if revision.get("gameplay") == "not-tested-for-this-package" else
                 "HOD2 gameplay was validated on this Flycast build. Approved artwork-only package revisions "
@@ -393,13 +407,19 @@ class Installs:
             if supported:
                 runtime = record["runtime"]
                 current = facts.get(runtime, {})
-                expected = record["software"]
+                builds = compatibility.software_builds(record)
+                selection = engines.select(current, builds,
+                    RUNTIME_RESOLVERS[runtime].discover if runtime == "uzdoom" else None)
+                expected = selection.build
+                current = selection.facts
+                facts[runtime] = current
+                engine_selection[runtime] = selection.details()
                 supported_software[runtime] = expected
                 if isinstance(expected.get("commit"), str):
                     dependency_targets[runtime] = {
                         key: expected[key] for key in ("version", "commit") if key in expected}
                 enabled = (len(facts) == 1 and current.get("installed") is True
-                           and all(current.get(k) == v for k, v in expected.items()))
+                           and engines.matches(current, expected))
                 if enabled:
                     if runtime in ("supermodel", "vkquake", "uzdoom", "eduke32", "ironwail"):
                         if runtime == "vkquake":
@@ -424,6 +444,52 @@ class Installs:
                         current["capabilities_checked"] = True
                         current["capability_note"] = record["limits"]
                         current["capability_evidence"] = str(path.relative_to(Path(__file__).parent))
+        runtime = next(iter(facts), None)
+        contract = man.get("extensions", {}).get("managed_engine")
+        if supported and runtime in managed_flatpak.BUILDS and contract == managed_flatpak.CONTRACT:
+            if man["extensions"].get("managed_helper_sha256") != _hash_file(Path(managed_flatpak.__file__)):
+                raise InstallError("This package's retained engine helper differs from this launcher. "
+                                   "Use the matching private candidate; no engine preparation was started.")
+            previous = self._load_receipt(package_id)
+            old = (previous or {}).get("dependencies", {}).get(runtime, {})
+            try:
+                if old.get("managed"):
+                    managed_flatpak.validate_binding(old["managed"])
+                    current = managed_flatpak.facts(runtime, package_id)
+                elif (not enabled or os.environ.get("MCL_TEST_ISOLATED_ENGINES") == "1") and (
+                        (facts[runtime].get("installed") or os.environ.get("MCL_TEST_ISOLATED_ENGINES") == "1")
+                        and facts[runtime].get("flatpak_available") and not previous):
+                    enabled = False
+                    current = managed_flatpak.facts(runtime, package_id)
+                    if current is None:
+                        managed_fallback = {
+                            "runtime": runtime, "target": managed_flatpak.BUILDS[runtime],
+                            "slot": str(managed_flatpak.slot(runtime)),
+                            "profile": str(managed_flatpak.root() / "state" / package_id / "engine-profile-v1"),
+                            "space_required_bytes": managed_flatpak.SPACE[runtime],
+                            "test_mode": os.environ.get("MCL_TEST_ISOLATED_ENGINES") == "1",
+                            "existing": engines.identity(facts[runtime])}
+                else:
+                    current = None
+                if current is not None:
+                    current["capabilities_checked"] = True
+                    current["capability_evidence"] = "docs/shared-engine-fallback-evidence.json"
+                    facts[runtime] = current
+                    supported_software[runtime] = {
+                        key: current[key] for key in ("version", "commit")}
+                    engine_selection[runtime]["status"] = "managed"
+                    engine_selection[runtime]["selected"] = engines.identity(current)
+                    enabled = True
+                elif previous and old and engines.identity(old) != engines.identity(facts[runtime]):
+                    enabled = False
+                    host_prerequisites.append({
+                        "title": "Existing engine binding must be preserved",
+                        "reason": "This installation's recorded engine is not the selected copy. "
+                                  "Engine/profile migration is not automatic.",
+                        "instruction": "Keep the existing installation. Review repair or migration before changing its engine.",
+                        "packages": [], "commands": []})
+            except managed_flatpak.ManagedError as exc:
+                raise InstallError(str(exc)) from exc
         if not flatpak_prerequisite_added:
             for runtime in ("flycast", "uzdoom"):
                 current = facts.get(runtime)
@@ -435,13 +501,15 @@ class Installs:
         return dict(summary, manifest=man, home_games=str(Path.home() / "Games"), dependencies=facts,
                     dependency_targets=dependency_targets,
                     supported_software=supported_software,
+                    engine_selection=engine_selection,
+                    managed_fallback=managed_fallback,
                     host_prerequisites=host_prerequisites,
                     compatibility=compatibility.guidance(summary["platform_issues"], supported, enabled,
                                                          host_prerequisites, facts),
                     install_enabled=enabled, package_supported=supported)
 
     @staticmethod
-    def _dependency_steps(runtime="flycast", target=None):
+    def _dependency_steps(runtime="flycast", target=None, fallback=None, package_id=None):
         if runtime not in RUNTIME_RESOLVERS:
             raise InstallError(f"Unsupported dependency resolver: {runtime}")
         helper = str(Path(__file__).with_name(RUNTIME_RESOLVERS[runtime].__name__ + ".py"))
@@ -454,6 +522,13 @@ class Installs:
         if runtime in ("flycast", "uzdoom") and target and target.get("commit"):
             for step in steps:
                 step["context"]["target_commit"] = target["commit"]
+        if fallback is not None:
+            for step in steps:
+                step["argv"][1] = str(Path(__file__).with_name("managed_flatpak.py"))
+                step["context"].update(runtime=runtime, package_id=package_id,
+                                       existing=fallback["existing"])
+                step["name"] = ("Review tested isolated engine" if
+                                step["context"]["phase"] == "preflight" else "Prepare tested isolated engine")
         return steps
 
     def before_step(self, job, index):
@@ -461,7 +536,18 @@ class Installs:
         if not meta.get("prepare_required_software") or index != 2:
             return None
         detail = self.package_details(meta["package_id"], meta["package_version"])
+        detail_status = {"compatibility": detail.get("compatibility"),
+                         "host_prerequisites": _json_copy(detail.get("host_prerequisites", [])),
+                         "engine_selection": _json_copy(detail.get("engine_selection", {})),
+                         "supported_software": _json_copy(detail.get("supported_software", {}))}
         if detail["digest"] != meta["package_digest"] or not detail["install_enabled"]:
+            with self.jobs.lock:
+                meta.update(detail_status)
+                self.jobs._save(job)
+            guidance = detail.get("compatibility")
+            if detail["digest"] == meta["package_digest"] and guidance:
+                return ("needs-action", guidance["title"] + ": " + guidance["message"]
+                        + " No game files were installed.")
             return ("needs-action", "Required game software is not a validated build for this package. "
                     "No game files were installed; Momentum needs updated compatibility evidence.")
         source = None
@@ -473,7 +559,17 @@ class Installs:
                 return ("needs-action", f"Mod source verification failed: {e}")
             if source is None:
                 return ("needs-action", "Approved QBJ3 source preparation did not produce a complete source.")
+        elif "vkquake" in detail["dependencies"] and enyo.enabled(
+                job["steps"][2]["context"]["package_root"], meta["package_digest"]):
+            ctx = job["steps"][2]["context"]
+            try:
+                source = enyo.source_for(ctx["inputs"], ctx["package_root"], ctx["package_digest"])
+            except dependencies.DependencyError as e:
+                return ("needs-action", f"Enyo source verification failed: {e}")
+            if source is None:
+                return ("needs-action", "Approved Enyo download did not produce verified source files.")
         with self.jobs.lock:
+            meta.update(detail_status)
             for step in job["steps"][2:]:
                 step["context"]["dependencies"] = _json_copy(detail["dependencies"])
                 if source is not None:
@@ -594,7 +690,9 @@ class Installs:
                 "game_directory": game_dir, "paths": paths, "manifest": {"name": man["name"]},
                 "install_enabled": detail["install_enabled"],
                 "compatibility": detail.get("compatibility"),
+                "host_prerequisites": detail.get("host_prerequisites", []),
                 "supported_software": detail.get("supported_software", {}),
+                "engine_selection": detail.get("engine_selection", {}),
                 "catalog_defaults": {**man["catalog"], "name": man["name"], "icon": paths["icon"]}}
         runtime = next(iter(deps), None)
         prepare_source = False
@@ -606,15 +704,27 @@ class Installs:
             prepare_source = mod is None
             if mod is not None:
                 inputs["mod_dir"] = str(mod)
-        if detail["package_supported"] and runtime and (not deps[runtime].get("installed") or prepare_source):
-            steps = self._dependency_steps(runtime, detail.get("dependency_targets", {}).get(runtime)) + steps
-            if runtime == "ironwail":
+        elif runtime == "vkquake" and enyo.enabled(str(snap), base["package_digest"]):
+            try:
+                mod = enyo.source_for(inputs, str(snap), base["package_digest"])
+            except dependencies.DependencyError as e:
+                raise InstallError(str(e)) from e
+            prepare_source = mod is None
+            if mod is not None:
+                inputs["mod_dir"] = str(mod)
+        fallback = detail.get("managed_fallback")
+        if detail["package_supported"] and runtime and (not deps[runtime].get("installed") or prepare_source or fallback):
+            steps = self._dependency_steps(runtime, detail.get("dependency_targets", {}).get(runtime),
+                                           fallback, package_id) + steps
+            if runtime == "ironwail" or (runtime == "vkquake" and enyo.enabled(str(snap), base["package_digest"])):
                 for step in steps[:2]:
                     step["context"].update(package_root=str(snap), package_digest=base["package_digest"],
                                            inputs=_json_copy(inputs), game_directory=game_dir)
                     step["name"] = ("Check required software and mod download" if
                                     step["context"]["phase"] == "preflight" else "Prepare required software and mod source")
             meta["prepare_required_software"] = True
+            if fallback:
+                meta["managed_fallback"] = fallback
         return self.jobs.submit(f"Install {man['name']}", steps, game=package_id, meta=meta)
 
     def approve(self, jid, digest):
@@ -636,10 +746,18 @@ class Installs:
                     return "Package changed since preflight; cancel and review a new job"
                 if preparing and not detail["package_supported"]:
                     return "This game package lacks matching target evidence"
+                if preparing and meta.get("managed_fallback") != detail.get("managed_fallback"):
+                    return "Isolated engine selection changed; start a new setup review."
                 if not preparing and (not meta.get("install_enabled") or not detail["install_enabled"]):
                     if detail.get("compatibility"):
                         return detail["compatibility"]["title"] + ": " + detail["compatibility"]["message"]
                     return "This exact game package/software build lacks matching installer capability evidence"
+                if not preparing:
+                    planned = job["steps"][-1]["context"].get("dependencies", {})
+                    for runtime in ("flycast", "uzdoom"):
+                        if runtime in planned and engines.identity(planned[runtime]) != engines.identity(
+                                detail["dependencies"].get(runtime, {})):
+                            return "Selected engine installation changed; start a new review before approval."
                 if self._load_receipt(meta["package_id"]) != previous:
                     return "Installation receipt changed since preflight; cancel and review a new job"
                 if "flycast" in detail["dependencies"] and dependencies.APP in dependencies.probe("ps", "--columns=application").splitlines():

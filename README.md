@@ -47,6 +47,38 @@ copies with temporary home directories. Existing emulator/hardware support
 still requires its own evidence. Publish only after human approval; verify
 uploaded assets before promoting the catalog.
 
+## Private acceptance bundles
+
+Build a complete local launcher with a selected set of exact-evidence candidates:
+
+```bash
+python3 tools/build-candidate.py /path/to/new-candidate.zip \
+  --package quake-slave-zero-x \
+  --package the-house-of-the-dead-2 \
+  --package brutal-doom
+```
+
+The builder rejects missing exact installer evidence, duplicate selections and
+existing output paths. It includes a testing guide and a package/build inventory,
+but no personal library, original game media, journals or home-directory settings.
+Historical Enyo bundles and Brutal Doom's bundled content remain private until applicable
+redistribution permission is established. Enyo 0.3.0 includes no mod files: it
+reuses verified source or obtains the pinned release through the publisher's
+anonymous download flow with separate approval and a retained verified cache.
+It never stores expiring download links in release metadata. This does not publish or change the
+online Store; gameplay and real fresh-system provisioning remain acceptance gates.
+Brutal Doom 0.2.0 also permits reuse of the exact tested UZDoom 5.0.3 Flathub
+commit, alongside 5.0.1. This is not a version-range exemption: unknown commits
+stay blocked and existing software is never automatically changed. New software
+preparation still defaults to the original pinned 5.0.1 build.
+HOD2 0.2.0 additionally permits the exact v2.7 runtime-26.08 Flathub commit
+after isolated acquisition, installer/repeat and windowed boot checks. This does
+not inherit old fullscreen/input/gameplay acceptance for the new build.
+Missing host prerequisites show their manual commands in setup and blocked plan
+review; return to a new setup review after installing them with system tools.
+Enyo 0.3.0 retains 0.2.2's fullscreen startup without importing laptop display
+configuration or forcing a resolution. Its wrapper accepts `-window` when needed.
+
 ## Quick start
 
 ```bash
@@ -82,10 +114,14 @@ untouched. Local package ZIPs can also be imported through **Advanced**.
 
 **Bring your games; Momentum brings the setup.** Commercial base-game data, ROMs and BIOS
 files come from you. Mod packages can include their complete distributable mod.
-The catalog includes *The House of the Dead 2*, *Virtua Cop 2*, *Star Wars Trilogy
-Arcade*, *L.A. Machineguns*, *Episode Enyo*, *Brutal Doom 64*, *Duke Nukem 3D*,
-*Brutal Doom*, *Aliens: Eradication*, *Ashes 2063: Enriched* and *Quake Brutalist Jam III*. Installer verification is separate
-from gameplay confirmation. Updates are not installed automatically.
+The current public catalog contains *Star Wars Trilogy Arcade* 0.2.1 and
+*L.A. Machineguns* 0.2.2. HOD2 remains a local candidate until publication.
+The owner accepted all five first-wave games on the debug laptop; Enyo and
+Brutal Doom remain private pending content redistribution permission.
+Other historical game releases are withdrawn pending
+acceptance under the current standard; private candidates can be tested through
+Local packages. Installer verification is separate from gameplay confirmation.
+Updates are not installed automatically.
 QBJ3 requires your Quake PAKs and uses pinned Ironwail 0.8.2. Its restricted
 mod assets are not bundled: reuse a complete extracted source or separately
 approve a pinned 2.7 GB download before the game installation review.
@@ -97,6 +133,56 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
 `video.mp4|webm`) or add it from the in-app editor.
 
 ## Setup and safety
+
+### Shared engine selection
+
+Engine discovery, package compatibility and software preparation are separate
+responsibilities. `engines.py` selects from exact package-scoped supported builds;
+adapters retain provider-specific identity, prerequisite and transaction checks.
+For Flycast and UZDoom, the preferred user/default-system installation is reused
+when tested. If an installed preferred build is untested, both default scopes are
+inspected and a tested existing copy can be chosen without modifying either.
+Untested builds are not labeled broken. Probe/identity errors remain explicit.
+
+Selection details include the chosen identity, inspected candidates and supported
+builds in setup and plan review. Scope is a reuse location, not a Flatpak version
+compatibility requirement: existing user or default-system installations may be
+reused; missing software is still prepared only in user scope after approval.
+Changing the selected installation/build after plan review requires a new review.
+Saved wrappers and receipts continue to record the chosen location.
+
+To add another engine, register its adapter in `RUNTIME_RESOLVERS`, validate its
+declared provider/source, and supply exact package/build evidence. Adapters expose
+`detect()` (preferred installation), optional `discover()` (read-only alternative
+facts), and their existing prerequisite/preparation hooks. `engines.select` owns
+deterministic matching; adapters own safe provider-specific probing and commands.
+Native providers must not inherit Flatpak's user/system scope exception.
+Discovery is lazy to avoid extra probes on an already supported setup.
+
+Existing-copy selection does not support named Flatpak installations, arbitrary
+providers or version-range exemptions. Isolated known-working fallback is
+separately gated by the exact package/helper contract below.
+The [managed fallback design](docs/shared-engine-fallback.md) uses
+build-specific user-only Flatpak slots and separately approved per-game profiles,
+with acceptance gates before it can be enabled. Its opt-in development prototype
+has passed fresh isolated provisioning, per-game sandbox state, HOD2 windowed
+boot/VMU persistence and vanilla Doom II save/reload checks. It is not wired into
+historical packages. The private HOD2/Brutal Doom 0.3.0 candidates now accept the
+explicit `momentum-flatpak-1` binding: reuse a tested existing copy first, otherwise
+offer the primary tested isolated build after separate software approval.
+The retained, hash-bound helper validates the app/dependency graph and per-game
+profile on launch. Existing receipts never silently switch engine/profile.
+There is no automatic update, migration, cleanup or deduplication.
+
+For debug acceptance without disturbing existing installations, close the old
+launcher and run `bash start-isolated-test.sh` in a new extracted private candidate.
+It uses a separate acceptance HOME under the real user's
+`~/.local/share/momentum-core/isolated-acceptance-home-v1`, forces the managed path
+only for new supported candidate installations, and retains its receipts/state
+for relaunch. Supply original media by absolute path and keep the default test
+destination. Do not run shortcut installation in this mode. Normal
+`start-candidate.sh` retains ordinary reuse behavior. Partial/uncertain slots
+stop with their journals retained; there is no automatic destructive recovery.
 
 See the [user guide](USER-GUIDE.md#notifications-installs-and-backups) for folder
 selection, separate software/game approvals, local import, cancellation and recovery.

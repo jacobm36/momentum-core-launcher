@@ -40,6 +40,20 @@ def check(archive, package_repo, distribution, launcher, public=False):
             require(source.is_dir(), "Package source directory is missing")
             require(inventory(source) == inventory(snapshot), "Source bytes/modes differ from the ZIP")
             manifest = json.loads((snapshot / "package.json").read_text())
+            if manifest.get("extensions", {}).get("managed_engine") is not None:
+                require(manifest["extensions"]["managed_engine"] == "momentum-flatpak-1",
+                        "Unrecognized managed engine binding contract")
+                helper_sha = hashlib.sha256((launcher / "managed_flatpak.py").read_bytes()).hexdigest()
+                require(manifest["extensions"].get("managed_helper_sha256") == helper_sha,
+                        "Package managed helper differs from delivered launcher bytes")
+                managed_evidence = json.loads((launcher / "docs/shared-engine-fallback-evidence.json").read_text())
+                require(managed_evidence.get("retained_helper_sha256") == helper_sha and
+                        f"{info['id']} {info['version']}" in managed_evidence.get("candidate_enabled_for", []),
+                        "Delivered launcher lacks matching managed helper/package evidence")
+            if manifest.get("extensions", {}).get("mod_download") is not None:
+                import enyo
+                require(enyo.enabled(snapshot, info["digest"]), "Unrecognized publisher source declaration")
+                require(not (snapshot / "game-data").exists(), "Publisher-download package still bundles mod files")
             repository_root = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=package_repo,
                                              capture_output=True, text=True, check=True).stdout.strip()
             require(Path(repository_root).resolve() == package_repo.resolve(),
@@ -71,8 +85,19 @@ def check(archive, package_repo, distribution, launcher, public=False):
                 if declared in requirement:
                     require(requirement[declared] == software.get(expected_key),
                             f"Evidence software {expected_key} mismatch")
-            if "tested_version" in requirement:
+            if requirement.get("tested_version") is not None:
                 require(requirement["tested_version"] == software.get("version"), "Evidence software version mismatch")
+            for additional in compatibility.software_builds(evidence)[1:]:
+                require(evidence["runtime"] in ("uzdoom", "flycast") and software.get("provider") == "flatpak",
+                        "Additional software builds require explicit Flatpak runtime evidence")
+                require(set(additional) == set(software), "Additional build evidence fields differ")
+                for key in set(software) - {"version", "commit"}:
+                    require(additional[key] == software[key], f"Additional build {key} mismatch")
+                require(isinstance(additional["version"], str) and additional["version"].strip(),
+                        "Additional build version missing")
+                require(isinstance(additional["commit"], str)
+                        and re.fullmatch(r"[a-f0-9]{64}", additional["commit"]),
+                        "Additional build exact commit missing")
             data = json.loads((distribution / "catalog.json").read_text())
             catalog.validate(data)
             entry = next((g for g in data["games"] if g["id"] == info["id"]), None)

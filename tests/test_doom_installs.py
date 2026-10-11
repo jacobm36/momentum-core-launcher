@@ -14,7 +14,8 @@ import jobs
 import packages
 import uzdoom
 
-PACKAGE_REPO = Path(__file__).resolve().parents[2] / "momentum-packages"
+PACKAGE_REPO = Path(os.environ.get("MCL_PACKAGE_REPO",
+                                  str(Path(__file__).resolve().parents[2] / "momentum-packages")))
 GAME_ID = "brutal-doom-64"
 VERSION = "5.0.1"
 COMMIT = "d7b8ce76e5480a28d1e07400093a20d47f56c201fd974b0a5dbfa3b26bbd587e"
@@ -26,30 +27,45 @@ def write_iwad(path):
                      b"".join(struct.pack("<ii8s", 12, 0, name.encode()) for name in names))
 
 
-def fake_flatpak(path, marker, scope="user", commit=COMMIT):
+def fake_flatpak(path, marker, scope="user", commit=COMMIT, app="org.zdoom.UZDoom", version=VERSION,
+                 competing_user_commit=None):
     path.write_text(f"""#!/usr/bin/env python3
 from pathlib import Path
 import sys
 args=sys.argv[1:]
 ready=Path({str(marker)!r})
 scope={scope!r}
-app='org.zdoom.UZDoom'
+app={app!r}
+commit={commit!r}
+competing_user_commit={competing_user_commit!r}
+if competing_user_commit and '--user' in args:
+    scope='user'
+    commit=competing_user_commit
+if ready.exists() and ready.read_text()=='unpinned': commit='b'*64
 if args[0]=='ps': pass
 elif args[0]=='remotes': print('flathub\\thttps://dl.flathub.org/repo/')
 elif args[0]=='list':
     if '--runtime' in args: print('org.freedesktop.Platform/x86_64/25.08')
-    elif ready.exists() and '--'+scope in args: print(app+'\\tx86_64\\tstable\\tflathub')
+    elif ready.exists() and '--'+scope in args:
+        print(app if '--columns=application' in args else app+'\\tx86_64\\tstable\\tflathub')
 elif args[0]=='info':
     if not ready.exists(): sys.exit(1)
-    if '--show-commit' in args: print({commit!r})
+    if '--show-commit' in args: print(commit)
     elif '--show-ref' in args: print('runtime/org.freedesktop.Platform/x86_64/25.08' if args[-1].startswith('org.freedesktop.Platform/') else 'app/'+app+'/x86_64/stable')
     elif '--show-metadata' in args: print('[Application]\\nname='+app+'\\nruntime=org.freedesktop.Platform/x86_64/25.08\\ncommand=uzdoom')
     elif '--show-origin' in args: print('flathub')
     elif '--show-runtime' in args: print('org.freedesktop.Platform/x86_64/25.08')
-    else: print('Ref: app/'+app+'/x86_64/stable\\nVersion: {VERSION}\\nCommit: {commit}\\nArch: x86_64\\nBranch: stable\\nOrigin: flathub\\nRuntime: org.freedesktop.Platform/x86_64/25.08')
+    else: print('Ref: app/'+app+'/x86_64/stable\\nVersion: {version}\\nCommit: '+commit+'\\nArch: x86_64\\nBranch: stable\\nOrigin: flathub\\nRuntime: org.freedesktop.Platform/x86_64/25.08')
+elif args[0]=='remote-info':
+    assert '--commit='+{commit!r} in args
+    print('Commit: '+{commit!r})
 elif args[0]=='install':
-    assert '--user' in args and '--noninteractive' in args and 'app/'+app+'/x86_64/stable' in args
-    ready.touch()
+    assert '--user' in args and '--noninteractive' in args and (app in args or 'app/'+app+'/x86_64/stable' in args)
+    ready.write_text('unpinned')
+elif args[0]=='update':
+    assert '--user' in args and '--noninteractive' in args and '--commit='+{commit!r} in args
+    assert ready.exists()
+    ready.write_text('pinned')
 else: sys.exit('Unexpected Flatpak operation; game launches forbidden: '+str(args))
 """)
     path.chmod(0o755)

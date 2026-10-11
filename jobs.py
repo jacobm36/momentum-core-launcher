@@ -290,10 +290,13 @@ class Jobs:
                         raise ValueError("no resolved plan was supplied")
                 except (OSError, ValueError, StopIteration) as e:
                     out["plan_error"] = f"Cannot review this plan: {e}"
+            if (j.get("meta") or {}).get("kind") == "install":
+                out["engine_selection"] = j["meta"].get("engine_selection", {})
             if ((j.get("meta") or {}).get("kind") == "install" and not j["meta"].get("install_enabled")
                     and (out.get("plan") or {}).get("operation") != "prepare-dependency"):
                 guidance = j["meta"].get("compatibility")
                 out["compatibility"] = guidance
+                out["host_prerequisites"] = j["meta"].get("host_prerequisites", [])
                 out["supported_software"] = j["meta"].get("supported_software", {})
                 out["dependencies"] = (out.get("plan") or {}).get("dependencies", {})
                 out["approval_blocked"] = (guidance["message"] if guidance else

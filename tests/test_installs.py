@@ -626,6 +626,71 @@ class InstallsTests(unittest.TestCase):
             with self.assertRaisesRegex(installs.InstallError, "Unsupported dependency resolver"):
                 self.inst.package_details("untested-game", "0.1.0")
 
+    def test_additional_uzdoom_build_requires_exact_commit_and_package(self):
+        discovery = mock.patch("uzdoom.discover", return_value=[])
+        discovery.start()
+        self.addCleanup(discovery.stop)
+        snapshot = self.root / "snapshot"
+        snapshot.mkdir()
+        requirement = {"id": "uzdoom", "provider": "flatpak", "scope": "user",
+                       "source": "flathub", "app_id": installs.uzdoom.APP, "tested_version": "5.0.1"}
+        (snapshot / "package.json").write_text(json.dumps({"requires": [requirement]}))
+        record = next(r for r in installs.compatibility.records(Path(installs.__file__).parent)
+                      if r["id"] == "brutal-doom" and r["version"] == "0.2.0")
+        additional = record["additional_software"][0]
+        summary = {"digest": record["digest"], "platform_issues": []}
+        for installed, version, commit, package_id, enabled in (
+            (True, additional["version"], additional["commit"], "brutal-doom", True),
+            (True, additional["version"], "a" * 64, "brutal-doom", False),
+            (True, "5.0.4", additional["commit"], "brutal-doom", False),
+            (False, None, None, "brutal-doom", False),
+            (True, additional["version"], additional["commit"], "aliens-eradication", False),
+        ):
+            facts = dict(additional, installed=installed, version=version, commit=commit,
+                         flatpak_available=True)
+            with self.subTest(version=version, commit=commit, package=package_id), \
+                    mock.patch("packages.snapshot_path", return_value=snapshot), \
+                    mock.patch("packages.check", return_value=summary), \
+                    mock.patch("uzdoom.detect", return_value=facts), \
+                    mock.patch("uzdoom.check_host", return_value={"metadata_checked": True}) as host:
+                detail = self.inst.package_details(package_id, "0.2.0")
+                self.assertEqual(detail["install_enabled"], enabled)
+                self.assertEqual(host.call_count, int(enabled))
+                if package_id == "brutal-doom":
+                    expected = additional if enabled else record["software"]
+                    self.assertEqual(detail["supported_software"]["uzdoom"], expected)
+                    self.assertEqual(detail["dependency_targets"]["uzdoom"]["commit"], expected["commit"])
+
+    def test_additional_flycast_build_is_exact_and_limited_to_current_candidate(self):
+        discovery = mock.patch("dependencies.discover", return_value=[])
+        discovery.start()
+        self.addCleanup(discovery.stop)
+        snapshot = self.root / "snapshot"
+        snapshot.mkdir()
+        (snapshot / "package.json").write_text(json.dumps({"requires": [{
+            "id": "flycast", "provider": "flatpak", "scope": "user",
+            "app_id": installs.dependencies.APP}]}))
+        evidence = json.loads((Path(installs.__file__).parent / "docs/hod2-target-evidence.json").read_text())
+        current = next(p for p in evidence["derived_packages"] if p["version"] == "0.2.0")
+        additional = current["additional_software"][0]
+        for commit, version, revision, enabled in (
+            (additional["commit"], "v2.7", current, True),
+            ("a" * 64, "v2.7", current, False),
+            (additional["commit"], "v2.8", current, False),
+            (additional["commit"], "v2.7",
+             next(p for p in evidence["derived_packages"] if p["version"] == "0.1.2"), False),
+        ):
+            summary = {"digest": revision["digest"], "platform_issues": []}
+            with self.subTest(commit=commit, version=version, package_version=revision["version"]), \
+                    mock.patch("packages.snapshot_path", return_value=snapshot), \
+                    mock.patch("packages.check", return_value=summary), \
+                    mock.patch.object(self.inst, "_flycast_facts", return_value={
+                        "installed": True, "version": version, "commit": commit}):
+                detail = self.inst.package_details("the-house-of-the-dead-2", revision["version"])
+                self.assertEqual(detail["install_enabled"], enabled)
+                self.assertEqual(detail["dependency_targets"]["flycast"]["commit"],
+                                 additional["commit"] if enabled else evidence["emulator_commit"])
+
     def test_runtime_helpers_preserve_approval_steps_and_reject_unknown_runtime(self):
         for runtime, filename in (("flycast", "dependencies.py"), ("supermodel", "supermodel.py"),
                                   ("vkquake", "vkquake.py"), ("uzdoom", "uzdoom.py"), ("eduke32", "eduke32.py")):

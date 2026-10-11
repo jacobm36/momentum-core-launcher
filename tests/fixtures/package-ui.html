@@ -203,7 +203,22 @@ async function until(fn) {
   check($("#rdlg").textContent.includes("/home/test/backups/game"), "backup shown");
   check($("#rdlg").textContent.includes("Confirm aiming"), "manual setup shown");
   check($("#plan-approve").disabled && $("#plan-consent").disabled, "capability gate disables approval");
-  $("#plan-close").click(); blockApproval = false;
+  $("#plan-close").click();
+  plan.compatibility = { reason: "host-prerequisites", title: "Action required: install system prerequisites",
+    message: "Run the commands below yourself, then return and start a new setup review." };
+  plan.host_prerequisites = [{ title: "vkQuake host libraries are missing",
+    reason: "FUSE2 is missing.", instruction: "Run in a terminal yourself.",
+    commands: [["sudo", "apt", "update"], ["sudo", "apt", "install", "-y", "libfuse2t64"]] }];
+  plan.engine_selection = { flycast: { status: "untested", candidates: [
+    { scope: "user", version: "untested-engine" },
+    { scope: "system", version: "another-untested-engine" }] } };
+  await reviewPackagePlan(job.id);
+  check($("#rdlg").textContent.includes("Action required"), "prerequisite action prominent in plan review");
+  check($("#rdlg").textContent.includes("sudo apt install -y libfuse2t64"), "blocked review shows exact prerequisite command");
+  check($("#plan-consent").disabled, "manual commands do not bypass approval");
+  check($("#rdlg").textContent.includes("another-untested-engine"), "all inspected engine copies shown");
+  $("#plan-close").click(); delete plan.compatibility; delete plan.host_prerequisites;
+  delete plan.engine_selection; blockApproval = false;
   await reviewPackagePlan(job.id);
   $("#plan-consent").click(); check(!$("#plan-approve").disabled, "plan consent enables approval");
   failApprove = true; $("#plan-approve").click(); await until(() => !$("#rdlg .pkg-error").hidden);
@@ -256,6 +271,16 @@ async function until(fn) {
   check($("#plan-approve").textContent.includes("required software"), "game-focused software approval");
   check($("#plan-approve").disabled, "dependency approval also requires explicit consent");
   $("#plan-close").click();
+  plan.plan.managed_engine = "momentum-flatpak-1";
+  plan.plan.space_required_bytes = 6 * 1073741824;
+  plan.plan.slot = "/home/test/isolated/engine";
+  await reviewPackagePlan(job.id);
+  check($("#rdlg").textContent.includes("Your existing engine is not changed"), "isolated preparation explains preservation");
+  check($("#rdlg").textContent.includes("6 GiB"), "isolated storage requirement visible");
+  check($("#plan-approve").textContent.includes("tested isolated engine"), "isolated engine approval is explicit");
+  check($("#plan-approve").disabled, "isolated preparation requires consent");
+  $("#plan-close").click();
+  delete plan.plan.managed_engine; delete plan.plan.space_required_bytes; delete plan.plan.slot;
   plan.plan.dependency_commands = [];
   plan.plan.dependency_download = { url: "https://github.com/trzy/Supermodel/releases/download/pinned/runtime.tar.gz", sha256: "a".repeat(64) };
   await reviewPackagePlan(job.id);
@@ -285,6 +310,15 @@ async function until(fn) {
   check($("#pdlg").textContent.includes("All four Brutal Doom 64 mod files"), "complete Doom mod bundle explained");
   check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "UZDoom retains separate package trust");
   $("#pdlg").close();
+  detail.managed_fallback = { target: { version: "5.0.1" }, space_required_bytes: 4 * 1073741824,
+    slot: "/home/test/isolated/engine", profile: "/home/test/isolated/profile", test_mode: true };
+  detail.compatibility = { reason: "software-mismatch", title: "Untested existing engine", message: "No tested existing copy." };
+  openPackages(); await selectPackage("test-game", "1.0.0");
+  check($("#pdlg").textContent.includes("Prepare a tested engine for this game"), "fallback offered prominently");
+  check($("#pdlg").textContent.includes("test mode is enabled"), "explicit acceptance mode is labeled");
+  check(!$("#pdlg").textContent.includes("block this installation"), "fallback does not claim the version conflict is unresolvable");
+  check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "fallback does not bypass package trust");
+  $("#pdlg").close(); delete detail.managed_fallback; delete detail.compatibility;
   check(jobSub({ kind: "dependency", status: "succeeded" }).includes("No game installed"), "dependency success does not imply game success");
   detail.dependencies = { eduke32: { installed: false, provider: "native", scope: "user" } };
   detail.manifest.inputs[0].help = "Choose DUKE3D.GRP's folder. All three Duke enhancement packs are already included.";

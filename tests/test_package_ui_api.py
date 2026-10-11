@@ -165,6 +165,39 @@ class PackageUiApi(Base):
         self.assertFalse(self.catalog)
         self.assertEqual(self.request(f"/api/jobs/{jid}/cancel", {})[0], 200)
 
+    def test_blocked_prerequisite_commands_survive_job_restart(self):
+        data = self.upload()
+        status, reply = self.request("/api/packages/install", {
+            "id": data["id"], "version": data["version"], "trusted_digest": data["digest"],
+            "inputs": {"source_dir": str(self.t), "games_root": str(self.t / "Games")}})
+        self.assertEqual(status, 200, reply)
+        jid = reply["id"]
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and self.runner.get(jid)["status"] in jobs.RUNNING:
+            time.sleep(.02)
+        self.assertEqual(self.runner.get(jid)["status"], "awaiting-approval")
+        prerequisites = [{"title": "FUSE2 missing", "commands": [
+            ["sudo", "apt", "update"], ["sudo", "apt", "install", "-y", "libfuse2t64"]]}]
+        with self.runner.lock:
+            job = self.runner.jobs[jid]
+            job["meta"].update(engine_selection={"flycast": {"status": "untested",
+                                "candidates": [{"scope": "user"}, {"scope": "system"}]}},
+                               host_prerequisites=prerequisites, compatibility={
+                "reason": "host-prerequisites", "title": "Action required",
+                "message": "Install the system prerequisites."})
+            self.runner._save(job)
+        self.runner.close()
+        self.runner = jobs.Jobs(self.app / "jobs")
+        self.inst.jobs = self.runner
+        server.JOBS = self.runner
+        status, detail = self.request(f"/api/jobs/{jid}")
+        self.assertEqual(status, 200)
+        self.assertEqual(detail["host_prerequisites"], prerequisites)
+        self.assertEqual(detail["compatibility"]["reason"], "host-prerequisites")
+        self.assertEqual(len(detail["engine_selection"]["flycast"]["candidates"]), 2)
+        self.assertTrue(detail["approval_blocked"])
+        self.assertFalse((self.app / "jobs" / jid / "approved-plan.json").exists())
+
     def test_existing_installation_keeps_recorded_folder(self):
         data = self.upload()
         old = self.t / "Games" / "Old Name, The (USA)"
@@ -195,6 +228,9 @@ class PackageUiApi(Base):
         self.assertFalse(self.runner.list())
 
     def test_target_evidence_enables_only_matching_package_digest_and_emulator_commit(self):
+        discovery = mock.patch("dependencies.discover", return_value=[])
+        discovery.start()
+        self.addCleanup(discovery.stop)
         evidence_path = Path(server.__file__).parent / "docs/hod2-target-evidence.json"
         evidence = json.loads(evidence_path.read_text())
         snapshot = self.t / "evidence-snapshot"

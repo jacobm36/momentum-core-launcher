@@ -5,6 +5,10 @@ from pathlib import Path
 RELEASE_URL = "https://github.com/jacobm36/momentum-distribution/releases/latest"
 
 
+def software_builds(record):
+    return [record["software"], *record.get("additional_software", [])]
+
+
 def records(launcher):
     docs = Path(launcher) / "docs"
     result = []
@@ -19,6 +23,7 @@ def records(launcher):
             "software": {"provider": hod["provider"], "scope": hod["scope"],
                          "app_id": hod["app_id"], "version": hod["emulator_version"],
                          "commit": hod["emulator_commit"]},
+            "additional_software": revision.get("additional_software", []),
         })
     return result
 
@@ -42,13 +47,14 @@ def guidance(platform_issues, supported, enabled, prerequisites, facts):
                            "the publisher must validate this version; do not bypass approval.",
                 "url": RELEASE_URL}
     if prerequisites:
-        return {"reason": "host-prerequisites", "title": "Host prerequisites need attention",
-                "message": "Follow the prerequisite instructions below, then start a new setup review. "
-                           "Updating Momentum alone will not install these system packages."}
+        return {"reason": "host-prerequisites", "title": "Action required: install system prerequisites",
+                "message": "Run the commands below yourself, then return and start a new setup review. "
+                           "Momentum does not install these system packages automatically."}
     if not enabled and any(f.get("installed") for f in facts.values()):
-        return {"reason": "software-mismatch", "title": "Installed software is not the supported build",
-                "message": "Check the required and detected software details below. Momentum leaves existing "
-                           "software untouched; a launcher update does not automatically make this build compatible."}
+        return {"reason": "software-mismatch", "title": "This installed engine build has not been validated",
+                "message": "No tested existing copy was found for this package. This is not proof that the "
+                           "engine is broken. Check the supported and detected builds below. Momentum leaves "
+                           "existing copies untouched; automatic upgrades and downgrades are not performed."}
     if not enabled:
         return {"reason": "software-missing", "title": "Required software needs preparation",
                 "message": "Review the required software preparation before installing the game."}

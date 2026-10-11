@@ -15,7 +15,8 @@ import jobs
 import packages
 import vkquake
 
-PACKAGE_REPO = Path(__file__).resolve().parents[2] / "momentum-packages"
+PACKAGE_REPO = Path(os.environ.get("MCL_PACKAGE_REPO",
+                                  str(Path(__file__).resolve().parents[2] / "momentum-packages")))
 GAME_ID = "quake-slave-zero-x"
 
 
@@ -69,7 +70,7 @@ class QuakeInstalls(unittest.TestCase):
             catalog = app / "games.json"
             catalog.write_text("[]")
             with mock.patch.dict(os.environ, {"HOME": str(home)}):
-                info = packages.import_package(PACKAGE_REPO / "dist/quake-slave-zero-x-0.2.1.zip", app)
+                info = packages.import_package(PACKAGE_REPO / "dist/quake-slave-zero-x-0.2.2.zip", app)
                 runner = jobs.Jobs(app / "jobs")
                 inst = installs.Installs(app, threading.Lock(), lambda: json.loads(catalog.read_text()),
                                         lambda gs: installs._write_atomic(catalog, json.dumps(gs).encode()), runner)
@@ -83,10 +84,10 @@ class QuakeInstalls(unittest.TestCase):
                     return self.wait(runner, jid)
 
                 def submit():
-                    return inst.submit_install(GAME_ID, "0.2.1", str(source), trusted_digest=info["digest"])
+                    return inst.submit_install(GAME_ID, "0.2.2", str(source), trusted_digest=info["digest"])
 
                 def operation(name, receipt, template):
-                    detail = inst.package_details(GAME_ID, "0.2.1")
+                    detail = inst.package_details(GAME_ID, "0.2.2")
                     context = dict(template, operation=name, previous_receipt=receipt,
                                    dependencies=detail["dependencies"])
                     steps = [{"name": f"{name} {phase}", "protocol": True, "approve_after": phase == "preflight",
@@ -94,7 +95,7 @@ class QuakeInstalls(unittest.TestCase):
                               "argv": ["bash", f"{name}.sh", "--context", "{context_file}", "--phase", phase],
                               "cwd": context["package_root"], "context": dict(context, phase=phase)}
                              for phase in ("preflight", "apply")]
-                    meta = {"kind": "install", "package_id": GAME_ID, "package_version": "0.2.1",
+                    meta = {"kind": "install", "package_id": GAME_ID, "package_version": "0.2.2",
                             "package_digest": info["digest"], "operation": name,
                             "game_directory": receipt["game_directory"], "paths": receipt["paths"],
                             "install_enabled": True, "catalog_defaults": {
@@ -126,7 +127,7 @@ class QuakeInstalls(unittest.TestCase):
                     self.assertFalse((game / "unrelated-mod").exists())
                     launcher = Path(receipt["paths"]["launcher"]).read_text()
                     self.assertIn("-game enyo", launcher)
-                    self.assertNotIn("-fullscreen", launcher)
+                    self.assertIn("-game enyo -fullscreen", launcher)
                     if missing:
                         return
                     template = runner.jobs[jid]["steps"][-1]["context"].copy()
