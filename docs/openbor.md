@@ -1,9 +1,9 @@
-# Private Marvel Infinity War candidate
+# Marvel Infinity War setup
 
 This is a bounded integration for Marvel Infinity War with the supplied OpenBOR
-6391 runtime, not a general OpenBOR manager. The owner accepted the private r1
-candidate on the debug PC and approved the unchanged 0.2.0 package for the public
-store. The frontend and candidate bundles remain private.
+6391 runtime, not a general OpenBOR manager. Version 0.2.0 is published in the
+public store and has owner-reported debug-PC acceptance. The frontend and
+launcher bundles remain private.
 
 - The package carries the exact tested AppImage and its verified extracted native
   runtime. Preparation uses the extracted files and needs no FUSE, engine download,
@@ -25,13 +25,13 @@ store. The frontend and candidate bundles remain private.
   launcher-served media on first association only. Existing library artwork
   stays unchanged.
 
-Host library checks do not certify graphics, audio or input. The prior manual
-setup used Ubuntu 24.04 x86_64 and an 8BitDo SNES Pro, with fullscreen and **CRT
+Host library checks do not certify graphics, audio or input. The configuration
+was tested on Ubuntu 24.04 x86_64 with an 8BitDo SNES Pro, fullscreen and **CRT
 scanlines TV**. Other controllers may require in-game remapping. Do not claim
 universal controller support, a fully tested campaign, or packaged gameplay
-acceptance from that earlier evidence.
+acceptance beyond the reported checks.
 
-## Debug PC test
+## Installation and controls
 
 Extract the complete private candidate to a new folder. Close any other Momentum
 server and run `bash start-isolated-test.sh`. This uses the existing isolated
@@ -39,8 +39,8 @@ acceptance HOME, leaving normal games, engines and receipts untouched. Always
 relaunch the candidate with the same script; do not install desktop shortcuts
 from isolated mode.
 
-Choose **Add game > Browse the package store > Local packages > Marvel Infinity
-War**. For online setup, leave downloading checked and the optional offline
+Choose **Add game > Browse the package store > Marvel Infinity War**, or import
+a supplied installer through **Local packages**. For online setup, leave downloading checked and the optional offline
 folder blank. Allow at least 2 GiB free temporary/destination space plus the
 candidate bundle. Review engine preparation, then the separate game download
 and install plan. A repeated complete install should not download again.
@@ -50,9 +50,7 @@ audio, progression beyond the tutorial, normal exit and relaunch. Confirm that
 settings and saved progress persist. To remap, use Control Options > Player 1:
 press Enter on an action, release Enter, then press the controller input.
 
-The automated lifecycle test exercises verify, repair, and game-only
-removal/reinstall through the actual runner. This candidate does not add new
-buttons for those operations. Your debug-PC acceptance focuses on installation,
-gameplay and relaunch; do not manually delete game files to simulate removal.
+Verify, repair and game-only removal/reinstall are available through the package
+runner, not dedicated new UI buttons. Do not manually delete game files to simulate removal.
 Keep failed jobs and their journals for diagnosis rather than deleting them or
 bypassing checks. Additional OpenBOR versions remain outside this scope.

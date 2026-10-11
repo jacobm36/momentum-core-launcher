@@ -42,6 +42,8 @@ NEW_FILES = (
     "docs/openbor-runtime-index.json", "docs/openbor-installer-evidence.json",
     "docs/openbor.md",
     "tests/fixtures/library-media.html",
+    "docs/delivery-layout.md", "docs/acceptance-history.md", "tools/runtime-files.json",
+    "docs/history/shared-engine-fallback-design.md",
 )
 PRIVATE_ROOTS = {"jobs", "packages", "media", "backups", "logs", ".git", "__pycache__"}
 PRIVATE_FILES = {"games.json", "stats.json", "playstats.json"}
@@ -53,15 +55,31 @@ def main(argv=None):
     parser.add_argument("--package-repo", type=Path, default=HERE.parent / "momentum-packages")
     parser.add_argument("--package", choices=sorted(PRIVATE_CANDIDATES), action="append",
                         help="Include only these local candidates; repeat for each game. Never publishes.")
+    parser.add_argument("--runtime-only", action="store_true",
+                        help="Ship the explicit runtime inventory, omitting developer tests/tools/instructions.")
+    parser.add_argument("--launcher-only", action="store_true",
+                        help="Bundle no game packages; games can still be imported or obtained from the store.")
     args = parser.parse_args(argv)
-    selected = args.package or list(CANDIDATES)
+    if args.launcher_only and args.package:
+        parser.error("--launcher-only cannot be combined with --package.")
+    selected = [] if args.launcher_only else args.package or list(CANDIDATES)
     if len(selected) != len(set(selected)):
         parser.error("Do not select the same package twice.")
     if args.output.exists():
         parser.error("Output already exists; use a new filename instead of overwriting it.")
-    tracked = subprocess.check_output(["git", "ls-files", "-z", "--", "."], cwd=HERE)
-    files = {Path(name.decode()) for name in tracked.split(b"\0") if name}
-    files.update(Path(name) for name in NEW_FILES)
+    if args.runtime_only:
+        inventory = json.loads((HERE / "tools/runtime-files.json").read_text())["files"]
+        if len(inventory) != len(set(inventory)):
+            raise ValueError("Runtime inventory contains duplicate paths.")
+        for name in inventory:
+            packages.check_path(name)
+        files = {Path(name) for name in inventory}
+        if any(path.parts[0] in PRIVATE_ROOTS or path.name in PRIVATE_FILES for path in files):
+            raise ValueError("Runtime inventory includes personal data.")
+    else:
+        tracked = subprocess.check_output(["git", "ls-files", "-z", "--", "."], cwd=HERE)
+        files = {Path(name.decode()) for name in tracked.split(b"\0") if name}
+        files.update(Path(name) for name in NEW_FILES)
     files = sorted(p for p in files if p.parts[0] not in PRIVATE_ROOTS and p.name not in PRIVATE_FILES)
     for path in files:
         source = HERE / path
@@ -109,7 +127,7 @@ def main(argv=None):
                 "Use normal start-candidate.sh to find this user's installed game shortcuts.\n"
                 "Isolated test mode sees only the separate acceptance HOME's shortcuts.\n\n"
                 "Use Add game > Browse the package store > Local packages for bundled candidates. The online Store\n"
-                "lists the five approved public games. Supply your own\n"
+                "lists the six approved public games. Supply your own\n"
                 "original media; source and destination must not overlap. Missing host\n"
                 "prerequisites have manual system commands; no automatic administrator access.\n"
                 "Review software preparation separately from the game installation plan.\n\n"
@@ -143,7 +161,7 @@ def main(argv=None):
                 "Verify, repeat install, repair, and game-only removal/reinstall should\n"
                 "preserve settings/progress and the engine. Edited managed content blocks\n"
                 "removal for explicit reconciliation rather than silently deleting it.\n"
-                "Do not publish this sixth-title private candidate.\n"
+                "The game package is published separately; this launcher bundle stays private.\n"
                 "\nEnyo: supply Quake id1/pak0.pak and pak1.pak. Mod files are not bundled;\n"
                 "reuse verified Enyo files or approve a direct publisher download separately.\n"
                 "Fullscreen is requested on\n"
@@ -151,15 +169,24 @@ def main(argv=None):
                 "HOD2: supply USA CUE plus matching BIN tracks together. Confirm Flycast\n"
                 "Start/trigger mappings; dedicated right-click reload is not yet verified.\n"
                 "Brutal Doom, if included: supply DOOM2.WAD. Canonical three-mod order is\n"
-                "bundled for private testing. Component redistribution rights remain unresolved;\n"
-                "public publication is blocked. Shared UZDoom settings remain untouched.\n"
+                "bundled in the published package. Shared UZDoom settings remain untouched.\n"
             )
             if selected == ["marvel-infinity-war"]:
                 guide = ("Momentum private OpenBOR debug-PC candidate\n\n"
                          "Extract into a NEW folder. Do not overwrite your existing launcher.\n"
                          "Run bash start-isolated-test.sh from that extracted folder.\n"
-                         "Only Marvel Infinity War 0.2.0 is included; nothing is published.\n\n"
+                         "Only Marvel Infinity War 0.2.0 is bundled. The game package is\n"
+                         "published separately; this frontend bundle remains private.\n\n"
                          + (HERE / "docs/openbor.md").read_text())
+            if args.launcher_only:
+                guide = ("Momentum private launcher-only bundle\n\n"
+                         "No game packages or personal data are bundled. The online store and\n"
+                         "local package import remain available. Close the old launcher and\n"
+                         "extract into a NEW folder; run bash start-candidate.sh. For separate\n"
+                         "test state, run bash start-isolated-test.sh instead. Normal mode uses\n"
+                         "the same user's installed-game receipts; do not delete journals.\n"
+                         "See USER-GUIDE.md for current use and docs/delivery-layout.md for\n"
+                         "repository versus shipped contents. This does not publish a frontend.\n")
             fd, temporary_zip = tempfile.mkstemp(prefix=".momentum-candidate-", suffix=".zip",
                                                  dir=args.output.parent)
             os.close(fd)
@@ -175,6 +202,7 @@ def main(argv=None):
                     bundle.writestr(f"{prefix}/candidate-build.json",
                                     json.dumps({"scope": "private-acceptance-only",
                                                 "launcher_base_revision": revision,
+                                                "delivery_profile": "runtime" if args.runtime_only else "acceptance",
                                                 "launcher_file_sha256": launcher_files,
                                                 "packages": delivery}, indent=2) + "\n")
                 os.link(staged, args.output)

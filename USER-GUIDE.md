@@ -4,14 +4,13 @@ One window to launch all your games.
 
 The supported public catalog contains SWTA 0.2.1, L.A. Machineguns 0.2.2,
 HOD2, Brutal Doom and Episode Enyo 0.3.0, and Marvel Infinity War 0.2.0.
-Use the current private launcher for these packages. Other historical installers are withdrawn pending current-standard
-acceptance; their downloads remain for reference. Existing installations are
-not removed. Startup no longer needs `curl`: Python performs bounded local
+Use the current private launcher for these packages. Existing installations are
+not removed when the catalog changes. Python performs bounded local
 server checks. Missing Python or `flock` must be installed through your system
 tools; Momentum never elevates itself automatically. Failed startup reports
 the server log at `~/.cache/momentum-core-launcher/server.log`.
 
-## Local acceptance candidate
+## Package setup and recovery
 
 ### When approval is blocked
 
@@ -41,42 +40,27 @@ uncertain dependency transactions block automatic recovery. The screen explains
 the reason and tells you to retain the journal and consult the log. Pending
 catalog recovery resumes on restart. Do not delete journals to unblock installs.
 
-The October 9 public launcher release contains the same exact-build evidence
-and runtime/recovery helpers as the accepted local candidate. Game ZIPs are
-downloaded separately through **Add game**. Update the launcher before using
-SWTA 0.2.1 or L.A. Machineguns 0.2.2; old launchers lack their evidence.
+### Using a supplied launcher bundle
 
-The acceptance bundle is a complete, separate launcher, not a four-file patch.
-Extract it into a new folder without replacing an existing launcher. Run
-`bash start-candidate.sh` from that folder. It refuses to reuse an already
-responding launcher and defaults to a normal window. It does not change desktop
-shortcuts, install system dependencies, import old jobs or delete old data.
+Extract a complete private launcher bundle into a new folder, without replacing
+an existing launcher. Run `bash start-candidate.sh` for a normal window. It
+refuses to reuse an already responding server and does not change shortcuts.
+Use the same entrypoint for subsequent launches.
 
-Use **Add game → Local packages / import...** to select the bundled SWTA
-0.2.1, L.A. Machineguns 0.2.2, Episode Enyo 0.2.1 or HOD2 0.2.0.
-These are local candidates, not necessarily the versions in the public catalog.
-Brutal Doom 0.2.0 installer validation is recorded, but its archive is not bundled
-pending approval of voxel-addon redistribution rights.
+For separate test state, run `bash start-isolated-test.sh` instead. It uses an
+acceptance HOME under your real
+`~/.local/share/momentum-core/isolated-acceptance-home-v1`; always relaunch with
+that script and do not install desktop shortcuts in isolated mode.
 
-The candidate has exact package/build installer evidence. Changing a package
-or using a different emulator build still blocks approval; missing host
-prerequisites still require the displayed manual Ubuntu commands. Existing
-supported engines are reused in place. New games use `~/Games/<package-id>`.
-Receipts and game state remain shared user data even when the launcher folder
-is different; a separate folder is not an isolated test account.
+Normal mode uses the same user's receipts and installed games even when the
+launcher folder differs. New games use `~/Games/<package-id>`; existing receipts
+retain their recorded directories. Originals, existing engines and player state
+are preserved. Installer validation is separate from gameplay acceptance.
 
-Installer tests use synthetic media and do not prove fresh-system gameplay,
-graphics capability, calibration or input. Native Supermodel/vkQuake acquisition
-is tested in disposable homes; Flatpak acquisition/pinning is covered by
-command-level tests rather than a newly provisioned Ubuntu machine.
-SWTA retains stock credit settings (**3** for credit, **1** for Start); free play
-is a manual cabinet setting. Episode Enyo does not import root `vkQuake.cfg` or
-force the reference laptop's display mode.
-
-L.A. Machineguns 0.2.2 seeds absent isolated NVRAM with the clean calibration
-confirmed on the reference and debug laptops. It never overwrites existing
-NVRAM, including older uncalibrated state; existing installations may still
-need manual AIM SET. Calibration persists across launches.
+Bundles may include selected installers or just the launcher. Use **Add game >
+Browse the package store > Local packages / import...** for bundled/local
+installers, or choose a current title from the online store. See
+[delivery contents](docs/delivery-layout.md) for what is included.
 
 ## 1. Opening the launcher
 
@@ -91,7 +75,7 @@ video cannot load or autoplay, the background falls back to the cover.
 If the icon is ever missing, or you move the project folder, run:
 
 ```bash
-cd ~/Projects/GamesRepo/momentum-core-launcher
+cd /path/to/your/momentum-core-launcher
 ./install.sh
 ```
 
@@ -127,9 +111,9 @@ Typing in the search box filters by game name or tag. If your controller isn't d
 - **Confirmations** (Remove, Exit, Discard) are plain dialogs: D-pad to a button and press A, or B to cancel.
 - Choosing a file from disk and drag-and-drop still need a mouse. Pasting a link or using the Steam lookup is the controller-friendly way to add art.
 
-## 2d. Fullscreen
+### Fullscreen
 
-The launcher opens as a fullscreen kiosk by default: no window frame, title bar or taskbar. Use the **⏻** button (section 2e) to exit, since there is no close button. Alt+F4 also works.
+The launcher opens as a fullscreen kiosk by default: no window frame, title bar or taskbar. Use the **⏻** button to exit, since there is no close button. Alt+F4 also works.
 
 To use a normal maximized window instead (with a title bar, and the **⛶** / F11 fullscreen toggle), run `MCL_WINDOWED=1 ./launch.sh`, or in the app-menu entry change the `Exec=` line to `env MCL_WINDOWED=1 /path/to/launch.sh`. The **⛶** button only appears in windowed mode.
 
@@ -143,11 +127,11 @@ not apply to Wayland. Game fullscreen, input settings and saves are unchanged.
 
 If the launcher was already open when you start it again, Chrome reuses that window. Exit first, then reopen.
 
-## 2e. Exiting
+### Exiting
 
 Click the **⏻** button in the sidebar, or press **Ctrl+Q** (**Esc** only clears the search box), and confirm (use ←/→ or ↑/↓ to switch between Cancel and Exit, Enter to choose, Esc to cancel) to close the launcher window and its background server. Games you started keep running. If an install is still running, only the window closes: the install carries on in the background and the server stops once it finishes. Reopen the launcher to check on it. Closing the window with the window's own close button still works too, and the server stops by itself shortly afterwards.
 
-## 2a. Animations and intro
+### Animations and intro
 
 - A short Momentum splash plays when the launcher opens. Press any key, click, or press a gamepad button to skip it.
 - Switching games fades in the background art and slides in the title and description. The art drifts slowly, the grid pulses, and PLAY glows gently.
@@ -158,11 +142,11 @@ Click the **⏻** button in the sidebar, or press **Ctrl+Q** (**Esc** only clear
 - **Controller rumble:** with a gamepad connected, it buzzes when you launch a game (a strong build-up), switch categories, save or favorite, and on errors or removals. A **📳** button appears next to 🔊 while a gamepad is connected; click it (or press A on it) to turn rumble off. Rumble works even if sound is muted, and not every controller or browser supports it.
 - Click **✨ On** next to **+ Add game** to turn all of this off (it then shows **✨ Off**). The setting is remembered, and the effects are also off automatically if your system is set to reduce motion.
 
-## 2b. Sound effects
+### Sound effects
 
 Short synthesized sounds play for moving through the list, switching category, opening the form, saving, removing, errors and launching a game. There are no audio files to manage. Click the **🔊** button next to **✨** to mute (**🔇**). The setting is remembered. The splash intro builds a rising turbine-like whoosh with climbing arcade synth notes, then crests in a punchy electronic hit and short echo; it is switched off with the 🔇 button and with ✨ Off, which skips the intro. The launcher icon starts Chrome with autoplay allowed so the intro sound works without a click. If you open the page in a normal browser tab instead and hear nothing at first, click or press a key once; browsers only allow sound after you interact with the page.
 
-## 2c. Play tracking
+### Play tracking
 
 - Every launch is recorded: when you last played, how many times, and how long.
 - The game page shows a line like "Last played 2 hours ago · 5 launches · 3h 20m played".
@@ -187,13 +171,18 @@ momentum-core-launcher/
 ├── dependencies.py       ← read-only Flycast detection and approved user-scope dependency preparation
 ├── packages.py           ← imports and checks install packages (folder or ZIP)
 ├── mcl_intent.py         ← helper install packages use to record changes before making them
-├── tests/                ← automated tests (python3 -m unittest discover -s tests)
+├── docs/                 ← user references and required runtime compatibility evidence
 ├── server.py             ← small local server that starts games
 ├── launch.sh             ← what the icon runs
 ├── install.sh            ← creates the app menu + Desktop icon
-├── import_games.py       ← imports games from .desktop shortcuts
-└── cleanup_shortcuts.py  ← moves old Desktop shortcuts to a backup (app menu untouched)
+└── import_games.py       ← command-line shortcut import
 ```
+
+The source repository and full acceptance bundles also contain `tests/`,
+developer `tools/` and the optional legacy `cleanup_shortcuts.py` utility.
+Runtime-only deliveries omit those development files. Personal data and
+recovery journals are not disposable application files; see
+[repository versus delivery contents](docs/delivery-layout.md).
 
 ## 4. Managing games in the launcher
 
@@ -284,20 +273,7 @@ Games with no cover get a colored background instead. Press Ctrl+Shift+R in the 
 
 The sidebar groups games by their `category` value. Groups appear in the order they first show up in `games.json`. Use the ▲ ▼ arrows on a category heading to reorder them, or the ✎ button to rename one (see section 4). Games with no category are listed under "Other".
 
-## 7. Removing the old shortcuts
-
-Once everything launches from the launcher:
-
-```bash
-./cleanup_shortcuts.py          # preview what would be moved
-./cleanup_shortcuts.py --apply  # move old Desktop shortcuts to a backup (app-menu launchers stay)
-./cleanup_shortcuts.py --menu --apply  # also move the app-menu launchers
-./cleanup_shortcuts.py --restore  # put them back
-```
-
-Only shortcuts whose launch command matches a game in `games.json` are moved. They go to `~/.local/share/momentum-core-launcher-shortcut-backup/`. Steam, Discord and Chrome apps are never touched.
-
-## 8. Troubleshooting
+## 7. Troubleshooting
 
 | Problem | Fix |
 |---|---|
@@ -310,9 +286,9 @@ Only shortcuts whose launch command matches a game in `games.json` are moved. Th
 | Port in use | Set another port: `MCL_PORT=48000 ./launch.sh` |
 | Controller not responding | Press a button once and make sure the launcher window is focused. |
 
-## 9. Good to know
+## 8. Good to know
 
-- The launcher only runs commands listed in `games.json`, and only accepts requests from your own computer. It goes online only when you use Steam lookup or paste a link.
+- Game launches use commands listed in `games.json`; approved package setup also runs the reviewed installer and software-preparation steps. The server only accepts local requests. Store browsing/downloads, approved game/source acquisition, Steam lookup and pasted media links use the internet.
 - The launcher rewrites `games.json` when you add, edit, remove or reorder games. Keep a backup copy if you've hand-edited it heavily.
 - Closing the launcher doesn't close games you started. They keep running on their own.
 - It needs Python 3 and Chrome or Chromium. Otherwise it falls back to your default browser.
@@ -337,17 +313,16 @@ Only shortcuts whose launch command matches a game in `games.json` are moved. Th
   - **Add a supported game:**
     1. Choose **+ Add game → Browse the package store** (or **Add game...** in **Installs & jobs**) and select a supported game.
     2. Momentum downloads and checks the installer from its public GitHub distribution repository. No GitHub account is required. It checks the ZIP size/checksum, package identity/digest and platform; no installer scripts run during downloading.
-    3. Under **Where are your game files?**, use **Choose folder...** to select the folder described by that game's setup screen, or type/paste its full path. For HOD2, it contains your USA CUE and matching BIN tracks; Virtua Cop 2 needs its Japan GDI and all 39 tracks; the Model 3 games need their named ROM ZIP kept zipped. The optional installation folder has the same picker. Cancelling leaves the path unchanged. Native selection requires Zenity or KDialog; if unavailable, Momentum shows an error and you can still enter paths manually. No game files are uploaded through the browser. Review trust, request the installation plan, then approve its changes. Your original files stay untouched.
+    3. Under **Where are your game files?**, use **Choose folder...** to select the folder described by that game's setup screen, or type/paste its full path. HOD2 needs your USA CUE and matching BIN tracks together; the Model 3 games need their named ROM ZIP kept zipped. Marvel Infinity War can download its pinned game archive or use the exact offline PAK. The optional installation folder has the same picker. Cancelling leaves the path unchanged. Native selection requires Zenity or KDialog; if unavailable, Momentum shows an error and you can still enter paths manually. No game files are uploaded through the browser. Review trust, request the installation plan, then approve its changes. Your original files stay untouched.
     4. Downloads show progress and can be cancelled. Closing the interface leaves a download running. Reopen **Installs & jobs → Continue setup**, or select the game again after it finishes. Failed downloads can be retried; incomplete files are discarded. Downloads are not completed game installations.
-    - The catalog includes HOD2, Virtua Cop 2, Star Wars Trilogy Arcade, L.A. Machineguns, Episode Enyo, Brutal Doom 64, Duke Nukem 3D, Brutal Doom, Aliens: Eradication, Ashes 2063: Enriched and Quake Brutalist Jam III. Momentum selects required software; there are no emulator choices or automatic package upgrades. An internet connection is needed to load the public catalog/download new installers. Errors are shown rather than silently falling back to stale data.
+    - The public catalog contains the six titles listed at the top of this guide. Momentum selects required software; there are no emulator choices or automatic package upgrades. An internet connection is needed to load the public catalog/download new installers. Errors are shown rather than silently falling back to stale data.
     - **System prerequisites are never installed by Momentum and never require passwordless sudo.** If Flatpak is missing, the package screen provides `sudo apt update` and `sudo apt install -y flatpak`; if an emulator lacks required host libraries, it identifies the missing library and shows its known Ubuntu package; Episode Enyo lists `libfuse2t64` and/or `libvulkan1`; and a pinned EDuke32 source build lists its compiler/development packages. Run the displayed commands yourself in a terminal, then retry the job or reopen setup. An unknown library is named but never guessed. Flatpak installs, remotes and runtimes are user-scope only; Momentum does not install or update system-wide software.
     - For a package with exact Flatpak build evidence, a missing UZDoom or Flycast is prepared in user scope and pinned to that evidence-backed commit before any game files are changed. The approved plan shows the commands. A current Flathub build is never silently accepted as compatible; if Flathub no longer offers the tested commit, preparation stops and the package remains blocked until evidence is refreshed. Already-installed engines, including system-wide engines, are not downgraded or otherwise changed.
-    - **Episode Enyo** bundles the complete Slave Zero X mod. Choose your Quake folder containing `id1/pak0.pak` and `id1/pak1.pak`; you do not need to download or select the mod separately. Existing `enyo` settings/saves are copied without modifying originals. Momentum uses the pinned official vkQuake 1.36.0 AppImage, never the Snap build. FUSE2 and Vulkan loaders are prerequisites, not gameplay certification. Confirm display, controls, audio and save/relaunch; no fullscreen or new control mapping is forced. Game-only removal retains base copies, settings, saves and the shared engine.
-    - **Brutal Doom 64** bundles all four mod files in the guide's loading order. Choose the folder containing `DOOM2.WAD`. Momentum reuses the exact compatible UZDoom 5.0.1 Flatpak in user or default-system scope; missing software is prepared only for your account after separate approval. No GZDoom/Zandronum fallback, persistent sandbox overrides or forced video/input settings. UZDoom settings/saves remain under `~/.var/app/org.zdoom.UZDoom/`. Runtime metadata checks do not prove graphical gameplay; confirm controls, display, sound and save/relaunch.
-    - **Brutal Doom**, **Aliens: Eradication** and **Ashes 2063: Enriched** use the same approved UZDoom flow and require your `DOOM2.WAD`. Brutal Doom preserves the v21 baseline: Doom Metal Volume 5 is included but enabled only with `~/.local/bin/brutal-doom --metal`; the incompatible Complete voxel addon is excluded. Aliens 2.0 loads its TC before the eight-map campaign; enable/bind mouse-look, jumping and crouching, with dynamic lights/dark sector lighting recommended. Ashes follows the exact Enriched 2.23 main PK3, without the undocumented Freedoom patch or copied engine resources. Each has separate game content/artwork and preserved original data; shared UZDoom preferences/saves remain untouched. See each included player guide and legal notices, and confirm actual gameplay.
-    - **Duke Nukem 3D** includes the complete upscale, voxel and SC-55 music packs. Choose the folder containing registered original/Atomic `DUKE3D.GRP`; optional `DUKE.RTS` and root settings/saves are copied without touching originals. Native EDuke32 is reused from guide locations or built from pinned official source after separate approval, without elevation. Missing Ubuntu build prerequisites require system setup; unknown compiled bytes stay gated. State stays in `~/Games/Duke Nukem 3D - Momentum`. Display/input preferences are not forced. Shareware, World Tour and expansions are outside the verified baseline. Confirm graphics, sound, controls and save/relaunch.
-    - **Quake Brutalist Jam III** uses exact official Ironwail 0.8.2, not another Quake engine. Choose your licensed Quake folder containing `id1/pak0.pak` and `id1/pak1.pak`. A complete `qbj3` 1.3 source is reused read-only; optionally choose it separately. Restricted mod assets are not bundled. If source or engine is missing, **Approve software / source preparation** permits only the listed pinned downloads, followed by separate game installation approval. QBJ3 downloads about 2.7 GB and extracts about 6.2 GB; allow about 17 GiB free for a fresh setup. No download resume or commercial base download. Existing incomplete/modified sources need manual reconciliation, not silent replacement. Shared engine/cache remain after removal; installed settings/saves are isolated in the game folder. Fullscreen and mouse-look are launch flags. Confirm actual graphics, sound, controls and save/load/relaunch.
-    - Virtua Cop 2 uses standalone Flycast. The Model 3 games use the exact pinned native Supermodel release, prepared after a separate software approval if missing. Existing emulator configuration and saves are not copied or changed. New game settings, NVRAM/calibration and saves are isolated and retained. Installer tests are not gameplay certification: confirm controls, display, sound and saved progress yourself. L.A. Machineguns follows the 1920x1080 X11 borderless reference; fresh calibration may need the cabinet menu.
+    - **Episode Enyo** needs your Quake folder containing `id1/pak0.pak` and `id1/pak1.pak`. Version 0.3.0 reuses verified mod files or obtains the pinned mod from its publisher after separate approval; it does not bundle the mod. Existing `enyo` settings/saves are copied without modifying originals. Momentum uses the pinned official vkQuake 1.36.0 AppImage, never the Snap build. FUSE2 and Vulkan loaders are prerequisites. Fullscreen is requested without importing laptop display configuration or forcing a resolution; the wrapper accepts `-window`. Game-only removal retains base copies, settings, saves and the shared engine.
+    - **Brutal Doom** requires your `DOOM2.WAD` and uses the approved UZDoom flow. Doom Metal Volume 5 is included but enabled only with `~/.local/bin/brutal-doom --metal`; the incompatible Complete voxel addon is excluded. Existing compatible software is reused. An incompatible existing engine is left alone; separately approved private shared-engine fallback uses isolated state. See the package's included player guide for controls and saved-state locations.
+    - **HOD2** uses exact-build Flycast evidence. Existing incompatible engines and profiles are preserved; the separately approved private fallback provides its own state. Confirm Start/trigger mappings in Flycast; dedicated right-click reload is not verified.
+    - **Star Wars Trilogy Arcade and L.A. Machineguns** use the pinned native Supermodel runtime, prepared after separate approval if missing. Fullscreen is requested. SWTA retains stock credit settings (**3** for credit, **1** for Start); free play is a manual cabinet setting. L.A. Machineguns seeds clean calibration only when isolated NVRAM is absent. Existing NVRAM is never overwritten and may need manual AIM SET.
+    - **Marvel Infinity War** uses bundled verified OpenBOR 6391 native files without FUSE or an engine download. Approve engine preparation separately, then download/install the game or supply the exact offline PAK. The fullscreen/CRT configuration and controller preset are seeded only when absent; other controllers can be remapped in-game. Settings and progress stay game-local. See [OpenBOR setup](docs/openbor.md).
     - **Add a game manually** opens the original library editor. Custom artwork uploads and Steam lookup are unchanged.
   - **Install packages (advanced local import):**
     1. Obtain a ZIP from a publisher you trust, or use a package already imported on this computer.

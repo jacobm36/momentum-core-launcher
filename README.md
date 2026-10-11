@@ -61,23 +61,21 @@ python3 tools/build-candidate.py /path/to/new-candidate.zip \
 The builder rejects missing exact installer evidence, duplicate selections and
 existing output paths. It includes a testing guide and a package/build inventory,
 but no personal library, original game media, journals or home-directory settings.
-Historical Enyo bundles and Brutal Doom's bundled content remain private until applicable
-redistribution permission is established. Enyo 0.3.0 includes no mod files: it
-reuses verified source or obtains the pinned release through the publisher's
-anonymous download flow with separate approval and a retained verified cache.
-It never stores expiring download links in release metadata. This does not publish or change the
-online Store; gameplay and real fresh-system provisioning remain acceptance gates.
-Brutal Doom 0.2.0 also permits reuse of the exact tested UZDoom 5.0.3 Flathub
-commit, alongside 5.0.1. This is not a version-range exemption: unknown commits
-stay blocked and existing software is never automatically changed. New software
-preparation still defaults to the original pinned 5.0.1 build.
-HOD2 0.2.0 additionally permits the exact v2.7 runtime-26.08 Flathub commit
-after isolated acquisition, installer/repeat and windowed boot checks. This does
-not inherit old fullscreen/input/gameplay acceptance for the new build.
-Missing host prerequisites show their manual commands in setup and blocked plan
-review; return to a new setup review after installing them with system tools.
-Enyo 0.3.0 retains 0.2.2's fullscreen startup without importing laptop display
-configuration or forcing a resolution. Its wrapper accepts `-window` when needed.
+The default acceptance profile includes developer tests and tools. To ship only
+the application and user references, without bundled game installers:
+
+```bash
+python3 tools/build-candidate.py /path/to/new-runtime.zip \
+  --runtime-only --launcher-only
+```
+
+The runtime profile uses an explicit file inventory, retains every supported
+engine adapter and required compatibility record, and omits developer tests,
+tools, contributor instructions and historical acceptance notes. Game packages
+can still be downloaded from the store or imported locally. To bundle an exact
+installer, use `--package <id>` instead of `--launcher-only`.
+See [repository and delivery contents](docs/delivery-layout.md).
+Neither build profile publishes the private frontend or changes the online store.
 
 ## Quick start
 
@@ -122,23 +120,18 @@ The three projects work together:
 In the launcher, choose **+ Add game**, pick a supported title and point Momentum at your game
 files. It downloads and checks the installer, helps set up compatible required software, and
 shows you the installation plan before making approved changes. Your original game files stay
-untouched. Local package ZIPs can also be imported through **Advanced**.
+untouched. Local package ZIPs can also be imported through **Local packages / import...**.
 
 **Bring your games; Momentum brings the setup.** Commercial base-game data, ROMs and BIOS
 files come from you. Mod packages can include their complete distributable mod.
 The current public package catalog contains *Star Wars Trilogy Arcade* 0.2.1,
 *L.A. Machineguns* 0.2.2, *The House of the Dead 2* 0.3.0, *Brutal Doom* 0.3.0,
-*Episode Enyo* 0.3.0, and *Marvel Infinity War* 0.2.0. The owner approved publication on October 10, 2026.
-The frontend remains private; historical public launcher downloads do not
-support these new revisions. Enyo 0.3.0 downloads its mod directly from
+*Episode Enyo* 0.3.0, and *Marvel Infinity War* 0.2.0.
+The frontend remains private. Use the current launcher for these revisions.
+Enyo 0.3.0 downloads its mod directly from
 the publisher or reuses verified source instead of bundling it.
-Other historical game releases are withdrawn pending
-acceptance under the current standard; private candidates can be tested through
-Local packages. Installer verification is separate from gameplay confirmation.
+Installer verification is separate from gameplay confirmation.
 Updates are not installed automatically.
-QBJ3 requires your Quake PAKs and uses pinned Ironwail 0.8.2. Its restricted
-mod assets are not bundled: reuse a complete extracted source or separately
-approve a pinned 2.7 GB download before the game installation review.
 
 ## Your data stays local
 
@@ -153,9 +146,7 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
 The [Marvel Infinity War integration](docs/openbor.md) reuses the supplied,
 exact OpenBOR 6391 native runtime. It adds no general engine manager or automatic
 controller mapping. Its author-hosted game download is separately approved;
-the working configuration is seeded only when absent. The owner accepted the
-debug-PC candidate and approved this sixth public package; the frontend remains
-private.
+the working configuration is seeded only when absent. The frontend remains private.
 
 Engine discovery, package compatibility and software preparation are separate
 responsibilities. `engines.py` selects from exact package-scoped supported builds;
@@ -183,12 +174,9 @@ Discovery is lazy to avoid extra probes on an already supported setup.
 Existing-copy selection does not support named Flatpak installations, arbitrary
 providers or version-range exemptions. Isolated known-working fallback is
 separately gated by the exact package/helper contract below.
-The [managed fallback design](docs/shared-engine-fallback.md) uses
+The [managed fallback implementation](docs/shared-engine-fallback.md) uses
 build-specific user-only Flatpak slots and separately approved per-game profiles,
-with acceptance gates before it can be enabled. Its opt-in development prototype
-has passed fresh isolated provisioning, per-game sandbox state, HOD2 windowed
-boot/VMU persistence and vanilla Doom II save/reload checks. It is not wired into
-historical packages. The private HOD2/Brutal Doom 0.3.0 candidates now accept the
+gated by exact package/build evidence. Published HOD2/Brutal Doom 0.3.0 support the
 explicit `momentum-flatpak-1` binding: reuse a tested existing copy first, otherwise
 offer the primary tested isolated build after separate software approval.
 The retained, hash-bound helper validates the app/dependency graph and per-game
@@ -207,11 +195,10 @@ stop with their journals retained; there is no automatic destructive recovery.
 
 See the [user guide](USER-GUIDE.md#notifications-installs-and-backups) for folder
 selection, separate software/game approvals, local import, cancellation and recovery.
-**Advanced → Add an existing game manually...** keeps the original library editor.
+**Add game → Add a game manually** keeps the original library editor.
 
 Only exact package/runtime evidence enables installation; unknown builds remain gated.
 Installer checks are not gameplay certification. All new installations report **setup required**.
-HOD2's approved artwork revisions inherit unchanged installer-code evidence, not new gameplay runs.
 Technical evidence: [HOD2](docs/hod2-target-evidence.json),
 [arcade](docs/arcade-installer-evidence.json), [Episode Enyo](docs/quake-installer-evidence.json),
 [UZDoom games](docs/doom-installer-evidence.json), [Duke Nukem 3D](docs/duke-installer-evidence.json),

@@ -1,0 +1,26 @@
+{
+  "files": [
+    "LICENSE", "README.md", "USER-GUIDE.md", "games.example.json",
+    "backup.py", "catalog.py", "compatibility.py", "dependencies.py",
+    "eduke32.py", "engines.py", "enyo.py", "game_import.py", "import_games.py",
+    "install.sh", "installs.py", "ironwail.py", "jobs.py", "launch.sh",
+    "launcher_probe.py", "managed_flatpak.py", "mcl_intent.py", "openbor.py",
+    "ownership.py", "packages.py", "picker.py", "server.py",
+    "start-candidate.sh", "start-isolated-test.sh", "supermodel.py",
+    "uzdoom.py", "vkquake.py", "window_handoff.py",
+    "web/accent.js", "web/actions.js", "web/backup.js", "web/core.js",
+    "web/gallery.js", "web/gamepad.js", "web/icon-256.png", "web/index.html",
+    "web/jobs.js", "web/library.js", "web/logo-full.png", "web/logo-icon.png",
+    "web/main.js", "web/navigation.js", "web/notify.js", "web/packages.js",
+    "web/shell.js", "web/sound.js", "web/stats.js", "web/style.css",
+    "docs/arcade-installer-evidence.json", "docs/doom-installer-evidence.json",
+    "docs/duke-installer-evidence.json", "docs/hod2-target-evidence.json",
+    "docs/openbor-installer-evidence.json", "docs/openbor-runtime-index.json",
+    "docs/qbj3-installer-evidence.json", "docs/quake-installer-evidence.json",
+    "docs/shared-engine-fallback-evidence.json",
+    "docs/eduke32-preparation.md", "docs/ironwail-preparation.md",
+    "docs/openbor.md", "docs/shared-engine-fallback.md",
+    "docs/uzdoom-preparation.md", "docs/screenshot.png", "docs/stats.png",
+    "docs/delivery-layout.md"
+  ]
+}
