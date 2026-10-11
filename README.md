@@ -128,9 +128,9 @@ untouched. Local package ZIPs can also be imported through **Advanced**.
 files come from you. Mod packages can include their complete distributable mod.
 The current public package catalog contains *Star Wars Trilogy Arcade* 0.2.1,
 *L.A. Machineguns* 0.2.2, *The House of the Dead 2* 0.3.0, *Brutal Doom* 0.3.0,
-and *Episode Enyo* 0.3.0. The owner approved publication on October 10, 2026.
+*Episode Enyo* 0.3.0, and *Marvel Infinity War* 0.2.0. The owner approved publication on October 10, 2026.
 The frontend remains private; historical public launcher downloads do not
-support the three new revisions. Enyo 0.3.0 downloads its mod directly from
+support these new revisions. Enyo 0.3.0 downloads its mod directly from
 the publisher or reuses verified source instead of bundling it.
 Other historical game releases are withdrawn pending
 acceptance under the current standard; private candidates can be tested through
@@ -149,6 +149,13 @@ play history and game artwork. Drop artwork into `media/<game-id>/` (`cover.jpg|
 ## Setup and safety
 
 ### Shared engine selection
+
+The [Marvel Infinity War integration](docs/openbor.md) reuses the supplied,
+exact OpenBOR 6391 native runtime. It adds no general engine manager or automatic
+controller mapping. Its author-hosted game download is separately approved;
+the working configuration is seeded only when absent. The owner accepted the
+debug-PC candidate and approved this sixth public package; the frontend remains
+private.
 
 Engine discovery, package compatibility and software preparation are separate
 responsibilities. `engines.py` selects from exact package-scoped supported builds;
@@ -238,6 +245,7 @@ Package check without executing scripts: `python3 packages.py check <folder-or-z
 | Duke Nukem 3D runner/lifecycle | `MCL_DUKE_TESTS=1 python3 -m unittest tests.test_duke_installs` |
 | QBJ3 full source and real preparation/lifecycle | `MCL_QBJ3_TESTS=1 python3 -m unittest tests.test_qbj3_installs` |
 | HOD2 runner/lifecycle | `MCL_HOD_PACKAGE=/absolute/HOD-package.zip python3 -m unittest tests.test_hod_receipts` |
+| Private OpenBOR exact acquisition/lifecycle | `MCL_OPENBOR_TESTS=1 python3 -m unittest tests.test_openbor_installs` |
 
 Browser checks need Chrome/Chromium; public checks need internet access.
 Runner checks need built packages in the sibling package repository and temporary storage.
@@ -247,6 +255,13 @@ QBJ3 checks use the full real mod and real pinned source/engine downloads;
 only its commercial base PAK fixtures are synthetic. Run the large cases
 sequentially with at least 17 GiB free.
 These tests never launch games or engines and do not modify working installations.
+The OpenBOR integration test uses the actual pinned author download (about 503 MiB)
+unless `MCL_OPENBOR_SOURCE` points to an offline folder with the exact PAK. It
+checks separate approvals, state preservation, repair and reinstall in an isolated
+HOME. `MCL_PACKAGE_REPO` can locate the private built packages outside the sibling
+checkout. Proposed evidence is tested only in memory with
+`MCL_CANDIDATE_EVIDENCE=1`; a delivery requires a passing rerun against persisted
+exact evidence without that flag.
 
 ## License
 

@@ -2,8 +2,9 @@
 
 One window to launch all your games.
 
-The supported public catalog currently contains SWTA 0.2.1 and L.A. Machineguns
-0.2.2 only. Other historical installers are withdrawn pending current-standard
+The supported public catalog contains SWTA 0.2.1, L.A. Machineguns 0.2.2,
+HOD2, Brutal Doom and Episode Enyo 0.3.0, and Marvel Infinity War 0.2.0.
+Use the current private launcher for these packages. Other historical installers are withdrawn pending current-standard
 acceptance; their downloads remain for reference. Existing installations are
 not removed. Startup no longer needs `curl`: Python performs bounded local
 server checks. Missing Python or `flock` must be installed through your system
@@ -78,6 +79,10 @@ NVRAM, including older uncalibrated state; existing installations may still
 need manual AIM SET. Calibration persists across launches.
 
 ## 1. Opening the launcher
+
+When a game has both a cover and a preview video, the background shows only the
+video while it plays. The cover remains available in the Featured panel. If the
+video cannot load or autoplay, the background falls back to the cover.
 
 - Click **Momentum Core Launcher** in the app menu or on the Desktop.
 - Pick a game on the left, then click **▶ PLAY** (or press Enter / gamepad A).

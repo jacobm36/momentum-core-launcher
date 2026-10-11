@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Library media test</title>
+<link rel="stylesheet" href="/web/style.css"></head><body>
+<div id="art" class="art"></div><video id="bg" muted></video><div id="detail"></div>
+<pre id="result">RUNNING</pre>
+<script>
+const $ = selector => document.querySelector(selector);
+const esc = value => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
+let games = [{id:"miw",name:"Marvel Infinity War",cover:"cover.png",icon:"icon.png",video:"preview.mp4"}];
+let sel = "miw", shown = null, ver = 1, stats = {}, running = new Set(), tagSel = new Set(), filter = "";
+let featured = false, rejectVideo = false, playResolve;
+const featuredPanel = () => featured;
+const galleryStrip = () => "";
+const applyAccent = () => {};
+const hue = () => 1;
+const launch = () => {}, toggleFav = () => {}, editor = () => {}, removeGame = () => {};
+$("#bg").play = () => rejectVideo ? Promise.reject(new Error("test autoplay failure"))
+  : new Promise(resolve => { playResolve = resolve; });
+$("#bg").pause = () => {};
+</script>
+<script src="/web/library.js"></script>
+<script>
+const check = (value, message) => { if (!value) throw new Error(message); };
+(async () => {
+  renderDetail();
+  check(!$("#art").hidden, "artwork stays until video starts");
+  $("#bg").onplaying(); playResolve();
+  check($("#art").hidden && $("#bg").classList.contains("on"), "classic video excludes overlapping artwork");
+  featured = true; renderDetail(); $("#bg").onplaying(); playResolve();
+  check($("#art").hidden && $("#detail .feature-art img").getAttribute("src").includes("cover.png"),
+    "featured view retains its cover alongside video-only background");
+  $("#bg").onerror();
+  check(!$("#art").hidden && !$("#bg").classList.contains("on"), "failed video restores artwork");
+  rejectVideo = true; renderDetail(); await new Promise(resolve => setTimeout(resolve, 0));
+  check(!$("#art").hidden && !$("#bg").classList.contains("on"), "autoplay failure restores artwork");
+  games.push({id:"still",name:"Still image",cover:"still.png"}); sel = "still"; renderDetail();
+  check(!$("#art").hidden && !$("#bg").hasAttribute("src") && $("#art").style.background.includes("still.png"),
+    "image-only game restores artwork and clears video");
+  $("#result").textContent = "PASS: video-only background, featured cover, load/autoplay fallback, image-only selection";
+})().catch(error => { $("#result").textContent = "FAIL: " + error.stack; });
+</script></body></html>

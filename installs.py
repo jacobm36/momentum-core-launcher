@@ -27,6 +27,7 @@ import managed_flatpak
 import uzdoom
 import eduke32
 import ironwail
+import openbor
 import ownership
 
 DESC_FIELDS = ("name", "description", "tagline", "category", "tags")
@@ -36,7 +37,7 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 RUNTIME_RESOLVERS = {
     "flycast": dependencies, "supermodel": supermodel, "vkquake": vkquake, "uzdoom": uzdoom,
-    "eduke32": eduke32, "ironwail": ironwail,
+    "eduke32": eduke32, "ironwail": ironwail, "openbor": openbor,
 }
 UBUNTU_2404_RUNTIME_PACKAGES = {
     "libSDL2-2.0.so.0": "libsdl2-2.0-0", "libSDL2_net-2.0.so.0": "libsdl2-net-2.0-0",
@@ -111,7 +112,14 @@ def _library_prerequisite(title, reason, libraries):
 
 
 def _runtime_prerequisite(runtime, error):
-    if runtime == "supermodel":
+    if runtime == "openbor":
+        missing = re.search(r"OpenBOR host libraries missing:\s*(.*?)\.\s*Install prerequisites", error)
+        if missing:
+            return _library_prerequisite(
+                "OpenBOR host libraries are missing",
+                "The bundled native runtime still requires these host libraries.",
+                [name.strip() for name in missing.group(1).split(",") if name.strip()])
+    elif runtime == "supermodel":
         missing = re.search(r"error while loading shared libraries:\s*([^:\s]+)", error)
         if missing:
             return _library_prerequisite(
@@ -335,6 +343,11 @@ class Installs:
                 if (req.get("provider"), req.get("scope"), req.get("source"), req.get("tested_version")) != (
                         "native", "user", "github:andrei-drexler/ironwail", ironwail.VERSION):
                     raise InstallError("Only the pinned official user-scope Ironwail release is supported")
+            elif runtime == "openbor":
+                if (req.get("provider"), req.get("scope"), req.get("source"),
+                        req.get("tested_version"), req.get("sha256")) != (
+                        "appimage", "user", "github:DCurrent/openbor", openbor.VERSION, openbor.ASSET_SHA256):
+                    raise InstallError("Only the exact bundled OpenBOR 6391 runtime is supported")
             else:
                 raise InstallError(f"Unsupported dependency resolver: {runtime}")
             try:
@@ -398,7 +411,8 @@ class Installs:
                 "aliens-eradication": "docs/doom-installer-evidence.json",
                 "ashes-2063": "docs/doom-installer-evidence.json",
                 "quake-brutalist-jam-3": "docs/qbj3-installer-evidence.json",
-                "duke-nukem-3d": "docs/duke-installer-evidence.json"
+                "duke-nukem-3d": "docs/duke-installer-evidence.json",
+                "marvel-infinity-war": "docs/openbor-installer-evidence.json"
             }.get(package_id, "docs/arcade-installer-evidence.json")
             path = Path(__file__).parent / evidence_file
             record = compatibility.find_record(Path(__file__).parent, package_id, version, summary["digest"])
@@ -431,7 +445,7 @@ class Installs:
                                     "The pinned AppImage requires the FUSE2 and Vulkan loader libraries.",
                                     [package_by_loader[name] for name in missing]))
                                 enabled = False
-                    if enabled and runtime in ("supermodel", "vkquake", "uzdoom", "eduke32", "ironwail"):
+                    if enabled and runtime in ("supermodel", "vkquake", "uzdoom", "eduke32", "ironwail", "openbor"):
                         try:
                             current["host_checks"] = RUNTIME_RESOLVERS[runtime].check_host(current)
                         except dependencies.DependencyError as e:
@@ -612,7 +626,9 @@ class Installs:
         snap = packages.snapshot_path(self.here, package_id, version)
         man = detail["manifest"]
         if inputs is None:
-            inputs = {"source_dir": source_dir, "games_root": games_root or str(Path.home() / "Games")}
+            inputs = {"games_root": games_root or str(Path.home() / "Games")}
+            if source_dir is not None:
+                inputs["source_dir"] = source_dir
         if not isinstance(inputs, dict):
             raise InstallError("Package inputs must be an object")
         inputs = dict(inputs)
@@ -638,9 +654,17 @@ class Installs:
                 valid = isinstance(value, str) and (bool(value.strip()) or not field.get("required"))
             if not valid:
                 raise InstallError(f"Invalid {typ} input: {key}")
-        if not all(_safe_abs(inputs.get(k)) for k in ("source_dir", "games_root")):
-            raise InstallError("This install profile requires source_dir and games_root directories")
-        if not Path(inputs["source_dir"]).is_dir():
+        online_openbor = (package_id == "marvel-infinity-war" and
+                          set(detail["dependencies"]) == {"openbor"} and
+                          inputs.get("download_game") is True)
+        if not _safe_abs(inputs.get("games_root")):
+            raise InstallError("This install profile requires a games_root directory")
+        if not online_openbor:
+            if not _safe_abs(inputs.get("source_dir")):
+                raise InstallError("This install profile requires a source_dir directory in offline mode")
+            if not Path(inputs["source_dir"]).is_dir():
+                raise InstallError("Source directory does not exist")
+        elif "source_dir" in inputs and not Path(inputs["source_dir"]).is_dir():
             raise InstallError("Source directory does not exist")
         if catalog_entry_id is not None:
             with self.catalog_lock:
@@ -722,6 +746,11 @@ class Installs:
                                            inputs=_json_copy(inputs), game_directory=game_dir)
                     step["name"] = ("Check required software and mod download" if
                                     step["context"]["phase"] == "preflight" else "Prepare required software and mod source")
+            elif runtime == "openbor":
+                for step in steps[:2]:
+                    step["context"].update(package_root=str(snap), package_digest=base["package_digest"])
+                    step["name"] = ("Check bundled OpenBOR runtime" if
+                                    step["context"]["phase"] == "preflight" else "Prepare bundled OpenBOR runtime")
             meta["prepare_required_software"] = True
             if fallback:
                 meta["managed_fallback"] = fallback
@@ -764,6 +793,8 @@ class Installs:
                     return "Close Flycast before approving this installation"
                 if "supermodel" in detail["dependencies"] and not preparing and supermodel.running(detail["dependencies"]["supermodel"]):
                     return "Close Supermodel before approving this installation"
+                if "openbor" in detail["dependencies"] and openbor.running(detail["dependencies"]["openbor"]):
+                    return "Close OpenBOR before approving this installation"
                 if "vkquake" in detail["dependencies"] and not preparing and vkquake.running(detail["dependencies"]["vkquake"]):
                     return "Close vkQuake before approving this installation"
                 if "uzdoom" in detail["dependencies"] and uzdoom.running(detail["dependencies"]["uzdoom"]):
@@ -819,6 +850,19 @@ class Installs:
                 retained = f"media/{gid}/package-icon-{resource['sha256']}.png"
                 if defaults.get("icon") == retained:
                     expected["icon"] = retained
+        if m["package_id"] == "marvel-infinity-war" and isinstance(defaults, dict):
+            assoc = self._load_receipt(m["package_id"])
+            gid = (assoc or {}).get("catalog", {}).get("entry_id")
+            for field in ("cover", "video"):
+                if not expected.get(field):
+                    continue
+                source = Path(m["paths"]["support"]) / expected[field]
+                resource = next((r for r in res["resources"] if r["path"] == str(source)), None)
+                if resource:
+                    suffix = ".png" if field == "cover" else ".mp4"
+                    retained = f"media/{gid}/package-{field}-{resource['sha256']}{suffix}"
+                    if defaults.get(field) == retained:
+                        expected[field] = retained
         if defaults != expected:
             raise InstallError("Catalog defaults differ from the validated package manifest")
         for key in ("pending_actions", "checks", "completed_steps", "recovery_notes"):
@@ -964,6 +1008,27 @@ class Installs:
                 _write_atomic(self.here / rel, icon.read_bytes())
                 defaults["icon"] = rel.as_posix()
                 # Persist the resolved media URL before catalog publication as part of the same commit.
+                res["catalog_proposal"]["defaults"] = _json_copy(defaults)
+                if journal:
+                    marker = {"commit_version": 1, "job_id": rec["last_job_id"], "receipt": rec, "result": res}
+                    if recovery_policy:
+                        marker["recovery_policy"] = recovery_policy
+                    _write_atomic(journal, (json.dumps(marker, indent=2) + "\n").encode())
+            if first and rec["package_id"] == "marvel-infinity-war":
+                for field in ("cover", "video"):
+                    if not _is_missing(existing.get(field)) or not defaults.get(field):
+                        continue
+                    asset = "assets/cover.png" if field == "cover" else "assets/preview.mp4"
+                    source = ownership.safe_path(str(Path(rec["paths"]["support"]) / asset))
+                    if not source.is_relative_to(Path(rec["paths"]["support"])):
+                        raise InstallError(f"Catalog {field} must be retained inside installed support")
+                    resource = next((r for r in rec["resources"] if r["path"] == str(source)), None)
+                    if not resource or resource["kind"] != "file" or resource["sha256"] != _hash_file(source):
+                        raise InstallError(f"Catalog {field} has no validated retained resource")
+                    suffix = ".png" if field == "cover" else ".mp4"
+                    rel = Path("media") / rec["catalog"]["entry_id"] / f"package-{field}-{resource['sha256']}{suffix}"
+                    _write_atomic(self.here / rel, source.read_bytes())
+                    defaults[field] = rel.as_posix()
                 res["catalog_proposal"]["defaults"] = _json_copy(defaults)
                 if journal:
                     marker = {"commit_version": 1, "job_id": rec["last_job_id"], "receipt": rec, "result": res}

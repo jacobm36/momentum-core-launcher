@@ -1,0 +1,331 @@
+{
+  "version": "6391",
+  "appimage_sha256": "35895117c2eae94867ee0b094083ae66cd3853372d7447d60cfe92fa929d73eb",
+  "archive_sha256": "ef96ad2e3a64367bcee13b6f9e0321ee47bcb3553d38a092307f443d18c9bd7d",
+  "files": [
+    {
+      "path": "usr/bin/OpenBOR",
+      "size": 1375592,
+      "sha256": "f761a68ec3af8c3f22a363ade73e328775c7b18fdb23d6fb8aab5e00ef360fb4",
+      "mode": 493
+    },
+    {
+      "path": "usr/lib/libFLAC.so.8",
+      "size": 493000,
+      "sha256": "d458334cca73b22b5300611978f3abbe56bd6bc627b190ea0d110d9202160ea8",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libSDL2-2.0.so.0",
+      "size": 1133296,
+      "sha256": "e0ad29ea193b79ac39da5026f5520aef35ec7fca2236934e7d39e3994acbca71",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libSDL2_gfx-1.0.so.0",
+      "size": 77984,
+      "sha256": "3b831d10add35acfe25fdadc3a86f3a7fe49846c1c85b5ec7d32d42351796faf",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libXau.so.6",
+      "size": 17824,
+      "sha256": "91d2d5a997e186d43ce585756cb8c699db5f10eda18b569640b3355c6438b352",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libXcursor.so.1",
+      "size": 44240,
+      "sha256": "0373a63d9eb9270d59b23f5bfb8e61cdf96dae166124c436eee5a0ee2a3de571",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libXdmcp.so.6",
+      "size": 26560,
+      "sha256": "7f323f217dc88b2c55460862bc4554135929423aed701d3d8861f78f92dcdacd",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libXext.so.6",
+      "size": 78088,
+      "sha256": "b3eddf02d0339c0c814f5c995831c69c0b144b8a92f19a28aed8eddeca3c4788",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libXfixes.so.3",
+      "size": 26832,
+      "sha256": "03bcfb93e8937011ce316a9cf65605249e0274491c65671fa64b9eb0075d4a8e",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libXi.so.6",
+      "size": 68680,
+      "sha256": "3ed41c91d22637470ce55310b193c8ba0bbb161bb4ae3966aa197cac191fed8b",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libXinerama.so.1",
+      "size": 13816,
+      "sha256": "5f8b8e5f60abf823a5030e3d72ecc340682fcbb2b755c0c620da64f95fd0ad83",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libXrandr.so.2",
+      "size": 47928,
+      "sha256": "9a0a1550d46a4db41effbfe6cbed49429090a80b6fd5cefd16392bff1765d0bb",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libXrender.so.1",
+      "size": 43600,
+      "sha256": "c79e63607c336f34568844e2487496ff2f32f3d591c39b34775881bf00829750",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libXss.so.1",
+      "size": 18032,
+      "sha256": "a8ed8749dd8d5c89ab0e937a21978e10e45c984a7bda3ddf40303fcece3c063e",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libXxf86vm.so.1",
+      "size": 26488,
+      "sha256": "d6d3641c8c1e6c94ee16bf8b8aea4c0d1cd0447d19f98773b8bf5a933ef4d161",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libapparmor.so.1",
+      "size": 68488,
+      "sha256": "7835c00690d55ae3a1dec1e0e62f8fc63c6fb3e6cffbee63dcd3292e884c1646",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libasyncns.so.0",
+      "size": 26416,
+      "sha256": "8a4a32d071e46b46f40f25d29ee6874e7236048fc17585b86f5065b6adcb8fcf",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libbsd.so.0",
+      "size": 84944,
+      "sha256": "4a3eac3f5eb1ff2820a09edcc8231a0c28af902da75b87df3fbfcbb4b49d4620",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libdbus-1.so.3",
+      "size": 327216,
+      "sha256": "78181eb7d0e7f4581ee112259855fbc5d29ecfb121e311457236cc0b01abbb79",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libffi.so.6",
+      "size": 34896,
+      "sha256": "cb333796a1d2bc57243312b7ca9158335d09ef8d935c785489b98f1ea34515d7",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libgcrypt.so.20",
+      "size": 927040,
+      "sha256": "01025bcf6afcaf116cb22cde561116ed9f18990cd817900510867602a179c425",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/liblzma.so.5",
+      "size": 142480,
+      "sha256": "f08541277eb75512e01518d830ddc33056934e29d551bffdd165977d00cf9997",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libnsl.so.1",
+      "size": 98400,
+      "sha256": "d61a730310ad5c7ce4f82468db1baade9bfdfe22460eceeb75e92e842b5ed4a5",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libogg.so.0",
+      "size": 39296,
+      "sha256": "4022ea720a358c62be63bd44b1af9a75ab169faf107dc99087a2158f4e5ae48f",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libpcre.so.3",
+      "size": 460728,
+      "sha256": "a6a2f3f041c8c33827ac2a7811a3d5557891e3de2b7567fd68ffce39f968b6d0",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libpng12.so.0",
+      "size": 156928,
+      "sha256": "5256a30edbb109db71f20e5601045cadf43e5261327f75e9516fc4fe78b573bd",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libpulse.so.0",
+      "size": 328600,
+      "sha256": "ff9b7c3f90c55aae29d0c31c767d2a483d07676d488b750a22a061ab98ab26d6",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libpulsecommon-8.0.so",
+      "size": 538448,
+      "sha256": "081a14110c35a6832ce763ba9ae6ed4ef562fa49209e7211384c6b23f06a719f",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libselinux.so.1",
+      "size": 138008,
+      "sha256": "a3214552bed4ba6431b78f1e25d69067c5bdc8fc2a953b1b7ca82d5aabf665b6",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libsndfile.so.1",
+      "size": 417632,
+      "sha256": "be3517c9f64d22c00e5abd0ff9d8e886720ce6b2290371a919530949ff30e2a7",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libsndio.so.6.1",
+      "size": 60688,
+      "sha256": "35e417460d01674980db08f136d87c6edc346c732d4afb7c92badf943c01cf4b",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libsystemd.so.0",
+      "size": 550240,
+      "sha256": "1ab8a0aaf3ce96c2a68846ad4935b716a82b01d492795fdf69d985fa7e31ede2",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libvorbis.so.0",
+      "size": 179888,
+      "sha256": "d3ec40257f696fbfc97227cedb46d281ecbb6f50c3fa0540a816c87ff5f3fb70",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libvorbisenc.so.2",
+      "size": 693568,
+      "sha256": "fba3d6af5c6cda220eb5a7474281da2bdf76a94d5ec7219c7d2715dd71b33c39",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libvorbisfile.so.3",
+      "size": 39440,
+      "sha256": "2d4905d8a7036842974a1fe20c967f5e6363f5eab6f2ab348d381eac64d7b7c4",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libvpx.so.3",
+      "size": 2234880,
+      "sha256": "85800624f006f2f65b56efd278cb8c6f6d07814219c1bec5cabaa68f2ceb0ac4",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libwayland-client.so.0",
+      "size": 65000,
+      "sha256": "5d6e958e6c581e4fb01e54daf2d25f780591efefa48a993c81e547721a4dfaba",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libwayland-cursor.so.0",
+      "size": 34464,
+      "sha256": "37bb041d072bad0aa3f547b6d5afdec8c70a07be7e9c18dde2bed6d354cc5699",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libwayland-egl.so.1",
+      "size": 9424,
+      "sha256": "83d3c0f45c31f0a23106ffe728fb42267138b5b8115fee443aa4f97f36c633ee",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libwrap.so.0",
+      "size": 39328,
+      "sha256": "cfd9229b8d592a7e2f058a757ab600e9055392434a86b0eb94a1643fbafd5376",
+      "mode": 420
+    },
+    {
+      "path": "usr/lib/libxkbcommon.so.0",
+      "size": 261736,
+      "sha256": "5a08c15e08e3b434fa94cef2ec52b21620bb83e67da356af73244b01ec39ce3a",
+      "mode": 420
+    },
+    {
+      "path": "usr/share/applications/openbor.desktop",
+      "size": 132,
+      "sha256": "44ba38ae7093bfdadf4fc0cad0c5122e70f45d1835ef7b1d04b1400ccace5e88",
+      "mode": 420
+    },
+    {
+      "path": "usr/share/doc/libapparmor1/copyright",
+      "size": 6033,
+      "sha256": "91a3a52df92c616db779d873ba90f0866221ffcc0396e5c42c28b5ae12ac511c",
+      "mode": 420
+    },
+    {
+      "path": "usr/share/doc/libbsd0/copyright",
+      "size": 23283,
+      "sha256": "0f66f734e25b82c12e931aaf7d95ea30f2518659e58d21b3dae928ae8298d8f6",
+      "mode": 420
+    },
+    {
+      "path": "usr/share/doc/libc6/copyright",
+      "size": 25465,
+      "sha256": "a09cfc6ecf8fcd835ba851a1c95b256e01420982ac7acdd01fcfaa748c402f11",
+      "mode": 420
+    },
+    {
+      "path": "usr/share/doc/libdbus-1-3/copyright",
+      "size": 19289,
+      "sha256": "fe20dc27d46a7aadf125b2e6653d49541136dec756cd98851306da7f9b0276b0",
+      "mode": 420
+    },
+    {
+      "path": "usr/share/doc/libgcrypt20/copyright",
+      "size": 15783,
+      "sha256": "5d6d603666c861e0040569d6f4e07c0393402dfa22d025101783e72f541f7798",
+      "mode": 420
+    },
+    {
+      "path": "usr/share/doc/liblzma5/copyright",
+      "size": 15308,
+      "sha256": "36109804b8e69c5344232598a4f064da4465683b9461662085be7d8fca29b35a",
+      "mode": 420
+    },
+    {
+      "path": "usr/share/doc/libpcre3/copyright",
+      "size": 2765,
+      "sha256": "ac9276490d2fa167442ae1aae33926514ad10c8886baa40046c5e367fccc5938",
+      "mode": 420
+    },
+    {
+      "path": "usr/share/doc/libpulse0/copyright",
+      "size": 21450,
+      "sha256": "23af631956da36e1992e32ebcb8ec808bdad748adc3d4b05613ef463a4c36ccd",
+      "mode": 420
+    },
+    {
+      "path": "usr/share/doc/libselinux1/copyright",
+      "size": 3129,
+      "sha256": "514ea9dc715249906df09333d9a7583b9251fc7c3c265602b53066e564fdfcdc",
+      "mode": 420
+    },
+    {
+      "path": "usr/share/doc/libsystemd0/copyright",
+      "size": 7786,
+      "sha256": "0fcf0a6fcc5f515e2484aade36f2860308089aed65c8041d4746b36fad4b1fab",
+      "mode": 420
+    },
+    {
+      "path": "usr/share/doc/libwrap0/copyright",
+      "size": 1314,
+      "sha256": "b5a4e550c3c398e3138097c04a5cde7ebb61ec237353de233dde3211b31f2321",
+      "mode": 420
+    },
+    {
+      "path": "usr/share/icons/hicolor/128x128/apps/openbor.png",
+      "size": 10785,
+      "sha256": "9909e28299b63fd2c4d3eaba8786b608ba49ea33ffb3c02663e6e790d3108038",
+      "mode": 420
+    }
+  ]
+}

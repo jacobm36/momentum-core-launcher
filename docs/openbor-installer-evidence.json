@@ -1,0 +1,41 @@
+{
+  "evidence_version": 1,
+  "scope": "Private OpenBOR installer validation; no packaged gameplay acceptance or public release.",
+  "packages": [
+    {
+      "id": "marvel-infinity-war",
+      "version": "0.2.0",
+      "digest": "sha256:22fed88ff0aaecb7bc9016cde8ec67dff4fdb49f48574ce88c80dfde03b6859c",
+      "runtime": "openbor",
+      "installer_validated": true,
+      "software": {
+        "provider": "appimage",
+        "scope": "user",
+        "version": "6391",
+        "sha256": "35895117c2eae94867ee0b094083ae66cd3853372d7447d60cfe92fa929d73eb"
+      },
+      "limits": "Exact native runtime and actual runner lifecycle validated with the pinned author PAK. Owner subsequently reports flawless debug-PC setup and supplies gameplay screenshot for r1; individual controller, persistence and campaign acceptance checks were not reported.",
+      "validation": {
+        "package_tests": 43,
+        "adapter_tests": 11,
+        "actual_author_download": true,
+        "separate_runtime_and_game_approvals": true,
+        "exact_PAK_verified": true,
+        "repeat_without_download": true,
+        "verify": true,
+        "repair_missing_PAK": true,
+        "game_only_removal_preserves_state_and_runtime": true,
+        "reinstall_preserves_path_and_identity": true,
+        "served_artwork": true,
+        "gameplay_launched": false
+      },
+      "public_release": false,
+      "owner_acceptance": {
+        "reported": "2026-10-10",
+        "candidate": "Momentum-OpenBOR-Debug-Candidate-20261010-r1.zip",
+        "candidate_sha256": "d498e6a8329a670762f13db5c9335615bce0bfa867b360e1e1e7f270e5f51238",
+        "result": "Owner reports debug-PC setup worked flawlessly right out of the gate and supplied a gameplay screenshot. No individual acceptance checklist was reported."
+      }
+    }
+  ]
+}

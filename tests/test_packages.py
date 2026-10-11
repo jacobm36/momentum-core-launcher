@@ -112,6 +112,22 @@ class Digest(unittest.TestCase):
 
 
 class Intake(Base):
+    def test_openbor_intake_is_scoped_to_exact_miw_runtime(self):
+        requirement = {"id": "openbor", "provider": "appimage", "scope": "user",
+                       "source": "github:DCurrent/openbor", "tested_version": "6391",
+                       "sha256": "35895117c2eae94867ee0b094083ae66cd3853372d7447d60cfe92fa929d73eb"}
+        self.assertTrue(packages.check(write_tree(self.t / "openbor",
+                        package_files(manifest(id="marvel-infinity-war",
+                                               requires=[requirement]))))["digest"])
+        for key, value in (("tested_version", "7533"), ("sha256", "a" * 64),
+                           ("source", "https://example.invalid"), ("scope", "system")):
+            with self.subTest(key=key):
+                bad = dict(requirement, **{key: value})
+                self.assertIn("exact bundled OpenBOR", self.problems(write_tree(
+                    self.t / key, package_files(manifest(id="marvel-infinity-war", requires=[bad])))))
+        self.assertIn("exact bundled OpenBOR", self.problems(write_tree(
+            self.t / "other-game", package_files(manifest(requires=[requirement])))))
+
     def test_ironwail_requires_exact_official_release_engine_and_companion(self):
         import ironwail
         requirement = {"id": "ironwail", "provider": "native", "scope": "user",

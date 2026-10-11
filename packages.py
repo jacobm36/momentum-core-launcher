@@ -407,9 +407,15 @@ def check_manifest(m, files, root):
             if r.get("scope") != "user":
                 P.append(f"{w}scope must be 'user' (v1 does not elevate privileges)")
         elif prov == "appimage":
-            if (rid, r.get("source"), r.get("scope"), r.get("tested_version")) != (
-                    "vkquake", "github:Novum/vkQuake", "user", "1.36.0"):
-                P.append(f"{w}appimage provider supports only pinned user-scope vkQuake 1.36.0 from its official GitHub release")
+            vkquake = (rid, r.get("source"), r.get("scope"), r.get("tested_version")) == (
+                "vkquake", "github:Novum/vkQuake", "user", "1.36.0")
+            openbor = (m.get("id"), rid, r.get("source"), r.get("scope"),
+                       r.get("tested_version"), r.get("sha256")) == (
+                "marvel-infinity-war", "openbor", "github:DCurrent/openbor", "user", "6391",
+                "35895117c2eae94867ee0b094083ae66cd3853372d7447d60cfe92fa929d73eb")
+            if not (vkquake or openbor):
+                P.append(f"{w}appimage provider supports only pinned user-scope vkQuake 1.36.0 "
+                         "or Marvel Infinity War's exact bundled OpenBOR 6391")
         elif rid == "eduke32":
             if (r.get("source"), r.get("scope"), r.get("source_commit")) != (
                     "https://voidpoint.io/terminx/eduke32", "user",

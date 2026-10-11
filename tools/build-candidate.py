@@ -21,7 +21,7 @@ CANDIDATES = {
     "quake-slave-zero-x": "0.3.0",
     "the-house-of-the-dead-2": "0.3.0",
 }
-PRIVATE_CANDIDATES = {**CANDIDATES, "brutal-doom": "0.3.0"}
+PRIVATE_CANDIDATES = {**CANDIDATES, "brutal-doom": "0.3.0", "marvel-infinity-war": "0.2.0"}
 NEW_FILES = (
     "start-candidate.sh", "window_handoff.py", "tests/test_window_handoff.py",
     "tests/test_priority_candidates.py", "tools/build-candidate.py",
@@ -38,6 +38,10 @@ NEW_FILES = (
     "tools/managed-flatpak-prototype.py", "tools/check-managed-flatpak-prototype.py",
     "tests/test_managed_flatpak_prototype.py",
     "game_import.py", "tests/test_game_import.py",
+    "openbor.py", "tests/test_openbor.py", "tests/test_openbor_installs.py",
+    "docs/openbor-runtime-index.json", "docs/openbor-installer-evidence.json",
+    "docs/openbor.md",
+    "tests/fixtures/library-media.html",
 )
 PRIVATE_ROOTS = {"jobs", "packages", "media", "backups", "logs", ".git", "__pycache__"}
 PRIVATE_FILES = {"games.json", "stats.json", "playstats.json"}
@@ -105,7 +109,7 @@ def main(argv=None):
                 "Use normal start-candidate.sh to find this user's installed game shortcuts.\n"
                 "Isolated test mode sees only the separate acceptance HOME's shortcuts.\n\n"
                 "Use Add game > Browse the package store > Local packages for bundled candidates. The online Store\n"
-                "still lists only the two publicly accepted arcade games. Supply your own\n"
+                "lists the five approved public games. Supply your own\n"
                 "original media; source and destination must not overlap. Missing host\n"
                 "prerequisites have manual system commands; no automatic administrator access.\n"
                 "Review software preparation separately from the game installation plan.\n\n"
@@ -125,7 +129,22 @@ def main(argv=None):
                 "delete jobs. Startup errors: ~/.cache/momentum-core-launcher/server.log.\n\n"
                 "Included candidates:\n"
                 + "".join(f"- {p['id']} {p['version']}\n" for p in delivery)
-                + "\nEnyo: supply Quake id1/pak0.pak and pak1.pak. Mod files are not bundled;\n"
+                + "\nMarvel Infinity War: use bash start-isolated-test.sh on the debug PC.\n"
+                "Use Local packages > Marvel Infinity War. Leave Download from ZVitor\n"
+                "checked and the offline source blank for the pinned 503 MiB author download.\n"
+                "Allow at least 2 GiB free temporary/destination space, plus this bundle.\n"
+                "Approve bundled OpenBOR preparation first, then the game download/install.\n"
+                "The engine is supplied in this package: no FUSE or engine network download.\n"
+                "Connect your controller before launching. Confirm fullscreen, CRT scanlines\n"
+                "TV, input/audio, tutorial-to-next-area progression, exit and relaunch.\n"
+                "Different controllers may need Control Options > Player 1 remapping:\n"
+                "press Enter on an action, release Enter, then press the controller button.\n"
+                "Settings are seeded only when absent; no personal saves are bundled.\n"
+                "Verify, repeat install, repair, and game-only removal/reinstall should\n"
+                "preserve settings/progress and the engine. Edited managed content blocks\n"
+                "removal for explicit reconciliation rather than silently deleting it.\n"
+                "Do not publish this sixth-title private candidate.\n"
+                "\nEnyo: supply Quake id1/pak0.pak and pak1.pak. Mod files are not bundled;\n"
                 "reuse verified Enyo files or approve a direct publisher download separately.\n"
                 "Fullscreen is requested on\n"
                 "startup without copying display settings; pass -window for windowed startup.\n"
@@ -135,6 +154,12 @@ def main(argv=None):
                 "bundled for private testing. Component redistribution rights remain unresolved;\n"
                 "public publication is blocked. Shared UZDoom settings remain untouched.\n"
             )
+            if selected == ["marvel-infinity-war"]:
+                guide = ("Momentum private OpenBOR debug-PC candidate\n\n"
+                         "Extract into a NEW folder. Do not overwrite your existing launcher.\n"
+                         "Run bash start-isolated-test.sh from that extracted folder.\n"
+                         "Only Marvel Infinity War 0.2.0 is included; nothing is published.\n\n"
+                         + (HERE / "docs/openbor.md").read_text())
             fd, temporary_zip = tempfile.mkstemp(prefix=".momentum-candidate-", suffix=".zip",
                                                  dir=args.output.parent)
             os.close(fd)

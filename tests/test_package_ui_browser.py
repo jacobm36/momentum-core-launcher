@@ -20,12 +20,18 @@ class QuietHandler(SimpleHTTPRequestHandler):
 @unittest.skipUnless(os.environ.get("MCL_BROWSER_TESTS") == "1", "opt-in headless Chrome test")
 class PackageBrowser(unittest.TestCase):
     def test_import_trust_inputs_and_plan_review(self):
+        self.check_fixture("package-ui.html")
+
+    def test_video_background_and_featured_artwork(self):
+        self.check_fixture("library-media.html")
+
+    def check_fixture(self, fixture):
         chrome = shutil.which("google-chrome") or shutil.which("chromium")
         self.assertIsNotNone(chrome, "Chrome/Chromium is needed for the requested browser test")
         with tempfile.TemporaryDirectory(prefix="mcl-ui-") as tmp:
             root = Path(tmp)
             shutil.copytree(HERE / "web", root / "web")
-            shutil.copy(HERE / "tests" / "fixtures" / "package-ui.html", root / "test.html")
+            shutil.copy(HERE / "tests" / "fixtures" / fixture, root / "test.html")
             handler = functools.partial(QuietHandler, directory=tmp)
             http = ThreadingHTTPServer(("127.0.0.1", 0), handler)
             thread = threading.Thread(target=http.serve_forever, daemon=True)

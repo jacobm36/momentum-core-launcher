@@ -25,7 +25,7 @@ class CandidateBuild(unittest.TestCase):
         self.repo = self.root / "package-repo"
         (self.repo / "dist").mkdir(parents=True)
         self.output = self.root / "acceptance.zip"
-        for game in ("quake-slave-zero-x", "the-house-of-the-dead-2", "brutal-doom"):
+        for game in ("quake-slave-zero-x", "the-house-of-the-dead-2", "brutal-doom", "marvel-infinity-war"):
             version = builder.PRIVATE_CANDIDATES[game]
             files = package_files(manifest(id=game, version=version, destination_name=game))
             write_zip(self.repo / "dist" / f"{game}-{version}.zip", files)
@@ -67,6 +67,20 @@ class CandidateBuild(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "No exact installer evidence"):
                 self.build("brutal-doom")
         self.assertFalse(self.output.exists())
+
+    def test_openbor_only_bundle_has_focused_isolated_instructions(self):
+        with mock.patch.object(builder.compatibility, "find_record", return_value={
+            "installer_validated": True, "software": {"version": "6391"}
+        }):
+            self.build("marvel-infinity-war")
+        with zipfile.ZipFile(self.output) as bundle:
+            inventory = json.loads(bundle.read("acceptance/candidate-build.json"))
+            self.assertEqual([p["id"] for p in inventory["packages"]], ["marvel-infinity-war"])
+            guide = bundle.read("acceptance/ACCEPTANCE-GUIDE.txt").decode()
+            self.assertIn("bash start-isolated-test.sh", guide)
+            self.assertIn("offline", guide)
+            self.assertIn("No upstream executable", guide)
+            self.assertNotIn("Allow at least 6 GiB for Flycast", guide)
 
     def test_renamed_archive_with_wrong_identity_rejected(self):
         version = builder.PRIVATE_CANDIDATES["brutal-doom"]

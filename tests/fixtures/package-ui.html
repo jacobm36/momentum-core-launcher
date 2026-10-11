@@ -379,6 +379,33 @@ async function until(fn) {
   check($("#pdlg").textContent.includes("No commercial Quake data is downloaded"), "additional source help visible");
   check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "Ironwail preparation never skips publisher trust");
   $("#pdlg").close();
+  detail.dependencies = { openbor: { installed: false, provider: "appimage", scope: "user" } };
+  detail.manifest.inputs = [
+    {id:"download_game",type:"boolean",required:false,default:true,label:"Download from ZVitor"},
+    {id:"source_dir",type:"directory",required:false,help:"Offline PAK folder only"},
+    {id:"games_root",type:"directory",required:true,default:"home_games"}
+  ];
+  openPackages(); await selectPackage("test-game", "1.0.0");
+  check($("#pdlg").textContent.includes("bundled") && $("#pdlg").textContent.includes("No engine download or FUSE"), "OpenBOR bundled runtime explanation");
+  check($("#pkg-input-download_game").checked && !$("#pkg-input-source_dir").required, "OpenBOR online default permits blank offline folder");
+  check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "OpenBOR preserves package trust gate");
+  $("#pkg-trust").click(); $("#pkg-setup").requestSubmit();
+  await until(() => !$("#pdlg").open);
+  const miwSubmit = submitted.filter(s => s.path === "/api/packages/install").at(-1);
+  check(miwSubmit.body.inputs.download_game && !("source_dir" in miwSubmit.body.inputs), "online submission omits empty offline source");
+  plan.plan = {operation:"prepare-dependency",dependency:"openbor",dependency_commands:[],actions:[],
+    runtime_publication:{target:"/home/test/runtime/openbor/6391",source:"engine/runtime.tar.gz",sha256:"d".repeat(64)}};
+  blockApproval = false;
+  await reviewPackagePlan(job.id);
+  check($("#rdlg").textContent.includes("extract the verified OpenBOR") && $("#rdlg").textContent.includes("engine/runtime.tar.gz"), "runtime publication details shown before consent");
+  check(!$("#rdlg").textContent.includes("reuse the installed software"), "missing bundled runtime is not misreported as reuse");
+  check($("#plan-approve").disabled, "bundled runtime needs separate consent");
+  $("#rdlg").close();
+  plan.plan = {operation:"install",package_id:"marvel-infinity-war",actions:[],network:[{url:"https://www.zvitor.com/Downloads/MIW_v112f3.zip",archive_size:527099513}]};
+  await reviewPackagePlan(job.id);
+  check($("#rdlg").textContent.includes("Game content download") && $("#rdlg").textContent.includes("zvitor.com"), "game acquisition is visible before game-plan approval");
+  check($("#plan-approve").disabled, "game download needs fresh consent");
+  $("#rdlg").close();
   plan.plan = { operation: "prepare-dependency", actions: [], downloads: [{
     url: "https://us.22061996.xyz/qbj3/qbj3_1.3.zip", bytes: 2689872444,
     sha256: "c".repeat(64), purpose: "mod-source", destination: "/home/test/cache/qbj3"

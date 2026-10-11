@@ -121,9 +121,39 @@ function renderDetailInner() {
   $("#fav").onclick = () => toggleFav(g);
   $("#edit").onclick = () => editor(g);
   $("#del").onclick = () => removeGame(g);
-  if (g.video) { if (!bg.src.includes(g.video + "?v=" + ver)) bg.src = url(g.video); bg.play().catch(() => {}); bg.classList.add("on"); }
-  else { bg.classList.remove("on"); bg.removeAttribute("src"); }
   applyAccent(g);
   if (g.cover) { art.classList.remove("fallback"); art.style.background = `center/cover url("${url(g.cover)}")`; }
   else { art.classList.add("fallback"); art.style.background = `radial-gradient(circle at 78% 25%, hsl(${hue(g.id)} 70% 28%), transparent 60%), radial-gradient(circle at 20% 90%, hsl(${(hue(g.id) + 80) % 360} 60% 18%), transparent 60%)`; }
+  art.hidden = false;
+  const videoSource = g.video ? new URL(url(g.video), location.href).href : null;
+  const showArtwork = () => {
+    if (bg.src !== videoSource) return;
+    art.hidden = false;
+    bg.classList.remove("on");
+  };
+  bg.onplaying = () => {
+    if (bg.src !== videoSource) return;
+    art.hidden = true;
+    bg.classList.add("on");
+  };
+  bg.onerror = () => {
+    if (!videoSource || bg.src !== videoSource) return;
+    showArtwork();
+    console.warn("Game preview video could not load; showing artwork instead.", g.video);
+  };
+  if (videoSource) {
+    if (bg.src !== videoSource) {
+      bg.classList.remove("on");
+      bg.src = videoSource;
+    }
+    if (!bg.paused && bg.readyState >= 2) bg.onplaying();
+    bg.play().catch(error => {
+      showArtwork();
+      console.warn("Game preview video could not play; showing artwork instead.", error);
+    });
+  } else {
+    bg.pause();
+    bg.classList.remove("on");
+    bg.removeAttribute("src");
+  }
 }

@@ -364,7 +364,7 @@ async function selectPackage(id, version) {
     const m = detail.manifest;
     const flatpak = detail.dependencies?.flycast || detail.dependencies?.uzdoom;
     const flatpakId = detail.dependencies?.flycast ? "flycast" : "uzdoom";
-    const native = detail.dependencies?.supermodel || detail.dependencies?.vkquake || detail.dependencies?.eduke32 || detail.dependencies?.ironwail;
+    const native = detail.dependencies?.supermodel || detail.dependencies?.vkquake || detail.dependencies?.eduke32 || detail.dependencies?.ironwail || detail.dependencies?.openbor;
     const source = m.inputs.find(f => f.id === "source_dir");
     const destination = m.inputs.find(f => f.id === "games_root");
     d.innerHTML = `<h2>${esc(detail.name)} <small>${esc(detail.version)}</small></h2>
@@ -385,6 +385,8 @@ async function selectPackage(id, version) {
         <details><summary>Technical software details</summary>${packageJson(flatpak)}</details>` : ""}
       ${native ? `<h3>Required game software</h3>
         <p class="bnote">${native.installed ? "Required software is installed. Momentum will reuse it without upgrading or changing its settings."
+          : detail.dependencies?.openbor
+            ? "Momentum will prepare the exact OpenBOR 6391 runtime bundled in this package after your approval. No engine download or FUSE is required. Then review the separate game installation and download plan."
           : detail.dependencies?.eduke32
             ? "Momentum will build the required software from pinned official source after your approval. Ubuntu build prerequisites must already be installed. Then review the game installation plan."
             : "Momentum will get the required software from its pinned official release after your approval. Then review the game installation plan."}</p>
@@ -498,6 +500,9 @@ async function reviewPackagePlan(id) {
         ${a.backup ? `<p class="bnote">Backup: <span class="pkg-path">${esc(a.backup)}</span></p>` : ""}</article>`).join("")}</div>`
         : '<p class="bnote">No file changes listed.</p>'}
       <details><summary>Technical software and network details</summary>${packageJson(plan.dependencies || {})}</details>
+      ${plan.package_id === "marvel-infinity-war" && Array.isArray(plan.network) && plan.network.length ? `<h3>Game content download</h3>
+        <p class="bnote">The package will download this pinned game content only after you approve this game installation plan. Only the verified game PAK is extracted; upstream executables and settings are not imported.</p>
+        ${packageJson(plan.network)}` : ""}
       ${Array.isArray(plan.downloads) ? `<h3>Required software and mod source</h3>
         <p class="bnote">These pinned downloads prepare shared software/source only. Original game files and saves are not changed. After preparation, review and approve the separate game installation plan.</p>
         ${packageJson(plan.downloads)}
@@ -507,12 +512,17 @@ async function reviewPackagePlan(id) {
           Your existing engine is not changed. This download goes into a separate Momentum-owned installation,
           with separate settings and saves for this game. Allow at least ${Math.ceil(plan.space_required_bytes / 1073741824)} GiB free.</p>
           <p class="pkg-path">${esc(plan.slot)}</p>` : ""}
-        <p class="bnote">${plan.dependency_download
+        <p class="bnote">${plan.runtime_publication
+          ? "Momentum will extract the verified OpenBOR 6391 runtime already bundled in this package into the location below. No engine download or FUSE is required."
+          : plan.dependency_download
           ? "Momentum will download the required software from its pinned official GitHub release for your account. No administrator access or automatic upgrade is requested."
           : plan.dependency_commands.length ? "Momentum will download the required software from Flathub for your account. No administrator access or automatic upgrade is requested."
           : "No downloads needed; reuse the installed software without upgrading it."}</p>
-        <details><summary>Exact software preparation</summary>${packageJson(plan.dependency_download || plan.dependency_commands)}</details>
-        <p class="pkg-warning">Shared software remains installed if later game work fails. Cancellation waits for an active download/install transaction to finish. After preparation, Momentum checks compatibility and asks you to review the game files.</p>` : ""}
+        ${plan.runtime_publication ? `<p class="pkg-path">${esc(plan.runtime_publication.target)}</p>` : ""}
+        <details><summary>Exact software preparation</summary>${packageJson(plan.runtime_publication || plan.dependency_download || plan.dependency_commands)}</details>
+        <p class="pkg-warning">${plan.dependency === "openbor"
+          ? "The shared runtime is retained after game removal. Cancellation is checked at safe extraction/publication boundaries. After preparation, review the separate game installation plan."
+          : "Shared software remains installed if later game work fails. Cancellation waits for an active download/install transaction to finish. After preparation, Momentum checks compatibility and asks you to review the game files."}</p>` : ""}
       <details><summary>Preserved files and state</summary>${packageJson({ preserve: plan.preserve || [], state: plan.state_destinations || [] })}</details>
       <h3>Manual setup after installation</h3>
       <ul>${(plan.manual_actions || []).map(a => `<li>${esc(a.message || a.action_id)}</li>`).join("") || "<li>No manual actions listed.</li>"}</ul>
