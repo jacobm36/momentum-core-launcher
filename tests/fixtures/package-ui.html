@@ -43,7 +43,8 @@ fetch = async path => {
   if (path === "/api/packages") return reply({ packages: installerReady ? [summary] : [] });
   if (path === "/api/catalog") return catalogOffline ? reply({ error: "Cannot load available games: offline" }, 502)
     : reply({ catalog_version: 1, games: [{
-      ...summary, description: "Bring your own game files.", icon_url: "/web/icon.svg"
+      ...summary, description: "Bring your own game files.", icon_url: "/web/icon.svg",
+      pillar: "boomer-shooters", runtime: "<i>UZDoom</i>"
     }] });
   if (path === "/api/jobs/j00000002") return reply({ id: "j00000002", kind: "download", status: downloadStatus,
     package_id: "test-game", package_version: "1.0.0", progress: { current: 50, total: 100 },
@@ -124,7 +125,11 @@ async function until(fn) {
   await until(() => $("[data-game]"));
   check($("#catalog-manual").getClientRects().length && $("#catalog-installed").getClientRects().length,
     "manual entry and installed-game import are visible");
-  check($("#catalog-games h3").textContent === summary.name, "catalog metadata escaped");
+  check($("#catalog-games .catalog-card h3").textContent === summary.name, "catalog metadata escaped");
+  check($("#catalog-games .pillar-title").textContent === "Boomer Shooters"
+    && document.querySelectorAll("#catalog-games .catalog-pillar").length === 1, "catalog grouped by pillar");
+  check($("#catalog-games .runtime-badge").textContent === "<i>UZDoom</i>" && !$("#catalog-games .runtime-badge i"),
+    "runtime badge shown and escaped");
   check($("#catalog-games img").getAttribute("src") === "/web/icon.svg", "catalog card artwork only");
   check($("[data-game]").textContent.includes("Continue setup"), "validated imported installer reuses setup");
   $("[data-game]").click(); await until(() => $("#pkg-setup"));

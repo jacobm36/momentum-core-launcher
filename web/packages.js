@@ -12,6 +12,11 @@ function packageError(d, error) {
 const packageJson = value => `<pre class="pkg-json">${esc(JSON.stringify(value, null, 2))}</pre>`;
 let selectedPackage = null;
 let downloadPoll = null;
+const STORE_PILLARS = [
+  { id: "openbor", title: "OpenBOR", note: "Fan-made beat 'em ups, packaged and made Linux-native. OpenBOR, without the setup." },
+  { id: "mouse-arcade", title: "Momentum Mouse Arcade", note: "Arcade rail shooters become mouse games. Point, click, play." },
+  { id: "boomer-shooters", title: "Boomer Shooters", note: "Quake • Doom • Duke • Community Mods. Classic engines. Modern mods. Less setup." },
+];
 
 function openAddGame() {
   const d = $("#pdlg");
@@ -123,7 +128,7 @@ function openPackages() {
   if (d.open) return;
   selectedPackage = null;
   d.innerHTML = `<h2>Browse the package store</h2>
-    <p class="bnote">Choose a game. Momentum gets its installer; you provide your game files.</p>
+    <p class="bnote">Community games. Arcade oddities. Boomer shooters. Choose a game: Momentum gets its installer and guides the setup; you provide your own game files where required.</p>
     <p class="pkg-error" role="alert" hidden></p>
     <div id="catalog-games"><p class="bnote">Loading available games...</p></div>
     <div id="catalog-download" hidden><p id="catalog-status" role="status"></p>
@@ -158,14 +163,21 @@ async function loadGameCatalog() {
       fetch("/api/catalog").then(packageResponse), fetch("/api/packages").then(packageResponse)
     ]);
     if (!d.open || !list.isConnected) return;
-    list.innerHTML = catalog.games.length ? catalog.games.map(g => {
+    const card = g => {
       const ready = imported.packages.some(p => p.id === g.id && p.version === g.version && p.digest === g.digest);
       return `<article class="catalog-card"><img src="${esc(g.icon_url)}" alt="" referrerpolicy="no-referrer">
-        <div><h3>${esc(g.name)}</h3><p class="bnote">${esc(g.description)}</p>
+        <div><h3>${esc(g.name)}</h3>${g.runtime ? `<span class="runtime-badge" title="Runtime">${esc(g.runtime)}</span>` : ""}
+        <p class="bnote">${esc(g.description)}</p>
         ${g.platform_issues.length ? `<p class="pkg-warning">${esc(g.platform_issues.join("; "))}</p>` : ""}
         <button type="button" class="primary" data-game="${esc(g.id)}" ${g.platform_issues.length ? "disabled" : ""}>
           ${ready ? "Continue setup" : "Set up game"}</button></div></article>`;
-    }).join("") : '<p class="sempty">No games available yet.</p>';
+    };
+    const sections = [...STORE_PILLARS, { id: null, title: "More games", note: "" }].map(p => ({
+      ...p, games: catalog.games.filter(g => p.id ? g.pillar === p.id : !STORE_PILLARS.some(s => s.id === g.pillar))
+    })).filter(p => p.games.length);
+    list.innerHTML = sections.length ? sections.map(p => `<section class="catalog-pillar">
+      <h3 class="pillar-title">${esc(p.title)}</h3>${p.note ? `<p class="pillar-note">${esc(p.note)}</p>` : ""}
+      ${p.games.map(card).join("")}</section>`).join("") : '<p class="sempty">No games available yet.</p>';
     list.onclick = async e => {
       const button = e.target.closest("[data-game]"); if (!button || button.disabled) return;
       const game = catalog.games.find(g => g.id === button.dataset.game);

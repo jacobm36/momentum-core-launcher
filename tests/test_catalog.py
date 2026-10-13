@@ -61,6 +61,16 @@ class CatalogTests(Base):
         with self.assertRaises(catalog.CatalogError):
             catalog.validate({"catalog_version": 1, "games": [self.entry, self.entry]})
 
+    def test_optional_pillar_and_runtime_are_validated(self):
+        entry = dict(copy.deepcopy(self.entry), pillar="boomer-shooters", runtime="UZDoom")
+        game = catalog.validate({"catalog_version": 1, "games": [entry]})["games"][0]
+        self.assertEqual((game["pillar"], game["runtime"]), ("boomer-shooters", "UZDoom"))
+        for key, value in (("pillar", "rpg"), ("pillar", None), ("runtime", ""), ("runtime", 5),
+                           ("runtime", "x" * 41)):
+            with self.subTest(key=key, value=value):
+                with self.assertRaises(catalog.CatalogError):
+                    catalog.validate({"catalog_version": 1, "games": [dict(self.entry, **{key: value})]})
+
     def test_redirects_are_bounded_to_https_github_delivery(self):
         handler = catalog.GitHubRedirect()
         request = urllib.request.Request(self.entry["url"])

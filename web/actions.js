@@ -69,6 +69,7 @@ function editor(g, manual = false) {
     <label>Accent color (optional, like #ff3030; blank = automatic from the art)<input name="accent" value="${esc(g.accent || "")}" placeholder="#ff3030" pattern="#[0-9a-fA-F]{6}"></label>
     <div class="chips swatches" data-chips="accent">${SWATCHES.map(c => `<button type="button" data-v="${c}" style="--sw:${c}" title="${c}" aria-label="Accent ${c}"></button>`).join("")}<button type="button" data-v="">Auto</button></div>
     <label>Tagline<input name="tagline" value="${esc(g.tagline || "")}"></label>
+    <label>Runtime badge (optional, like UZDoom or OpenBOR 6391)<input name="runtime" maxlength="40" value="${esc(g.runtime || "")}"></label>
     <label>Description<textarea name="description" rows="4">${esc(g.description || "")}</textarea></label>
     <label>Tags (comma separated)<input name="tags" value="${esc((g.tags || []).join(", "))}"></label>
     ${chips("tags", allTags)}

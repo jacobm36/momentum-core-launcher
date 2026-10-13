@@ -99,6 +99,7 @@ function renderDetailInner() {
   const on = running.has(g.id);
   if (shown !== g.id) { shown = g.id; for (const n of [el, art]) { n.classList.remove("swap"); void n.offsetWidth; n.classList.add("swap"); } }
   const tagline = `<div class="tagline">${esc(g.tagline || g.category || "")}</div>`;
+  const runtime = g.runtime ? `<span class="runtime-badge" title="Runtime">${esc(g.runtime)}</span>` : "";
   const tags = `<div class="tags">${(g.tags || []).map(t => `<span data-tag="${esc(t)}" tabindex="0" role="button" aria-pressed="${tagSel.has(tagKey(t))}" class="${tagSel.has(tagKey(t)) ? "on" : ""}" title="${tagSel.has(tagKey(t)) ? "Remove" : "Add"} tag filter: ${esc(t)}">${esc(t)}</span>`).join("")}</div>`;
   const play = `<button id="play" ${on ? "disabled" : ""}>${on ? "RUNNING" : "▶ PLAY"}</button>`;
   const actions = `${play}<span id="toast"></span><span class="manage"><button id="fav" aria-pressed="${!!g.favorite}">${g.favorite ? "★ Favorited" : "☆ Favorite"}</button><button id="edit">Edit</button><button id="del">Remove</button></span>`;
@@ -108,12 +109,12 @@ function renderDetailInner() {
       ? `<img class="${g.cover ? "cover" : "icon"}" src="${esc(url(image))}" alt="">`
       : `<div class="feature-monogram">${esc(g.name[0] || "?")}</div>`;
     el.innerHTML = `<div class="feature-art">${media}</div><div class="feature-copy">
-      <div class="feature-top">${tagline}<div class="feature-badges">${on ? '<span class="running-badge">● Running</span>' : ""}${g.favorite ? '<span class="favorite-badge">★ Favorite</span>' : ""}</div></div>
+      <div class="feature-top">${tagline}<div class="feature-badges">${runtime}${on ? '<span class="running-badge">● Running</span>' : ""}${g.favorite ? '<span class="favorite-badge">★ Favorite</span>' : ""}</div></div>
       <h1>${esc(g.name)}</h1><p class="desc">${esc(g.description || "")}</p>${tags}
       ${galleryStrip(g)}<div class="stats">${statText(g.id)}</div><div class="feature-actions">${actions}</div>
     </div>`;
   } else {
-    el.innerHTML = `${tagline}<h1>${esc(g.name)}</h1>
+    el.innerHTML = `${tagline}${runtime ? `<div class="feature-badges classic-badges">${runtime}</div>` : ""}<h1>${esc(g.name)}</h1>
       <p class="desc">${esc(g.description || "")}</p>${tags}
       ${galleryStrip(g)}<div class="stats">${statText(g.id)}</div>${actions}`;
   }

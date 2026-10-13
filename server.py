@@ -141,7 +141,7 @@ def load_games():
     return games
 
 
-FIELDS = ("name", "exec", "cwd", "tagline", "description", "tags", "category", "accent")
+FIELDS = ("name", "exec", "cwd", "tagline", "description", "tags", "category", "accent", "runtime")
 KINDS = {"cover": ("jpg", "jpeg", "png", "webp"), "icon": ("jpg", "jpeg", "png", "webp", "svg"),
          "video": ("mp4", "webm"), "shot": ("jpg", "jpeg", "png", "webp")}
 MAX_SHOTS = 24
@@ -199,6 +199,8 @@ def clean(data):
             v = str(v).strip() if v is not None else ""
         if k == "accent" and not re.fullmatch(r"#[0-9a-fA-F]{6}", v):
             v = ""
+        if k == "runtime":
+            v = v[:40]
         if v or k in ("name", "exec", "tags"):
             g[k] = v
     return g
@@ -480,7 +482,7 @@ class Handler(SimpleHTTPRequestHandler):
                 existing = next((x for x in games if x["id"] == gid), None) if gid else None
                 if existing:
                     existing.update(g)
-                    for k in ("tagline", "description", "cwd", "category", "accent"):
+                    for k in ("tagline", "description", "cwd", "category", "accent", "runtime"):
                         if k not in g:
                             existing.pop(k, None)
                 else:

@@ -1,5 +1,18 @@
 # Marvel Infinity War setup
 
+## OpenBOR, without the setup
+
+OpenBOR is home to a large library of fan-made beat 'em ups. Momentum packages
+make them Linux-native. A package pins the engine version the game was tested
+with and seeds the controller preset, display settings and shader. It keeps
+your saves and settings and adds the game to your library with artwork. No
+ROMs. No mystery configurations. Just games that work.
+
+Marvel Infinity War is the first OpenBOR package. The details below describe
+exactly what it does.
+
+## How the package works
+
 This is a bounded integration for Marvel Infinity War with the supplied OpenBOR
 6391 runtime, not a general OpenBOR manager. Version 0.2.0 is published in the
 public store and has owner-reported debug-PC acceptance. The frontend and

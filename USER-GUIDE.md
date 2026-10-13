@@ -191,8 +191,8 @@ You can do everything from the launcher window with the mouse and keyboard, and 
 **Add a game:** click **+ Add game** at the bottom of the sidebar. Three choices are visible here and on the empty-library welcome screen:
 
 - **Import installed games:** review game shortcuts from `~/.local/share/applications`. Select the games you trust, then choose **Import selected games**. Momentum shows what was added or skipped; existing entries and edited commands are never refreshed by this UI. Scanning and importing do not run game commands or install software. Steam games appear if they have game shortcuts in this folder; this does not enumerate every Steam library. Hidden, invalid and terminal-only game shortcuts are reported as skipped. File-based icons are copied only when absent; icon warnings are shown.
-- **Add a game manually:** use your own launch command or script. Name and launch command are required; working directory, category, tagline, description, tags and artwork are optional.
-- **Browse the package store:** choose a supported game and set it up from your local files. See [guided setup](#notifications-installs-and-backups) below. The store is optional; existing Steam, native and emulator launches do not require a Momentum package.
+- **Add a game manually:** use your own launch command or script. Name and launch command are required; working directory, category, tagline, runtime badge, description, tags and artwork are optional.
+- **Browse the package store:** choose a supported game and set it up from your local files. The store groups games into three sections: **OpenBOR** (fan-made beat 'em ups), **Momentum Mouse Arcade** (light-gun and rail shooters played with the mouse) and **Boomer Shooters** (Quake, Doom, Duke and community mods). Each card shows a badge naming the engine the package uses, such as UZDoom, vkQuake, Flycast, Supermodel or OpenBOR 6391. See [guided setup](#notifications-installs-and-backups) below. The store is optional; existing Steam, native and emulator launches do not require a Momentum package.
 
 **Edit a game:** select it and click **Edit** under the PLAY button. Change any field, choose a new file to replace art or video, or click **remove** next to a current file to clear it.
 
@@ -244,6 +244,7 @@ You can still edit the file directly if you prefer. Open `games.json` and add an
 | `cwd` | Optional folder to run the command from. |
 | `category` | Sidebar group. Use an existing name or invent a new one. |
 | `tagline`, `description`, `tags` | Optional info shown on the game page. |
+| `runtime` | Optional engine badge on the game page, e.g. `UZDoom` (up to 40 characters). Also editable in the Add/Edit form. |
 | `icon` | Optional small sidebar icon, e.g. `media/my-game/icon.png`. |
 
 Changes show up within a few seconds, with no restart needed. If the launcher shows nothing, there is probably a typo in `games.json`: a missing comma or quote. You can check the file with `python3 -m json.tool games.json`.

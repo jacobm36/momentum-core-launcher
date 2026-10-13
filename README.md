@@ -2,19 +2,68 @@
 
 ### Your games. Your Linux arcade.
 
-**Less setup. More PLAY.**
+**Community games. Arcade oddities. Boomer shooters.**
+All the stuff enthusiasts love, without the setup pain.
 
-Steam shortcuts. Native games. Arcade classics. Doom mods. OpenBOR beat 'em ups.
-Your games don't all come from the same place, and they don't all launch the same
-way. Momentum gives them one controller-friendly home, with an arcade-inspired
-interface that makes your collection feel like a collection.
+Momentum Core is not a ROM frontend. It is a Linux game compatibility and
+packaging platform for games that are otherwise inconvenient, fragmented or
+difficult to configure, with an arcade-inspired, controller-friendly library to
+launch them from.
 
-And for supported titles, it goes beyond the Play button: Momentum brings the
+Steam shortcuts, native games and emulator launches can live there too. Your
+games don't all come from the same place, and they don't all launch the same
+way. Momentum gives them one home that makes your collection feel like a
+collection.
+
+For supported titles, it goes beyond the Play button: Momentum brings the
 compatible engine, launch recipe, artwork and guided setup together, so a
 working configuration doesn't have to stay trapped on the computer where you
 first figured it out.
 
 ![Momentum's Featured panel with game artwork and an arcade-inspired library](docs/screenshot.png)
+
+## Three ways to play
+
+### OpenBOR: fan-made beat 'em ups, made Linux-native
+
+**OpenBOR, without the setup.** A Momentum package turns an OpenBOR game into a
+polished Linux experience. Each package can pin the engine version the game was
+tested with, configure the controller, apply display settings and shaders,
+preserve your saves and add the game to your library.
+No ROMs. No mystery configurations. Just games that work.
+
+The game files already existed. Momentum turns them into a polished Linux game.
+
+### Momentum Mouse Arcade: rail shooters become mouse games
+
+Momentum Core can turn compatible light-gun and rail-shooter titles into
+natural mouse-driven games on Linux. **Point, click, play.** Each package
+carries a tested emulator setup with fullscreen mouse aiming.
+Bring your own legally obtained game files. Momentum handles the rest.
+
+### Boomer Shooters: classic engines, modern mods
+
+**Classic engines. Modern mods. Less setup.** The best of Quake, Doom, Duke and
+beyond, configured for Linux and ready to launch.
+
+A Momentum package doesn't just run `-file something.pk3` or `-game modfolder`.
+It handles the parts people repeatedly trip over:
+
+- engine selection and per-game engine pinning
+- required base-game files
+- mod load order
+- fullscreen and display settings
+- launch arguments
+- controller and mouse configuration
+- artwork and metadata
+- preserving saves and user state
+- clean removal
+
+Every store card shows a runtime badge, such as UZDoom or vkQuake, so you can
+see the engine without having to configure it. The launcher also has adapters
+for EDuke32 and Ironwail. Packages bundle mod and engine components or fetch
+them from their sources; where a mod needs commercial base-game files, such as
+Quake's `pak0.pak`/`pak1.pak` or `DOOM2.WAD`, you supply them.
 
 ## One front door. Three ways in.
 
@@ -87,14 +136,17 @@ your user, so only approve installers from publishers you trust.
 
 ## In the package store today
 
-| Game | Package |
-|---|---|
-| Star Wars Trilogy Arcade | 0.2.1 |
-| L.A. Machineguns | 0.2.2 |
-| The House of the Dead 2 | 0.3.0 |
-| Brutal Doom | 0.3.0 |
-| Slave Zero X: Episode Enyo | 0.3.0 |
-| Marvel Infinity War | 0.2.0 |
+The store groups packages by experience, and each card shows the runtime it
+uses.
+
+| Pillar | Game | Runtime | Package |
+|---|---|---|---|
+| OpenBOR | Marvel Infinity War | OpenBOR 6391 | 0.2.0 |
+| Momentum Mouse Arcade | Star Wars Trilogy Arcade | Supermodel | 0.2.1 |
+| Momentum Mouse Arcade | L.A. Machineguns | Supermodel | 0.2.2 |
+| Momentum Mouse Arcade | The House of the Dead 2 | Flycast | 0.3.0 |
+| Boomer Shooters | Brutal Doom | UZDoom | 0.3.0 |
+| Boomer Shooters | Slave Zero X: Episode Enyo | vkQuake | 0.3.0 |
 
 The [public distribution repository](https://github.com/jacobm36/momentum-distribution)
 hosts the catalog and installer downloads; no GitHub account is needed to obtain

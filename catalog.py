@@ -21,6 +21,7 @@ MAX_CATALOG = 256 << 10
 MAX_DOWNLOAD = 512 << 20
 TIMEOUT = 20
 MAX_SECONDS = 600
+PILLARS = ("openbor", "mouse-arcade", "boomer-shooters")
 
 
 class CatalogError(ValueError):
@@ -79,6 +80,10 @@ def validate(data):
             raise CatalogError("Invalid canonical package digest")
         if type(game.get("size")) is not int or not 0 < game["size"] <= MAX_DOWNLOAD:
             raise CatalogError("Invalid installer download size")
+        if "pillar" in game and game["pillar"] not in PILLARS:
+            raise CatalogError("Invalid catalog pillar")
+        if "runtime" in game and (not isinstance(game["runtime"], str) or not 0 < len(game["runtime"]) <= 40):
+            raise CatalogError("Invalid catalog runtime")
         if not isinstance(game.get("platform"), dict):
             raise CatalogError("Missing catalog platform")
         platform = game["platform"]
