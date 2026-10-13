@@ -22,10 +22,12 @@ launcher bundles remain private.
   runtime. Preparation uses the extracted files and needs no FUSE, engine download,
   administrator access, or engine launch.
 - Momentum checks every runtime file, size, hash and mode before reuse. An altered
-  runtime blocks setup; it is not replaced or repaired automatically.
+  copy at the 0.2.0 runtime path blocks setup; it is not replaced or repaired
+  automatically.
 - New installations use `~/Games/marvel-infinity-war`. Existing receipts retain
   their recorded directories. The shared runtime lives separately under
-  `~/.local/share/momentum-core/software/openbor/6391`.
+  `~/.local/share/momentum-core/software/openbor/6391`. The published 0.2.0
+  package and its launcher script require this exact path, so it never moves.
 - Game acquisition is package-owned, after the separate game plan approval:
   the pinned ZVitor archive is downloaded and verified, and only its game PAK is
   extracted. Alternatively, disable downloading and supply the matching PAK.
@@ -37,6 +39,22 @@ launcher bundles remain private.
 - Cover and preview media are copied from validated retained package support to
   launcher-served media on first association only. Existing library artwork
   stays unchanged.
+
+### Build-specific runtime folders (launcher groundwork)
+
+The launcher also supports a build-specific runtime folder,
+`~/.local/share/momentum-core/software/openbor/builds/6391-<archive hash prefix>`.
+A package opts in by declaring `"layout": "build"` on its OpenBOR requirement. If
+the field is absent, the package uses the legacy `openbor/6391` path described
+above, so Marvel Infinity War 0.2.0 is unaffected. No published package uses the
+build layout yet. A future package release must opt in and be tested before it
+does.
+
+When a build-specific copy has been altered, the preparation plan names a
+side-by-side recovery folder (`<build>.altered-1`, `-2`, …). Only after you
+approve that plan does Momentum move the altered copy there unchanged and
+publish a fresh verified copy. Both renames refuse to overwrite anything. The
+move is recorded in the job's transaction journal, and nothing is deleted.
 
 Host library checks do not certify graphics, audio or input. The configuration
 was tested on Ubuntu 24.04 x86_64 with an 8BitDo SNES Pro, fullscreen and **CRT

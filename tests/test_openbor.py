@@ -72,6 +72,59 @@ class OpenBORTests(unittest.TestCase):
         shutil.rmtree(self.f.runtime);c=self.f.context();c.update(operation='prepare-dependency')
         Path(c['cancel_file']).touch();self.assertEqual(openbor.run(c),130);self.assertFalse(self.f.runtime.exists())
 
+    def test_legacy_layout_is_default_and_unchanged(self):
+        self.assertEqual(openbor.target_root(),self.f.home/'.local/share/momentum-core/software/openbor/6391')
+        self.assertEqual(openbor.target_root(),self.f.runtime)
+        facts=openbor.detect();self.assertNotIn('altered',facts);self.assertEqual(openbor.layout_of(facts),'legacy')
+        self.assertEqual(openbor.requirement_layout({}),'legacy')
+        self.assertEqual(openbor.requirement_layout({'layout':'build'}),'build')
+        with self.assertRaises(openbor.DependencyError):openbor.requirement_layout({'layout':'latest'})
+        with self.assertRaises(openbor.DependencyError):openbor.layout_of(dict(facts,launch_argv=['/usr/bin/OpenBOR']))
+
+    def _build_layout(self):
+        original=openbor._payload
+        return patch.object(openbor,'_payload',side_effect=lambda c:(original(c)[0],'build'))
+
+    def _prepare(self):
+        c=self.f.context();c.update(operation='prepare-dependency')
+        self.assertEqual(openbor.run(c),0);self.f.approve(c);self.assertEqual(openbor.run(c),0)
+        return json.loads(Path(c['result_file']).read_text())
+
+    def test_build_layout_publishes_beside_legacy_runtime(self):
+        legacy=fixture.m.inventory(self.f.runtime);root=openbor.target_root('build')
+        self.assertEqual(root.parent.name,'builds');self.assertTrue(root.name.startswith('6391-'))
+        with self._build_layout():result=self._prepare()
+        self.assertEqual(result['outcome'],'succeeded')
+        self.assertTrue(openbor.verify(root));self.assertEqual(fixture.m.inventory(self.f.runtime),legacy)
+        facts=openbor.detect('build');self.assertTrue(facts['installed'])
+        self.assertEqual(openbor.layout_of(facts),'build');self.assertTrue(openbor.check_host(facts)['bytes_verified'])
+
+    def test_altered_build_runtime_is_preserved_side_by_side(self):
+        root=openbor.target_root('build')
+        with self._build_layout():
+            self._prepare()
+            for n in (1,2):
+                target=root/'usr/bin/OpenBOR';target.write_bytes(target.read_bytes()+b'local edit')
+                altered=fixture.m.inventory(root)
+                facts=openbor.detect('build');self.assertTrue(facts['altered']);self.assertFalse(facts['installed'])
+                c=self.f.context();c.update(operation='prepare-dependency');self.assertEqual(openbor.run(c),0)
+                preserve=json.loads(Path(c['result_file']).read_text())['plan']['runtime_publication']['preserve_altered']
+                destination=root.parent/f'{root.name}.altered-{n}'
+                self.assertEqual(preserve,dict(source=str(root),destination=str(destination)))
+                self.assertEqual(fixture.m.inventory(root),altered);self.assertFalse(destination.exists())
+                self.f.approve(c);self.assertEqual(openbor.run(c),0)
+                self.assertEqual(fixture.m.inventory(destination),altered);self.assertTrue(openbor.verify(root))
+                journal=json.loads((Path(c['result_file']).parent/'dependency-transactions.json').read_text())
+                self.assertEqual(journal['completed'][0],dict(preserved=str(root),destination=str(destination)))
+
+    def test_altered_legacy_runtime_still_requires_manual_reconciliation(self):
+        target=self.f.runtime/'usr/bin/OpenBOR';target.write_bytes(target.read_bytes()+b'local edit')
+        before=fixture.m.inventory(self.f.runtime)
+        with self.assertRaises(openbor.DependencyError):openbor.detect()
+        c=self.f.context();c.update(operation='prepare-dependency');self.assertEqual(openbor.run(c),40)
+        self.assertEqual(fixture.m.inventory(self.f.runtime),before)
+        self.assertEqual(list(self.f.runtime.parent.glob('*.altered-*')),[])
+
     def test_unsafe_archive_member_rejected(self):
         buf=io.BytesIO()
         with tarfile.open(fileobj=buf,mode='w:gz') as tar:

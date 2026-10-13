@@ -348,10 +348,13 @@ class Installs:
                         req.get("tested_version"), req.get("sha256")) != (
                         "appimage", "user", "github:DCurrent/openbor", openbor.VERSION, openbor.ASSET_SHA256):
                     raise InstallError("Only the exact bundled OpenBOR 6391 runtime is supported")
+                if req.get("layout", "legacy") not in openbor.LAYOUTS:
+                    raise InstallError("Unsupported OpenBOR runtime layout")
             else:
                 raise InstallError(f"Unsupported dependency resolver: {runtime}")
             try:
-                facts[runtime] = RUNTIME_RESOLVERS[runtime].detect()
+                facts[runtime] = (openbor.detect(req.get("layout", "legacy")) if runtime == "openbor"
+                                  else RUNTIME_RESOLVERS[runtime].detect())
             except dependencies.DependencyError as e:
                 raise InstallError(str(e)) from e
             if runtime == "uzdoom" and facts[runtime].get("flatpak_available") is False:

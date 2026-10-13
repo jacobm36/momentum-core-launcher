@@ -531,6 +531,8 @@ async function reviewPackagePlan(id) {
           : plan.dependency_commands.length ? "Momentum will download the required software from Flathub for your account. No administrator access or automatic upgrade is requested."
           : "No downloads needed; reuse the installed software without upgrading it."}</p>
         ${plan.runtime_publication ? `<p class="pkg-path">${esc(plan.runtime_publication.target)}</p>` : ""}
+        ${plan.runtime_publication?.preserve_altered ? `<p class="pkg-warning">The existing OpenBOR runtime copy was altered. Approving moves it aside unchanged to the location below, then publishes a fresh verified copy. Nothing is deleted.</p>
+          <p class="pkg-path">${esc(plan.runtime_publication.preserve_altered.destination)}</p>` : ""}
         <details><summary>Exact software preparation</summary>${packageJson(plan.runtime_publication || plan.dependency_download || plan.dependency_commands)}</details>
         <p class="pkg-warning">${plan.dependency === "openbor"
           ? "The shared runtime is retained after game removal. Cancellation is checked at safe extraction/publication boundaries. After preparation, review the separate game installation plan."

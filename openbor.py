@@ -26,8 +26,27 @@ VERSION = '6391'
 INDEX = json.loads(Path(__file__).with_name('docs').joinpath('openbor-runtime-index.json').read_text())
 ASSET_SHA256 = INDEX['appimage_sha256']
 
-def target_root():
-    return Path.home() / '.local/share/momentum-core/software/openbor/6391'
+LAYOUTS = ('legacy', 'build')
+
+def target_root(layout='legacy'):
+    # Legacy path is the published Marvel 0.2.0 contract and must never move.
+    base = Path.home() / '.local/share/momentum-core/software/openbor'
+    if layout == 'legacy': return base / VERSION
+    if layout == 'build': return base / 'builds' / f"{VERSION}-{INDEX['archive_sha256'][:12]}"
+    raise DependencyError(f'Unsupported OpenBOR runtime layout: {layout}')
+
+def layout_of(facts):
+    argv = facts.get('launch_argv')
+    for layout in LAYOUTS:
+        if argv == [str(target_root(layout)/'usr/bin/OpenBOR')]: return layout
+    raise DependencyError('OpenBOR runtime path changed.')
+
+def recovery_target(root):
+    # First free side-by-side name; altered copies are preserved, never deleted.
+    n = 1
+    while (root.parent/f'{root.name}.altered-{n}').exists() or (root.parent/f'{root.name}.altered-{n}').is_symlink():
+        n += 1
+    return root.parent/f'{root.name}.altered-{n}'
 
 def safe(path):
     path=Path(path)
@@ -61,26 +80,31 @@ def verify(root):
 def supported():
     return platform.system()=='Linux' and platform.machine() in ('x86_64','AMD64')
 
-def detect():
-    root=safe(target_root())
-    installed=False
-    if root.exists():
-        if not verify(root): raise DependencyError('Existing OpenBOR runtime changed; preserve and reconcile it manually.')
-        installed=supported()
+def detect(layout='legacy'):
+    root=safe(target_root(layout))
+    installed=False;altered=False
+    if root.exists() or root.is_symlink():
+        if root.is_symlink() or not root.is_dir():
+            raise DependencyError('Existing OpenBOR runtime path is not a plain directory; reconcile it manually.')
+        if verify(root): installed=supported()
+        elif layout=='legacy': raise DependencyError('Existing OpenBOR runtime changed; preserve and reconcile it manually.')
+        else: altered=True
     exe=root/'usr/bin/OpenBOR'
-    return dict(provider='appimage',scope='user',installed=installed,version=VERSION if installed else None,
-                sha256=ASSET_SHA256 if installed else None,executable=str(exe),launch_argv=[str(exe)],
-                capabilities_checked=False)
+    facts=dict(provider='appimage',scope='user',installed=installed,version=VERSION if installed else None,
+               sha256=ASSET_SHA256 if installed else None,executable=str(exe),launch_argv=[str(exe)],
+               capabilities_checked=False)
+    if altered: facts['altered']=True
+    return facts
 
 def require(facts):
     if facts.get('installed') is not True or facts.get('version')!=VERSION or facts.get('sha256')!=ASSET_SHA256:
         raise DependencyError('Exact OpenBOR 6391 runtime is required.')
-    if facts.get('launch_argv')!=[str(target_root()/'usr/bin/OpenBOR')] or not verify(target_root()):
+    if not verify(target_root(layout_of(facts))):
         raise DependencyError('OpenBOR runtime path or bytes changed.')
 
 def check_host(facts):
     require(facts)
-    return _check_host(target_root())
+    return _check_host(target_root(layout_of(facts)))
 
 def _check_host(root):
     exe=safe(root/'usr/bin/OpenBOR')
@@ -114,7 +138,15 @@ def running(facts):
         except PermissionError as exc: raise DependencyError('Cannot inspect same-user OpenBOR processes.') from exc
     return False
 
+def requirement_layout(req):
+    layout=req.get('layout','legacy')
+    if layout not in LAYOUTS: raise DependencyError(f'Unsupported OpenBOR runtime layout: {layout}')
+    return layout
+
 def payload(context):
+    return _payload(context)[0]
+
+def _payload(context):
     root=safe(context['package_root'])
     # Intake creates an immutable package snapshot. Independently bind bytes here.
     import packages
@@ -124,6 +156,7 @@ def payload(context):
     req=man.get('requires',[])
     if man.get('id')!='marvel-infinity-war' or len(req)!=1 or req[0].get('id')!='openbor':
         raise DependencyError('Unsupported OpenBOR payload package.')
+    layout=requirement_layout(req[0])
     archive=safe(root/'engine/runtime.tar.gz')
     if not archive.is_file() or archive.stat().st_size>16*1024*1024:
         raise DependencyError('Bundled OpenBOR runtime archive is absent or exceeds the size limit.')
@@ -131,7 +164,7 @@ def payload(context):
         data=stream.read(16*1024*1024+1)
     if len(data)>16*1024*1024 or hashlib.sha256(data).hexdigest()!=INDEX['archive_sha256']:
         raise DependencyError('Bundled OpenBOR runtime archive hash mismatch.')
-    return data
+    return data,layout
 
 def check_payload_host(data,context,cancel):
     with tempfile.TemporaryDirectory(prefix='openbor-host-check-',
@@ -140,14 +173,23 @@ def check_payload_host(data,context,cancel):
         extract(data,root,cancel)
         return _check_host(root)
 
-def make_plan(facts,context):
+def make_plan(facts,context,layout='legacy'):
+    root=target_root(layout)
+    publication=None
+    if not facts['installed']:
+        publication=dict(target=str(root),source='engine/runtime.tar.gz',sha256=INDEX['archive_sha256'])
+        if facts.get('altered'):
+            publication['preserve_altered']=dict(source=str(root),destination=str(recovery_target(root)))
+    notes=['Exact local pinned runtime only; shared runtime retained on game removal.',
+           'Extraction is native and requires no FUSE. Graphics/input/gameplay checks remain.']
+    if facts.get('altered'):
+        notes.insert(0,'The existing OpenBOR runtime copy was altered. Approving moves it aside unchanged to '
+                     + Path(publication['preserve_altered']['destination']).name
+                     + ' and publishes a fresh verified copy; nothing is deleted.')
     return dict(plan_version=1,operation='prepare-dependency',dependency='openbor',scope='user',
                 dependencies={'openbor':facts},actions=[],dependency_commands=[],
                 package_digest=context['package_digest'],package_root=context['package_root'],
-                runtime_publication=None if facts['installed'] else dict(target=str(target_root()),
-                    source='engine/runtime.tar.gz',sha256=INDEX['archive_sha256']),
-                notes=['Exact local pinned runtime only; shared runtime retained on game removal.',
-                       'Extraction is native and requires no FUSE. Graphics/input/gameplay checks remain.'])
+                runtime_publication=publication,notes=notes)
 
 def extract(data,stage,cancel):
     expected={r['path']:r for r in INDEX['files']}
@@ -168,6 +210,13 @@ def extract(data,stage,cancel):
     if seen!=set(expected) or not verify(stage): raise DependencyError('Incomplete runtime extraction.')
     for p,_,_ in os.walk(stage,topdown=False): _fsync_dir(Path(p))
 
+def _rename_noreplace(source,destination):
+    # Linux atomic directory rename with NOREPLACE, never overwrite a competing directory.
+    import ctypes
+    libc=ctypes.CDLL(None,use_errno=True)
+    if libc.renameat2(-100,os.fsencode(source),-100,os.fsencode(destination),1):
+        err=ctypes.get_errno();raise OSError(err,os.strerror(err))
+
 def run(context):
     phase=context['phase'];code=0;outcome='succeeded';plan=None;facts=None;completed=[];stage=None
     journal=Path(context['result_file']).parent/'dependency-transactions.json'
@@ -176,14 +225,13 @@ def run(context):
     message='Exact OpenBOR 6391 prepared; target gameplay checks remain.'
     try:
         if phase not in ('preflight','apply'): raise DependencyError('Unsupported phase.')
-        cancel();facts=detect()
+        cancel();data,layout=_payload(context);facts=detect(layout)
         if not supported(): raise DependencyError('Linux x86_64 is required.')
-        data=payload(context)
         if facts['installed']:
             check_host(facts)
         else:
             check_payload_host(data,context,cancel)
-        plan=make_plan(facts,context)
+        plan=make_plan(facts,context,layout)
         if phase=='preflight':
             message='Review pinned shared OpenBOR runtime publication or reuse.'
         else:
@@ -194,25 +242,34 @@ def run(context):
             if (saved.get('job_id'),saved.get('phase'),saved.get('outcome'),saved.get('plan'))!=(context['job_id'],'preflight','succeeded',plan):
                 code=30;outcome='conflicted';message='Dependency facts changed; review a new plan.'
             elif not facts['installed']:
-                root=safe(target_root());stage=root.parent/('.openbor-stage-'+secrets.token_hex(8))
+                root=safe(target_root(layout));stage=root.parent/('.openbor-stage-'+secrets.token_hex(8))
+                preserve=plan['runtime_publication'].get('preserve_altered')
                 record=dict(job_id=context['job_id'],completed=[],active_command=['publish-openbor',str(root)],stage=str(stage))
+                if preserve: record['preserve_altered']=preserve
                 _write_durable(journal,(json.dumps(record)+'\n').encode())
                 emit('step_started','Preparing verified local OpenBOR runtime.',step='resolve')
                 missing=[];parent=root.parent
                 while not parent.exists(): missing.append(parent);parent=parent.parent
                 for p in reversed(missing): safe(p).mkdir(mode=0o755);_fsync_dir(p.parent)
                 stage.mkdir(mode=0o755);extract(data,stage,cancel);cancel()
-                if detect()!=facts: raise DependencyError('Runtime facts changed before publication.')
-                # Linux atomic directory rename with NOREPLACE, never overwrite a competing runtime.
-                import ctypes
-                libc=ctypes.CDLL(None,use_errno=True)
-                if libc.renameat2(-100,os.fsencode(stage),-100,os.fsencode(root),1):
-                    err=ctypes.get_errno();raise OSError(err,os.strerror(err))
+                if detect(layout)!=facts: raise DependencyError('Runtime facts changed before publication.')
+                if preserve:
+                    destination=safe(Path(preserve['destination']))
+                    if Path(preserve['source'])!=root or destination.parent!=root.parent:
+                        raise DependencyError('Unexpected OpenBOR recovery paths.')
+                    record.update(active_command=['preserve-altered-openbor',str(root),str(destination)])
+                    _write_durable(journal,(json.dumps(record)+'\n').encode())
+                    _rename_noreplace(root,destination);_fsync_dir(root.parent)
+                    completed.append(dict(preserved=str(root),destination=str(destination)))
+                    record.update(completed=completed,active_command=['publish-openbor',str(root)])
+                    _write_durable(journal,(json.dumps(record)+'\n').encode())
+                    emit('step_completed','Altered OpenBOR runtime preserved unchanged beside the fresh copy.',step='resolve')
+                _rename_noreplace(stage,root)
                 stage=None;_fsync_dir(root.parent)
-                completed=[dict(target=str(root),sha256=INDEX['archive_sha256'])]
+                completed.append(dict(target=str(root),sha256=INDEX['archive_sha256']))
                 record.update(completed=completed,active_command=None,detection_pending=True)
                 _write_durable(journal,(json.dumps(record)+'\n').encode())
-                facts=detect();require(facts)
+                facts=detect(layout);require(facts)
                 record.update(after=facts,detection_pending=False)
                 _write_durable(journal,(json.dumps(record)+'\n').encode())
                 emit('step_completed','Verified native runtime published; no game launched.',step='resolve')
