@@ -2,27 +2,47 @@
 
 ### Your games. Your Linux arcade.
 
-**Community games. Arcade oddities. Boomer shooters.**
-All the stuff enthusiasts love, without the setup pain.
+**Less setup. More PLAY.**
 
-Momentum Core is not a ROM frontend. It is a Linux game compatibility and
-packaging platform for games that are otherwise inconvenient, fragmented or
-difficult to configure, with an arcade-inspired, controller-friendly library to
-launch them from.
+Steam shortcuts. Native games. Emulator launches. Your own scripts. Your games
+don't all come from the same place, and they don't all launch the same way.
+Momentum gives every one of them a single controller-friendly home, with an
+arcade-inspired interface that makes your collection feel like a collection.
 
-Steam shortcuts, native games and emulator launches can live there too. Your
-games don't all come from the same place, and they don't all launch the same
-way. Momentum gives them one home that makes your collection feel like a
-collection.
-
-For supported titles, it goes beyond the Play button: Momentum brings the
-compatible engine, launch recipe, artwork and guided setup together, so a
-working configuration doesn't have to stay trapped on the computer where you
-first figured it out.
+Momentum Core is not a ROM frontend. It is a Linux game library plus a
+compatibility and packaging platform for games that are otherwise inconvenient,
+fragmented or difficult to configure. For supported titles, it goes beyond the
+Play button: Momentum brings the compatible engine, launch recipe, artwork and
+guided setup together, so a working configuration doesn't have to stay trapped
+on the computer where you first figured it out.
 
 ![Momentum's Featured panel with game artwork and an arcade-inspired library](docs/screenshot.png)
 
-## Three ways to play
+## One front door. Three ways in.
+
+**Already installed? Bring it in.** Review your Linux game shortcuts and import
+the ones you want. Momentum leaves your existing commands and installations
+alone. Steam games with local shortcuts, native games and emulator launches can
+sit side by side.
+
+**Have your own setup? Make it yours.** Add a command or script, give it a name,
+drop in some artwork and hit Play. You don't need a Momentum package to use
+Momentum.
+
+**Want a supported game set up? Let the recipe do the work.** Browse the package
+store, supply the required game files and review the setup plan. Momentum checks
+the installer, looks for a compatible runtime and walks you through the changes
+before making them.
+
+## Where the package store shines
+
+**Community games. Arcade oddities. Boomer shooters.**
+All the stuff enthusiasts love, without the setup pain.
+
+Your library can hold any game you can launch on Linux. The package store is
+where Momentum goes further: guided, tested setups for the kinds of games that
+are usually the hardest to get right. Today it specializes in three areas, and
+it will grow one real game at a time.
 
 ### OpenBOR: fan-made beat 'em ups, made Linux-native
 
@@ -64,22 +84,6 @@ see the engine without having to configure it. The launcher also has adapters
 for EDuke32 and Ironwail. Packages bundle mod and engine components or fetch
 them from their sources; where a mod needs commercial base-game files, such as
 Quake's `pak0.pak`/`pak1.pak` or `DOOM2.WAD`, you supply them.
-
-## One front door. Three ways in.
-
-**Already installed? Bring it in.** Review your Linux game shortcuts and import
-the ones you want. Momentum leaves your existing commands and installations
-alone. Steam games with local shortcuts, native games and emulator launches can
-sit side by side.
-
-**Have your own setup? Make it yours.** Add a command or script, give it a name,
-drop in some artwork and hit Play. You don't need a Momentum package to use
-Momentum.
-
-**Want a supported game set up? Let the recipe do the work.** Browse the package
-store, supply the required game files and review the setup plan. Momentum checks
-the installer, looks for a compatible runtime and walks you through the changes
-before making them.
 
 ## Not just a shortcut with a nice cover
 

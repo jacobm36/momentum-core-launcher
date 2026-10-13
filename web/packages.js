@@ -128,7 +128,7 @@ function openPackages() {
   if (d.open) return;
   selectedPackage = null;
   d.innerHTML = `<h2>Browse the package store</h2>
-    <p class="bnote">Community games. Arcade oddities. Boomer shooters. Choose a game: Momentum gets its installer and guides the setup; you provide your own game files where required.</p>
+    <p class="bnote">Guided setups for community games, arcade oddities and boomer shooters, with more to come. Momentum gets the installer and guides the setup; you provide your own game files where required. Your library isn't limited to the store: import or add any game you can launch.</p>
     <p class="pkg-error" role="alert" hidden></p>
     <div id="catalog-games"><p class="bnote">Loading available games...</p></div>
     <div id="catalog-download" hidden><p id="catalog-status" role="status"></p>
