@@ -18,13 +18,16 @@ import openbor, packages, installs, jobs, compatibility
 REPO=Path(os.environ.get('MCL_PACKAGE_REPO',str(Path(__file__).resolve().parents[2]/'momentum-packages')))
 PACKAGE=Path(os.environ.get('MIW_PACKAGE_DIR',str(REPO/'marvel-infinity-war/package')))
 fixture=None
+LAYOUT='legacy'
+if (PACKAGE/'package.json').is_file():
+    LAYOUT=openbor.requirement_layout(json.loads((PACKAGE/'package.json').read_text())['requires'][0])
 if (PACKAGE/'tests/test_lifecycle.py').is_file():
     spec=importlib.util.spec_from_file_location('miw_fixture',PACKAGE/'tests/test_lifecycle.py')
     fixture=importlib.util.module_from_spec(spec);spec.loader.exec_module(fixture)
 
 def provisional_record(digest):
     return {
-        "id": "marvel-infinity-war", "version": "0.2.0", "digest": digest,
+        "id": "marvel-infinity-war", "version": fixture.PACKAGE_VERSION, "digest": digest,
         "runtime": "openbor", "installer_validated": True,
         "software": {"provider": "appimage", "scope": "user", "version": openbor.VERSION,
                      "sha256": openbor.ASSET_SHA256},
@@ -50,17 +53,20 @@ class OpenBORTests(unittest.TestCase):
     def tearDown(self):self.env.stop();self.f.tearDown()
 
     def test_exact_reuse_host_checks_and_tamper(self):
-        facts=openbor.detect();self.assertTrue(facts['installed'])
+        facts=openbor.detect(LAYOUT);self.assertTrue(facts['installed'])
+        self.assertEqual(openbor.target_root(LAYOUT),self.f.runtime)
         self.assertFalse(openbor.check_host(facts)['engine_launched'])
-        before=fixture.m.inventory(self.f.runtime);self.assertEqual(openbor.detect(),facts)
+        before=fixture.m.inventory(self.f.runtime);self.assertEqual(openbor.detect(LAYOUT),facts)
         self.assertEqual(fixture.m.inventory(self.f.runtime),before)
         (self.f.runtime/'usr/bin/OpenBOR').chmod(0o644)
-        with self.assertRaises(openbor.DependencyError):openbor.detect()
+        if LAYOUT=='legacy':
+            with self.assertRaises(openbor.DependencyError):openbor.detect(LAYOUT)
+        else:self.assertTrue(openbor.detect(LAYOUT)['altered'])
 
     def test_missing_runtime_preparation_and_repeat(self):
         shutil.rmtree(self.f.runtime);c=self.f.context();c.update(operation='prepare-dependency')
         self.assertEqual(openbor.run(c),0);self.f.approve(c);self.assertEqual(openbor.run(c),0)
-        self.assertTrue(openbor.detect()['installed']);self.assertTrue(openbor.verify(self.f.runtime))
+        self.assertTrue(openbor.detect(LAYOUT)['installed']);self.assertTrue(openbor.verify(self.f.runtime))
         journal=json.loads((Path(c['result_file']).parent/'dependency-transactions.json').read_text())
         self.assertIsNone(journal['active_command']);self.assertFalse(journal['detection_pending'])
         c=self.f.context();c.update(operation='prepare-dependency')
@@ -72,10 +78,14 @@ class OpenBORTests(unittest.TestCase):
         shutil.rmtree(self.f.runtime);c=self.f.context();c.update(operation='prepare-dependency')
         Path(c['cancel_file']).touch();self.assertEqual(openbor.run(c),130);self.assertFalse(self.f.runtime.exists())
 
+    def _legacy_copy(self):
+        legacy=openbor.target_root()
+        if legacy!=self.f.runtime:shutil.copytree(self.f.runtime,legacy,symlinks=True)
+        return legacy
+
     def test_legacy_layout_is_default_and_unchanged(self):
         self.assertEqual(openbor.target_root(),self.f.home/'.local/share/momentum-core/software/openbor/6391')
-        self.assertEqual(openbor.target_root(),self.f.runtime)
-        facts=openbor.detect();self.assertNotIn('altered',facts);self.assertEqual(openbor.layout_of(facts),'legacy')
+        self._legacy_copy();facts=openbor.detect();self.assertNotIn('altered',facts);self.assertEqual(openbor.layout_of(facts),'legacy')
         self.assertEqual(openbor.requirement_layout({}),'legacy')
         self.assertEqual(openbor.requirement_layout({'layout':'build'}),'build')
         with self.assertRaises(openbor.DependencyError):openbor.requirement_layout({'layout':'latest'})
@@ -91,11 +101,13 @@ class OpenBORTests(unittest.TestCase):
         return json.loads(Path(c['result_file']).read_text())
 
     def test_build_layout_publishes_beside_legacy_runtime(self):
-        legacy=fixture.m.inventory(self.f.runtime);root=openbor.target_root('build')
+        legacy_root=self._legacy_copy();root=openbor.target_root('build')
+        if root.exists():shutil.rmtree(root)
+        legacy=fixture.m.inventory(legacy_root)
         self.assertEqual(root.parent.name,'builds');self.assertTrue(root.name.startswith('6391-'))
         with self._build_layout():result=self._prepare()
         self.assertEqual(result['outcome'],'succeeded')
-        self.assertTrue(openbor.verify(root));self.assertEqual(fixture.m.inventory(self.f.runtime),legacy)
+        self.assertTrue(openbor.verify(root));self.assertEqual(fixture.m.inventory(legacy_root),legacy)
         facts=openbor.detect('build');self.assertTrue(facts['installed'])
         self.assertEqual(openbor.layout_of(facts),'build');self.assertTrue(openbor.check_host(facts)['bytes_verified'])
 
@@ -118,12 +130,15 @@ class OpenBORTests(unittest.TestCase):
                 self.assertEqual(journal['completed'][0],dict(preserved=str(root),destination=str(destination)))
 
     def test_altered_legacy_runtime_still_requires_manual_reconciliation(self):
-        target=self.f.runtime/'usr/bin/OpenBOR';target.write_bytes(target.read_bytes()+b'local edit')
-        before=fixture.m.inventory(self.f.runtime)
+        legacy=self._legacy_copy()
+        target=legacy/'usr/bin/OpenBOR';target.write_bytes(target.read_bytes()+b'local edit')
+        before=fixture.m.inventory(legacy)
         with self.assertRaises(openbor.DependencyError):openbor.detect()
-        c=self.f.context();c.update(operation='prepare-dependency');self.assertEqual(openbor.run(c),40)
-        self.assertEqual(fixture.m.inventory(self.f.runtime),before)
-        self.assertEqual(list(self.f.runtime.parent.glob('*.altered-*')),[])
+        original=openbor._payload
+        with patch.object(openbor,'_payload',side_effect=lambda c:(original(c)[0],'legacy')):
+            c=self.f.context();c.update(operation='prepare-dependency');self.assertEqual(openbor.run(c),40)
+        self.assertEqual(fixture.m.inventory(legacy),before)
+        self.assertEqual(list(legacy.parent.glob('*.altered-*')),[])
 
     def test_unsafe_archive_member_rejected(self):
         buf=io.BytesIO()
@@ -154,7 +169,9 @@ class OpenBORTests(unittest.TestCase):
 
     def test_symlink_and_world_writable_runtime_are_not_reused(self):
         self.f.runtime.chmod(0o777)
-        with self.assertRaises(openbor.DependencyError):openbor.detect()
+        if LAYOUT=='legacy':
+            with self.assertRaises(openbor.DependencyError):openbor.detect(LAYOUT)
+        else:self.assertTrue(openbor.detect(LAYOUT)['altered'])
         self.f.runtime.chmod(0o755)
         link=self.f.base/'runtime-link';link.symlink_to(self.f.runtime,target_is_directory=True)
         with self.assertRaises(openbor.DependencyError):openbor.verify(link)

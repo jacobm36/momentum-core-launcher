@@ -15,19 +15,27 @@ exactly what it does.
 
 This is a bounded integration for Marvel Infinity War with the supplied OpenBOR
 6391 runtime, not a general OpenBOR manager. Version 0.2.0 is published in the
-public store and has owner-reported debug-PC acceptance. The frontend and
+public store and has owner-reported debug-PC acceptance. Version 0.3.0 moves the
+engine to a build-specific folder (below). It passed the real-runner installer
+validation, including an isolated upgrade from 0.2.0, but owner upgrade and
+gameplay confirmation is still pending and it is not published. The frontend and
 launcher bundles remain private.
 
 - The package carries the exact tested AppImage and its verified extracted native
   runtime. Preparation uses the extracted files and needs no FUSE, engine download,
   administrator access, or engine launch.
 - Momentum checks every runtime file, size, hash and mode before reuse. An altered
-  copy at the 0.2.0 runtime path blocks setup; it is not replaced or repaired
-  automatically.
+  copy at the legacy 0.2.0 runtime path blocks setup; it is not replaced or
+  repaired automatically.
 - New installations use `~/Games/marvel-infinity-war`. Existing receipts retain
-  their recorded directories. The shared runtime lives separately under
-  `~/.local/share/momentum-core/software/openbor/6391`. The published 0.2.0
-  package and its launcher script require this exact path, so it never moves.
+  their recorded directories. The shared runtime lives separately: 0.2.0 uses
+  `~/.local/share/momentum-core/software/openbor/6391` (its launcher script
+  requires that exact path, so it never moves); 0.3.0 uses
+  `~/.local/share/momentum-core/software/openbor/builds/6391-ef96ad2e3a64`.
+- Upgrading 0.2.0 to 0.3.0 prepares the build-specific copy, replaces the
+  unchanged 0.2.0 launcher script (backing it up first) and keeps the game
+  folder, installation identity, settings and saves. The legacy `openbor/6391`
+  folder is left in place. An edited launcher script stops the upgrade.
 - Game acquisition is package-owned, after the separate game plan approval:
   the pinned ZVitor archive is downloaded and verified, and only its game PAK is
   extracted. Alternatively, disable downloading and supply the matching PAK.
@@ -40,15 +48,14 @@ launcher bundles remain private.
   launcher-served media on first association only. Existing library artwork
   stays unchanged.
 
-### Build-specific runtime folders (launcher groundwork)
+### Build-specific runtime folders
 
 The launcher also supports a build-specific runtime folder,
 `~/.local/share/momentum-core/software/openbor/builds/6391-<archive hash prefix>`.
 A package opts in by declaring `"layout": "build"` on its OpenBOR requirement. If
 the field is absent, the package uses the legacy `openbor/6391` path described
-above, so Marvel Infinity War 0.2.0 is unaffected. No published package uses the
-build layout yet. A future package release must opt in and be tested before it
-does.
+above, so Marvel Infinity War 0.2.0 is unaffected. Marvel Infinity War 0.3.0 is
+the first package that opts in.
 
 When a build-specific copy has been altered, the preparation plan names a
 side-by-side recovery folder (`<build>.altered-1`, `-2`, …). Only after you

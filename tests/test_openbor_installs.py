@@ -21,7 +21,12 @@ from tests.test_openbor import provisional_record
 REPO = Path(os.environ.get("MCL_PACKAGE_REPO",
                           str(Path(__file__).resolve().parents[2] / "momentum-packages")))
 GAME = "marvel-infinity-war"
-VERSION = "0.2.0"
+VERSION = os.environ.get("MCL_OPENBOR_VERSION", "0.3.0")
+PREVIOUS = "0.2.0"
+
+
+def layout(detail):
+    return openbor.requirement_layout(detail["manifest"]["requires"][0])
 
 
 @unittest.skipUnless(os.environ.get("MCL_OPENBOR_TESTS") == "1",
@@ -77,14 +82,14 @@ class OpenBORInstalls(unittest.TestCase):
             job = self.wait(runner, jid)
             self.assertEqual(job["status"], "awaiting-approval", job)
             self.assertEqual(job["plan"]["operation"], "prepare-dependency")
-            self.assertFalse(openbor.target_root().exists())
+            self.assertFalse(openbor.target_root(layout(detail)).exists())
             self.assertFalse((home / "Games").exists())
             self.assertIs(inst.approve(jid, job["plan_digest"]), True)
             job = self.wait(runner, jid)
             self.assertEqual(job["status"], "awaiting-approval", job)
             self.assertEqual(job["plan"]["operation"], "install")
             self.assertEqual(bool(job["plan"]["network"]), not bool(offline))
-            self.assertTrue(openbor.verify(openbor.target_root()))
+            self.assertTrue(openbor.verify(openbor.target_root(layout(detail))))
             self.assertFalse((home / "Games").exists())
             self.assertIs(inst.approve(jid, job["plan_digest"]), True)
             job = self.wait(runner, jid)
@@ -105,7 +110,7 @@ class OpenBORInstalls(unittest.TestCase):
             cfg.write_bytes(b"player changed settings")
             save = game / "Saves/player.sav"
             save.write_bytes(b"player progress")
-            engine_before = openbor.detect()
+            engine_before = openbor.detect(layout(detail))
             self.assertEqual(len(library), 1)
             for field in ("icon", "cover", "video"):
                 self.assertTrue(library[0][field].startswith("media/"), library)
@@ -155,7 +160,7 @@ class OpenBORInstalls(unittest.TestCase):
             self.assertFalse(pak.exists())
             self.assertEqual(cfg.read_bytes(), b"player changed settings")
             self.assertEqual(save.read_bytes(), b"player progress")
-            self.assertEqual(openbor.detect(), engine_before)
+            self.assertEqual(openbor.detect(layout(detail)), engine_before)
             jid = inst.submit_install(GAME, VERSION, inputs={
                 "games_root": str(home / "different requested root"),
                 "download_game": False, "source_dir": str(source)}, trusted_digest=imported["digest"])
@@ -167,7 +172,7 @@ class OpenBORInstalls(unittest.TestCase):
             self.assertEqual(cfg.read_bytes(), b"player changed settings")
             self.assertEqual(save.read_bytes(), b"player progress")
             self.assertEqual(inst._load_receipt(GAME)["installation_id"], receipt["installation_id"])
-            self.assertEqual(openbor.detect(), engine_before)
+            self.assertEqual(openbor.detect(layout(detail)), engine_before)
             self.assertEqual(len(library), 1)
             (root / "validation.json").write_text(json.dumps({
                 "scope": "exact native acquisition and lifecycle; no gameplay launched",
@@ -177,6 +182,85 @@ class OpenBORInstalls(unittest.TestCase):
                            "repair-missing-PAK", "remove-preserves-state-engine",
                            "reinstall-preserves-path-state-identity", "served-artwork"]
             }, indent=2) + "\n")
+
+
+    def _install(self, inst, runner, version, inputs, digest, prepare):
+        jid = inst.submit_install(GAME, version, inputs=inputs, trusted_digest=digest)
+        job = self.wait(runner, jid)
+        if prepare:
+            self.assertEqual(job["status"], "awaiting-approval", job)
+            self.assertEqual(job["plan"]["operation"], "prepare-dependency")
+            self.assertIs(inst.approve(jid, job["plan_digest"]), True)
+            job = self.wait(runner, jid)
+        self.assertEqual(job["status"], "awaiting-approval", job)
+        self.assertEqual(job["plan"]["operation"], "install")
+        self.assertEqual(job["plan"]["network"], [])
+        plan = job["plan"]
+        self.assertIs(inst.approve(jid, job["plan_digest"]), True)
+        self.assertEqual(self.wait(runner, jid)["status"], "succeeded", runner.get(jid))
+        return plan
+
+    @unittest.skipUnless(os.environ.get("MCL_OPENBOR_SOURCE"), "offline PAK folder required for upgrade check")
+    def test_upgrade_from_previous_release_preserves_state_and_legacy_engine(self):
+        temporary = tempfile.TemporaryDirectory(prefix="openbor-upgrade-")
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        home, app = root / "home with spaces", root / "launcher"
+        home.mkdir()
+        app.mkdir()
+        library = []
+        inputs = {"games_root": str(home / "Games"), "download_game": False,
+                  "source_dir": os.environ["MCL_OPENBOR_SOURCE"]}
+        with mock.patch.dict(os.environ, {"HOME": str(home)}):
+            old = packages.import_package(REPO / f"dist/{GAME}-{PREVIOUS}.zip", app)
+            new = packages.import_package(REPO / f"dist/{GAME}-{VERSION}.zip", app)
+            if os.environ.get("MCL_CANDIDATE_EVIDENCE") == "1":
+                original = compatibility.find_record
+                record = provisional_record(new["digest"])
+                record["version"] = VERSION
+                def find(launcher, game, version, digest):
+                    if (game, version, digest) == (GAME, VERSION, new["digest"]):
+                        return record
+                    return original(launcher, game, version, digest)
+                override = mock.patch.object(compatibility, "find_record", side_effect=find)
+                override.start()
+                self.addCleanup(override.stop)
+            runner = jobs.Jobs(app / "jobs")
+            inst = installs.Installs(app, threading.RLock(), lambda: library,
+                                     lambda data: library.__setitem__(slice(None), data), runner)
+            runner.before_step, runner.on_success = inst.before_step, inst.on_success
+            self.addCleanup(runner.close)
+            self._install(inst, runner, PREVIOUS, inputs, old["digest"], prepare=True)
+            legacy = openbor.target_root("legacy")
+            legacy_facts = openbor.detect("legacy")
+            first = inst._load_receipt(GAME)
+            game = Path(first["game_directory"])
+            launcher = Path(first["paths"]["launcher"])
+            self.assertIn(str(legacy), launcher.read_text())
+            cfg, save = game / "Saves/Marvel_Infinity_War.cfg", game / "Saves/player.sav"
+            cfg.write_bytes(b"player changed settings")
+            save.write_bytes(b"player progress")
+            detail = inst.package_details(GAME, VERSION)
+            self.assertEqual(layout(detail), "build")
+            self.assertTrue(detail["package_supported"], detail)
+            self.assertFalse(detail["install_enabled"])
+            plan = self._install(inst, runner, VERSION, inputs, new["digest"], prepare=True)
+            replaced = [a for a in plan["actions"] if a["path"] == str(launcher)]
+            self.assertEqual([a["op"] for a in replaced], ["replace"])
+            receipt = inst._load_receipt(GAME)
+            self.assertEqual(receipt["package_version"], VERSION)
+            self.assertEqual(receipt["installation_id"], first["installation_id"])
+            self.assertEqual(receipt["game_directory"], str(game))
+            build = openbor.target_root("build")
+            self.assertTrue(openbor.verify(build))
+            self.assertIn(str(build / "usr/bin/OpenBOR"), launcher.read_text())
+            self.assertNotIn(str(legacy) + "/", launcher.read_text())
+            self.assertTrue(Path(replaced[0]["backup"]).is_file())
+            self.assertEqual(openbor.detect("legacy"), legacy_facts)
+            self.assertEqual(cfg.read_bytes(), b"player changed settings")
+            self.assertEqual(save.read_bytes(), b"player progress")
+            self.assertEqual(len(library), 1)
+            self.assertTrue(inst.package_details(GAME, VERSION)["install_enabled"])
 
 
 if __name__ == "__main__":
