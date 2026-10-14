@@ -138,6 +138,24 @@
       "installer_validated": true,
       "gameplay": "not-tested-for-this-package",
       "limits": "Guide-defined four-file mod order, explicit user/default-system scope, per-launch read-only game access and isolated lifecycle checked. User-only software preparation tested with mocked Flatpak, not a real fresh-machine install. Exact installed system UZDoom metadata/runtime checked read-only. No engine invocation, graphics/audio, input, real IWAD gameplay or save/relaunch confirmation. Readiness remains setup-required."
+    },
+    {
+      "id": "brutal-doom-64",
+      "version": "0.3.0",
+      "digest": "sha256:c7a5a55a7fc89f8209810b1a257c3ed409e9d4b36785c2721279263903034500",
+      "runtime": "uzdoom",
+      "software": {
+        "provider": "flatpak",
+        "app_id": "org.zdoom.UZDoom",
+        "version": "5.0.1",
+        "commit": "d7b8ce76e5480a28d1e07400093a20d47f56c201fd974b0a5dbfa3b26bbd587e",
+        "arch": "x86_64",
+        "branch": "stable",
+        "origin": "flathub"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "2026-10-10 private managed-engine candidate on the Brutal Doom 0.3.0 UZDoom standard. Package self-check/24 lifecycle tests, exact synthetic runner reuse/missing-preparation/lifecycle and managed separate engine/game approvals, repeat and descriptor-drift refusal passed. Bundled four-file mod payload, artwork and load order unchanged from 0.1.x. New installs use ~/Games/brutal-doom-64; upgrades keep the recorded folder. Managed binding reuses the helper/build validated for Brutal Doom 0.3.0. Gameplay/display/input/audio/save acceptance remains required. No public publication."
     }
   ]
 }

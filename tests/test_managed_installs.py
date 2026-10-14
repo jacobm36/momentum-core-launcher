@@ -31,8 +31,8 @@ class ManagedInstalls(unittest.TestCase):
             time.sleep(.05)
         self.fail(f"Timed out: {runner.get(jid)}")
 
-    def exercise(self, runtime):
-        game = "the-house-of-the-dead-2" if runtime == "flycast" else "brutal-doom"
+    def exercise(self, runtime, game=None):
+        game = game or ("the-house-of-the-dead-2" if runtime == "flycast" else "brutal-doom")
         with tempfile.TemporaryDirectory(prefix="managed-runner-") as temporary:
             root = Path(temporary)
             home, app, source, tools = [root / p for p in ("home with spaces", "launcher", "source", "tools")]
@@ -61,9 +61,10 @@ class ManagedInstalls(unittest.TestCase):
                             "version": "0.3.0", "digest": imported["digest"],
                             "basis": "Provisional exact managed integration."})
                 elif not any(r["id"] == game and r["version"] == "0.3.0" for r in evidence["packages"]):
+                    basis = ("brutal-doom", "0.3.0") if game == "brutal-doom-64" else (game, "0.2.0")
                     record = copy.deepcopy(next(r for r in evidence["packages"]
-                                                if r["id"] == game and r["version"] == "0.2.0"))
-                    record.update(version="0.3.0", digest=imported["digest"])
+                                                if (r["id"], r["version"]) == basis))
+                    record.update(id=game, version="0.3.0", digest=imported["digest"])
                     evidence["packages"].append(record)
 
                 def read(path, *args, **kwargs):
@@ -167,3 +168,6 @@ class ManagedInstalls(unittest.TestCase):
 
     def test_brutal_doom_separate_engine_game_approvals_repeat_and_binding_drift(self):
         self.exercise("uzdoom")
+
+    def test_brutal_doom_64_separate_engine_game_approvals_repeat_and_binding_drift(self):
+        self.exercise("uzdoom", "brutal-doom-64")

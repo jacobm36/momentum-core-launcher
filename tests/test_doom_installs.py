@@ -74,7 +74,7 @@ else: sys.exit('Unexpected Flatpak operation; game launches forbidden: '+str(arg
 @unittest.skipUnless(os.environ.get("MCL_DOOM_TESTS") == "1", "opt-in complete Doom mod integration")
 class DoomInstalls(unittest.TestCase):
     game_id = GAME_ID
-    package_version = "0.1.0"
+    package_version = "0.3.0"
     mod_directory = "mods/BrutalDoom64"
     files = ("bd64gamev2.pk3", "bd64mapsV2.pk3", "STAnnouncerPack.pk3", "ZD64MUSIC.PK3")
     load_order = files
@@ -148,6 +148,14 @@ class DoomInstalls(unittest.TestCase):
                     jid = submit()
                     job = self.wait(runner, jid)
                     self.assertEqual(job["status"], "awaiting-approval", job)
+                    if commit != COMMIT and inst.package_details(self.game_id, self.package_version)["manifest"].get(
+                            "extensions", {}).get("managed_engine"):
+                        self.assertEqual(job["plan"]["operation"], "prepare-dependency")
+                        self.assertEqual(job["plan"]["managed_engine"], "momentum-flatpak-1")
+                        self.assertEqual(job["plan"]["existing"]["commit"], commit)
+                        self.assertFalse((home / "Games").exists())
+                        self.assertIs(runner.cancel(jid), True)
+                        return
                     if commit != COMMIT:
                         self.assertIn("approval_blocked", job)
                         self.assertIsNot(inst.approve(jid, job["plan_digest"]), True)
@@ -173,6 +181,8 @@ class DoomInstalls(unittest.TestCase):
                     self.assertIn('--filesystem="$game_dir:ro"', wrapper)
                     self.assertEqual(sorted(self.load_order, key=wrapper.index), list(self.load_order))
                     self.assertTrue(all((game / self.mod_directory / f).is_file() for f in self.files))
+                    if self.game_id == GAME_ID:
+                        self.assertEqual(game.name, "brutal-doom-64")
                     if self.game_id == "brutal-doom":
                         self.assertIn('if [[ "${1:-}" == "--metal" ]]', wrapper)
                         self.assertNotIn("brutalVoxelDoom", wrapper)
@@ -213,6 +223,7 @@ class DoomInstalls(unittest.TestCase):
 
 class BrutalDoomInstalls(DoomInstalls):
     game_id = "brutal-doom"
+    package_version = "0.1.0"
     mod_directory = "mods/Brutal_Doom"
     files = ("brutalv21.pk3", "DoomMetalVol5.wad")
     load_order = ("brutalv21.pk3",)
@@ -220,6 +231,7 @@ class BrutalDoomInstalls(DoomInstalls):
 
 class AliensInstalls(DoomInstalls):
     game_id = "aliens-eradication"
+    package_version = "0.1.0"
     mod_directory = "mods/Aliens_Eradication"
     files = ("ALIENS_ERADICATION_TC_2_0.pk3", "ERADICATION_MAPSET_2_0.wad")
     load_order = files
@@ -227,6 +239,7 @@ class AliensInstalls(DoomInstalls):
 
 class AshesInstalls(DoomInstalls):
     game_id = "ashes-2063"
+    package_version = "0.1.0"
     mod_directory = "mods/Ashes_2063"
     files = ("Ashes2063Enriched2_23.pk3",)
     load_order = files
