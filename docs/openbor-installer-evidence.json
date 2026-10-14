@@ -99,7 +99,13 @@
         "served_artwork": true,
         "gameplay_launched": false
       },
-      "public_release": false
+      "public_release": false,
+      "owner_acceptance": {
+        "reported": "2026-10-13",
+        "candidate": "ultimate-double-dragon-3-0.1.0.zip",
+        "candidate_sha256": "ab887f099cb5233c9f70893d4f3f3e355e24deeded88144090cd7a898880a07e",
+        "result": "Owner reviewed the 0.1.0 package and approved publication. No individual acceptance checklist was reported; stage transitions and the full campaign remain unconfirmed."
+      }
     }
   ]
 }
