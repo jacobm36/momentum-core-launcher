@@ -49,7 +49,7 @@
         "version": "6391",
         "sha256": "35895117c2eae94867ee0b094083ae66cd3853372d7447d60cfe92fa929d73eb"
       },
-      "limits": "Same pinned OpenBOR 6391 bytes as 0.2.0, prepared in the build-specific folder openbor/builds/6391-ef96ad2e3a64. Real-runner lifecycle validated offline with the exact owner PAK, including an isolated 0.2.0-to-0.3.0 upgrade. Owner upgrade and gameplay confirmation not yet reported.",
+      "limits": "Same pinned OpenBOR 6391 bytes as 0.2.0, prepared in the build-specific folder openbor/builds/6391-ef96ad2e3a64. Real-runner lifecycle validated offline with the exact owner PAK, including an isolated 0.2.0-to-0.3.0 upgrade. Owner reports the real 0.2.0-to-0.3.0 upgrade on the development ThinkPad worked and gameplay looks right; individual controller, persistence and campaign checks were not separately reported.",
       "validation": {
         "package_tests": 49,
         "openbor_unit_tests": 15,
@@ -65,7 +65,13 @@
         "upgrade_from_0_2_0_preserves_state_identity_and_legacy_engine": true,
         "gameplay_launched": false
       },
-      "public_release": false
+      "public_release": false,
+      "owner_acceptance": {
+        "reported": "2026-10-13",
+        "candidate": "marvel-infinity-war-0.3.0.zip",
+        "candidate_sha256": "db6883ff019833a62f7a549e5794fc01df7f98d77dd526d1ad26a041a8cf8a2f",
+        "result": "Owner upgraded the real 0.2.0 install to 0.3.0 (receipt now 0.3.0 on openbor/builds/6391-ef96ad2e3a64, legacy openbor/6391 retained) and reports it looks great. No individual acceptance checklist was reported."
+      }
     }
   ]
 }

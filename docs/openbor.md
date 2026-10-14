@@ -17,8 +17,9 @@ This is a bounded integration for Marvel Infinity War with the supplied OpenBOR
 6391 runtime, not a general OpenBOR manager. Version 0.2.0 is published in the
 public store and has owner-reported debug-PC acceptance. Version 0.3.0 moves the
 engine to a build-specific folder (below). It passed the real-runner installer
-validation, including an isolated upgrade from 0.2.0, but owner upgrade and
-gameplay confirmation is still pending and it is not published. The frontend and
+validation, including an isolated upgrade from 0.2.0, and the owner reports a
+successful upgrade of the real 0.2.0 install on the development ThinkPad with
+gameplay looking right. It is published in the public store. The frontend and
 launcher bundles remain private.
 
 - The package carries the exact tested AppImage and its verified extracted native
