@@ -415,7 +415,8 @@ class Installs:
                 "ashes-2063": "docs/doom-installer-evidence.json",
                 "quake-brutalist-jam-3": "docs/qbj3-installer-evidence.json",
                 "duke-nukem-3d": "docs/duke-installer-evidence.json",
-                "marvel-infinity-war": "docs/openbor-installer-evidence.json"
+                "marvel-infinity-war": "docs/openbor-installer-evidence.json",
+                "ultimate-double-dragon-3": "docs/openbor-installer-evidence.json"
             }.get(package_id, "docs/arcade-installer-evidence.json")
             path = Path(__file__).parent / evidence_file
             record = compatibility.find_record(Path(__file__).parent, package_id, version, summary["digest"])
@@ -853,7 +854,7 @@ class Installs:
                 retained = f"media/{gid}/package-icon-{resource['sha256']}.png"
                 if defaults.get("icon") == retained:
                     expected["icon"] = retained
-        if m["package_id"] == "marvel-infinity-war" and isinstance(defaults, dict):
+        if m["package_id"] in packages.OPENBOR_PACKAGES and isinstance(defaults, dict):
             assoc = self._load_receipt(m["package_id"])
             gid = (assoc or {}).get("catalog", {}).get("entry_id")
             for field in ("cover", "video"):
@@ -1017,7 +1018,7 @@ class Installs:
                     if recovery_policy:
                         marker["recovery_policy"] = recovery_policy
                     _write_atomic(journal, (json.dumps(marker, indent=2) + "\n").encode())
-            if first and rec["package_id"] == "marvel-infinity-war":
+            if first and rec["package_id"] in packages.OPENBOR_PACKAGES:
                 for field in ("cover", "video"):
                     if not _is_missing(existing.get(field)) or not defaults.get(field):
                         continue

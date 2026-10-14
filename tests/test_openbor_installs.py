@@ -20,9 +20,33 @@ from tests.test_openbor import provisional_record
 
 REPO = Path(os.environ.get("MCL_PACKAGE_REPO",
                           str(Path(__file__).resolve().parents[2] / "momentum-packages")))
-GAME = "marvel-infinity-war"
-VERSION = os.environ.get("MCL_OPENBOR_VERSION", "0.3.0")
-PREVIOUS = "0.2.0"
+GAME = os.environ.get("MCL_OPENBOR_GAME", "marvel-infinity-war")
+SPECS = {
+    "marvel-infinity-war": dict(version="0.3.0", previous="0.2.0", pak="Marvel_Infinity_War.pak",
+                                cfg="Marvel_Infinity_War.cfg", downloads=True,
+                                cfg_sha256="11d2e516a0b924cb88d2fab1fe940431885d4a838cded8fb02f955989761f43a"),
+    # User-supplied PAK only; requires MCL_OPENBOR_SOURCE.
+    "ultimate-double-dragon-3": dict(version="0.1.0", previous=None, pak="UDD_3.0.pak",
+                                     cfg="UDD_3.0.cfg", downloads=False,
+                                     cfg_sha256="f106c4ce5b830697a0442f9922c4a73e18bf1411abd52a9120e345f0e120f37b"),
+}
+SPEC = SPECS[GAME]
+VERSION = os.environ.get("MCL_OPENBOR_VERSION", SPEC["version"])
+PREVIOUS = SPEC["previous"]
+
+
+def offline_inputs(games_root, source):
+    inputs = {"games_root": str(games_root), "source_dir": str(source)}
+    if SPEC["downloads"]:
+        inputs["download_game"] = False
+    return inputs
+
+
+def pak_pin(manifest):
+    ext = manifest["extensions"]
+    if "game_download" in ext:
+        return ext["game_download"]["pak_size"], ext["game_download"]["pak_sha256"]
+    return ext["source_pak"]["size"], ext["source_pak"]["sha256"]
 
 
 def layout(detail):
@@ -54,12 +78,14 @@ class OpenBORInstalls(unittest.TestCase):
         for directory in (home, app, source):
             directory.mkdir()
         offline = os.environ.get("MCL_OPENBOR_SOURCE")
+        if not SPEC["downloads"] and not offline:
+            self.skipTest("this package requires MCL_OPENBOR_SOURCE")
         library = []
         with mock.patch.dict(os.environ, {"HOME": str(home)}):
             imported = packages.import_package(REPO / f"dist/{GAME}-{VERSION}.zip", app)
             if os.environ.get("MCL_CANDIDATE_EVIDENCE") == "1":
                 original = compatibility.find_record
-                record = provisional_record(imported["digest"])
+                record = dict(provisional_record(imported["digest"]), id=GAME, version=VERSION)
                 def find(launcher, game, version, digest):
                     if (game, version, digest) == (GAME, VERSION, imported["digest"]):
                         return record
@@ -75,9 +101,10 @@ class OpenBORInstalls(unittest.TestCase):
             detail = inst.package_details(GAME, VERSION)
             self.assertTrue(detail["package_supported"], detail)
             self.assertFalse(detail["install_enabled"])
-            inputs = {"games_root": str(home / "Games"), "download_game": not bool(offline)}
             if offline:
-                inputs["source_dir"] = offline
+                inputs = offline_inputs(home / "Games", offline)
+            else:
+                inputs = {"games_root": str(home / "Games"), "download_game": True}
             jid = inst.submit_install(GAME, VERSION, inputs=inputs, trusted_digest=imported["digest"])
             job = self.wait(runner, jid)
             self.assertEqual(job["status"], "awaiting-approval", job)
@@ -97,22 +124,21 @@ class OpenBORInstalls(unittest.TestCase):
             receipt = inst._load_receipt(GAME)
             game = Path(receipt["game_directory"])
             self.assertEqual(game, home / "Games" / GAME)
-            pak = game / "Paks/Marvel_Infinity_War.pak"
-            pin = detail["manifest"]["extensions"]["game_download"]
-            self.assertEqual(pak.stat().st_size, pin["pak_size"])
-            self.assertEqual(installs._hash_file(pak), pin["pak_sha256"])
+            pak = game / "Paks" / SPEC["pak"]
+            pak_size, pak_sha256 = pak_pin(detail["manifest"])
+            self.assertEqual(pak.stat().st_size, pak_size)
+            self.assertEqual(installs._hash_file(pak), pak_sha256)
             source_pak = source / pak.name
             shutil.copyfile(pak, source_pak)
-            self.assertEqual(installs._hash_file(source_pak), pin["pak_sha256"])
-            cfg = game / "Saves/Marvel_Infinity_War.cfg"
-            self.assertEqual(hashlib.sha256(cfg.read_bytes()).hexdigest(),
-                             "11d2e516a0b924cb88d2fab1fe940431885d4a838cded8fb02f955989761f43a")
+            self.assertEqual(installs._hash_file(source_pak), pak_sha256)
+            cfg = game / "Saves" / SPEC["cfg"]
+            self.assertEqual(hashlib.sha256(cfg.read_bytes()).hexdigest(), SPEC["cfg_sha256"])
             cfg.write_bytes(b"player changed settings")
             save = game / "Saves/player.sav"
             save.write_bytes(b"player progress")
             engine_before = openbor.detect(layout(detail))
             self.assertEqual(len(library), 1)
-            for field in ("icon", "cover", "video"):
+            for field in [f for f in ("icon", "cover", "video") if detail["manifest"]["catalog"].get(f)]:
                 self.assertTrue(library[0][field].startswith("media/"), library)
                 self.assertTrue((app / library[0][field]).is_file())
             template = copy.deepcopy(runner.jobs[jid]["steps"][-1]["context"])
@@ -122,8 +148,7 @@ class OpenBORInstalls(unittest.TestCase):
                 current = inst.package_details(GAME, VERSION)
                 context = dict(template, operation=name, previous_receipt=inst._load_receipt(GAME),
                                dependencies=current["dependencies"],
-                               inputs={"games_root": str(game.parent), "download_game": False,
-                                       "source_dir": str(source)})
+                               inputs=offline_inputs(game.parent, source))
                 steps = [{
                     "name": name + " " + phase, "protocol": True,
                     "approve_after": phase == "preflight",
@@ -155,15 +180,14 @@ class OpenBORInstalls(unittest.TestCase):
             operation("verify")
             pak.unlink()
             operation("repair")
-            self.assertEqual(installs._hash_file(pak), pin["pak_sha256"])
+            self.assertEqual(installs._hash_file(pak), pak_sha256)
             operation("uninstall")
             self.assertFalse(pak.exists())
             self.assertEqual(cfg.read_bytes(), b"player changed settings")
             self.assertEqual(save.read_bytes(), b"player progress")
             self.assertEqual(openbor.detect(layout(detail)), engine_before)
-            jid = inst.submit_install(GAME, VERSION, inputs={
-                "games_root": str(home / "different requested root"),
-                "download_game": False, "source_dir": str(source)}, trusted_digest=imported["digest"])
+            jid = inst.submit_install(GAME, VERSION, inputs=offline_inputs(
+                home / "different requested root", source), trusted_digest=imported["digest"])
             job = self.wait(runner, jid)
             self.assertEqual(job["status"], "awaiting-approval", job)
             self.assertEqual(job["plan"]["game_directory"], str(game))
@@ -200,7 +224,8 @@ class OpenBORInstalls(unittest.TestCase):
         self.assertEqual(self.wait(runner, jid)["status"], "succeeded", runner.get(jid))
         return plan
 
-    @unittest.skipUnless(os.environ.get("MCL_OPENBOR_SOURCE"), "offline PAK folder required for upgrade check")
+    @unittest.skipUnless(os.environ.get("MCL_OPENBOR_SOURCE") and PREVIOUS,
+                         "offline PAK folder and a previous release required for upgrade check")
     def test_upgrade_from_previous_release_preserves_state_and_legacy_engine(self):
         temporary = tempfile.TemporaryDirectory(prefix="openbor-upgrade-")
         self.addCleanup(temporary.cleanup)

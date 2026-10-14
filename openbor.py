@@ -154,7 +154,7 @@ def _payload(context):
         raise DependencyError('Dependency package snapshot changed.')
     man=json.loads((root/'package.json').read_text())
     req=man.get('requires',[])
-    if man.get('id')!='marvel-infinity-war' or len(req)!=1 or req[0].get('id')!='openbor':
+    if man.get('id') not in packages.OPENBOR_PACKAGES or len(req)!=1 or req[0].get('id')!='openbor':
         raise DependencyError('Unsupported OpenBOR payload package.')
     layout=requirement_layout(req[0])
     archive=safe(root/'engine/runtime.tar.gz')

@@ -116,9 +116,9 @@ class Intake(Base):
         requirement = {"id": "openbor", "provider": "appimage", "scope": "user",
                        "source": "github:DCurrent/openbor", "tested_version": "6391",
                        "sha256": "35895117c2eae94867ee0b094083ae66cd3853372d7447d60cfe92fa929d73eb"}
-        self.assertTrue(packages.check(write_tree(self.t / "openbor",
-                        package_files(manifest(id="marvel-infinity-war",
-                                               requires=[requirement]))))["digest"])
+        for game in ("marvel-infinity-war", "ultimate-double-dragon-3"):
+            self.assertTrue(packages.check(write_tree(self.t / game,
+                            package_files(manifest(id=game, requires=[requirement]))))["digest"])
         for key, value in (("tested_version", "7533"), ("sha256", "a" * 64),
                            ("source", "https://example.invalid"), ("scope", "system")):
             with self.subTest(key=key):

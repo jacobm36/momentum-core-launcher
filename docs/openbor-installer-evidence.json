@@ -72,6 +72,34 @@
         "candidate_sha256": "db6883ff019833a62f7a549e5794fc01df7f98d77dd526d1ad26a041a8cf8a2f",
         "result": "Owner upgraded the real 0.2.0 install to 0.3.0 (receipt now 0.3.0 on openbor/builds/6391-ef96ad2e3a64, legacy openbor/6391 retained) and reports it looks great. No individual acceptance checklist was reported."
       }
+    },
+    {
+      "id": "ultimate-double-dragon-3",
+      "version": "0.1.0",
+      "digest": "sha256:d728447c7399b784544c7698ee386ce6490a23d7183a95975e9a07d008cb9823",
+      "runtime": "openbor",
+      "installer_validated": true,
+      "software": {
+        "provider": "appimage",
+        "scope": "user",
+        "version": "6391",
+        "sha256": "35895117c2eae94867ee0b094083ae66cd3853372d7447d60cfe92fa929d73eb"
+      },
+      "limits": "Same pinned OpenBOR 6391 runtime and build-specific folder as Marvel 0.3.0. User-supplied PAK only (no download). Real-runner lifecycle validated with the exact owner UDD_3.0.pak from a read-only source. Owner previously confirmed UDD launches and plays on a manual 6391 setup with fullscreen, shader and controller persistence; packaged gameplay, stage transitions and the full campaign are not yet confirmed.",
+      "validation": {
+        "package_tests": 17,
+        "actual_author_download": false,
+        "exact_PAK_verified": true,
+        "separate_runtime_and_game_approvals": true,
+        "repeat_install": true,
+        "verify": true,
+        "repair_missing_PAK": true,
+        "game_only_removal_preserves_state_and_runtime": true,
+        "reinstall_preserves_path_and_identity": true,
+        "served_artwork": true,
+        "gameplay_launched": false
+      },
+      "public_release": false
     }
   ]
 }

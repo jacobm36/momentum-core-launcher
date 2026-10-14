@@ -14,6 +14,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SUPPORTED_CONTRACT = {(1, 0)}  # 1.0.x only; a new minor version is not assumed compatible
+# Packages approved to use the exact bundled native OpenBOR 6391 runtime.
+OPENBOR_PACKAGES = frozenset({"marvel-infinity-war", "ultimate-double-dragon-3"})
 MAX_FILES = 20000
 MAX_ENTRIES = 40000
 MAX_FILE = 8 << 30
@@ -409,13 +411,13 @@ def check_manifest(m, files, root):
         elif prov == "appimage":
             vkquake = (rid, r.get("source"), r.get("scope"), r.get("tested_version")) == (
                 "vkquake", "github:Novum/vkQuake", "user", "1.36.0")
-            openbor = (m.get("id"), rid, r.get("source"), r.get("scope"),
+            openbor = m.get("id") in OPENBOR_PACKAGES and (rid, r.get("source"), r.get("scope"),
                        r.get("tested_version"), r.get("sha256")) == (
-                "marvel-infinity-war", "openbor", "github:DCurrent/openbor", "user", "6391",
+                "openbor", "github:DCurrent/openbor", "user", "6391",
                 "35895117c2eae94867ee0b094083ae66cd3853372d7447d60cfe92fa929d73eb")
             if not (vkquake or openbor):
                 P.append(f"{w}appimage provider supports only pinned user-scope vkQuake 1.36.0 "
-                         "or Marvel Infinity War's exact bundled OpenBOR 6391")
+                         "or an approved OpenBOR package's exact bundled OpenBOR 6391")
         elif rid == "eduke32":
             if (r.get("source"), r.get("scope"), r.get("source_commit")) != (
                     "https://voidpoint.io/terminx/eduke32", "user",
