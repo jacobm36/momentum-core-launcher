@@ -50,7 +50,7 @@ class CatalogLiveBrowser(unittest.TestCase):
         self.exercise("quake-slave-zero-x", "Quake - Slave Zero X: Episode Enyo", "0.1.0")
 
     def test_brutal_doom_64_public_gui_install(self):
-        self.exercise("brutal-doom-64", "Brutal Doom 64", "0.1.0")
+        self.exercise("brutal-doom-64", "Brutal Doom 64", "0.3.0")
 
     def test_duke_public_gui_install(self):
         self.exercise("duke-nukem-3d", "Duke Nukem 3D", "0.1.1")
