@@ -69,8 +69,8 @@
         "commit": "86ec4d845a66ff07cdba8e003d8549e93cd7a814b519766e1f744e530c5d3e5b"
       },
       "installer_validated": true,
-      "gameplay": "not-tested-for-this-package",
-      "limits": "2026-10-15: exact local 0.1.2 ZIP passed launcher intake, review/approval, install, receipt/catalog update, repeat-install cancellation, missing-software preparation and mismatched-build blocking in disposable homes with synthetic GDI/tracks and a Flatpak test double. Package tests separately verify copy-only migration from 0.1.0/0.1.1 while retaining the old folder. No real emulator or game launch; gameplay, fresh-machine, graphics/input/audio and universal hardware support remain untested."
+      "gameplay": "owner-confirmed",
+      "limits": "2026-10-15: exact local 0.1.2 ZIP passed launcher intake, review/approval, install, receipt/catalog update, repeat-install cancellation, missing-software preparation and mismatched-build blocking in disposable homes with synthetic GDI/tracks and a Flatpak test double. Package tests separately verify copy-only migration from 0.1.0/0.1.1 while retaining the old folder. The owner subsequently reported that the game works great and confirmed gameplay acceptance on their setup; specific checklist items and other hardware/platforms were not reported. Installer tests themselves used no real emulator or game launch."
     },
     {
       "id": "virtua-cop-2",
