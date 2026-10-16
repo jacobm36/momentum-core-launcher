@@ -190,6 +190,22 @@ or isolated-test instructions instead.
 **Quick controls:** arrows to browse, **Enter** to play, **F** to favorite,
 **S** to sort, **T** for playtime, **Ctrl+Q** to exit.
 On a gamepad, use the D-pad and **A**; **Start** opens menu navigation.
+Controller navigation pauses while any tracked game is running, while a launch
+request is pending, or whenever the launcher is hidden or unfocused. After
+returning, release the buttons and center the sticks before browsing resumes.
+Mouse and keyboard remain available if you deliberately return to the launcher.
+
+### Fullscreen game windows
+
+Fullscreen is selected by each game's launch command, not by shrinking the
+desktop or rewriting shared emulator settings. For native X11 commands whose
+fullscreen flag is ignored by the window manager, an individual library entry
+can use `python3 /path/to/window_handoff.py <original command and arguments>`.
+This opt-in wrapper requests fullscreen only on a unique window belonging to
+the launched process, waits for window-manager acknowledgement, and tracks the
+game until exit. Missing X11 tools block this opt-in launch with an error;
+a window that cannot be identified or changed is reported in the game log.
+Commands that delegate the actual window to a different process are not covered.
 
 ## Small launcher. Big games.
 

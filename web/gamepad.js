@@ -4,6 +4,14 @@
 // In dialogs: D-pad moves focus, A presses or edits a text field (on-screen keyboard), Start = save/done, B = cancel.
 const held = {};
 let uiMode = false;
+let padNeedsNeutral = true;
+const padSuspended = () => document.hidden || !document.hasFocus() || launchPending || running.size > 0;
+function suspendPad() {
+  padNeedsNeutral = true;
+  for (const key in held) delete held[key];
+}
+addEventListener("blur", suspendPad);
+document.addEventListener("visibilitychange", suspendPad);
 function pressed(key, on, fn, repeat = 180) {
   const now = performance.now();
   if (!on) { delete held[key]; return; }
@@ -57,6 +65,7 @@ async function cancelDialog(d) {
   d.close("cancel");
 }
 function padAction(b, ax, ay) {
+  if (padSuspended() || padNeedsNeutral) return;
   const d = topDlg(), moves = { up: b(12) || ay < -0.55, down: b(13) || ay > 0.55, left: b(14) || ax < -0.55, right: b(15) || ax > 0.55 };
   if (!d && !uiMode) {
     pressed("up", moves.up, () => step(-1));
@@ -65,6 +74,7 @@ function padAction(b, ax, ay) {
   pressed("lb", b(4), () => { if (!d) jump(-1); else d.nav?.(-1); }, 300);
   pressed("rb", b(5), () => { if (!d) jump(1); else d.nav?.(1); }, 300);
   pressed("a", b(0), () => { if (d || uiMode) activate(); else { const g = games.find(x => x.id === sel); if (g) launch(g); } }, 1e9);
+  if (padSuspended()) { suspendPad(); return; }
   pressed("b", b(1), () => {
     if (d) cancelDialog(d);
     else if (uiMode) leaveUi();
@@ -84,7 +94,18 @@ function padAction(b, ax, ay) {
   }, 1e9);
 }
 function pollPad() {
-  const p = [...(navigator.getGamepads?.() || [])].find(Boolean);
+  const pads = [...(navigator.getGamepads?.() || [])].filter(Boolean), p = pads[0];
+  if (padSuspended() || !p) {
+    suspendPad();
+    requestAnimationFrame(pollPad);
+    return;
+  }
+  if (padNeedsNeutral) {
+    if (pads.every(pad => pad.buttons.every(button => !button.pressed && button.value < 0.1)
+        && pad.axes.every(axis => Math.abs(axis) < 0.2))) padNeedsNeutral = false;
+    requestAnimationFrame(pollPad);
+    return;
+  }
   if (p) {
     if (!padOn) { padOn = true; hints(); }
     if (p.buttons.some(x => x.pressed) || Math.hypot(p.axes[0] || 0, p.axes[1] || 0) > 0.55) document.documentElement.classList.add("gp");

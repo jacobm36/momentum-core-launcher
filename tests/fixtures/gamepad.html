@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Controller handoff test</title></head><body>
+<div id="toast"></div><button id="play">Play</button>
+<dialog id="odlg"></dialog><dialog id="qdlg"></dialog><dialog id="rdlg"></dialog>
+<dialog id="pdlg"></dialog><dialog id="gdlg"></dialog><dialog id="bdlg"></dialog>
+<dialog id="idlg"></dialog><dialog id="ndlg"></dialog><dialog id="sdlg"></dialog><dialog id="dlg"></dialog>
+<pre id="result">RUNNING</pre>
+<script>
+const $ = selector => document.querySelector(selector);
+const token = "test-token";
+let running = new Set(), launchPending = false, padOn = false, focused = true, hidden = false;
+let games = [{id: "first", name: "First"}, {id: "second", name: "Second"}], sel = "first", requests = 0, moves = 0;
+let resolveLaunch, rejectLaunch;
+let pads = [{buttons: Array.from({length: 17}, () => ({pressed: false, value: 0})), axes: [0, 0, 0, 0]}];
+Object.defineProperty(navigator, "getGamepads", {value: () => pads});
+Object.defineProperty(document, "hidden", {get: () => hidden});
+document.hasFocus = () => focused;
+window.requestAnimationFrame = () => {};
+window.fetch = () => { requests++; return new Promise((resolve, reject) => { resolveLaunch = resolve; rejectLaunch = reject; }); };
+const hints = () => {}, sfx = () => {}, renderList = () => {}, renderDetail = () => {};
+const animOn = () => false, notify = () => {};
+const step = () => moves++, jump = () => moves++, jumpTo = () => moves++;
+const recent = () => [], favs = () => [], cycleSort = () => moves++, openStats = () => moves++;
+const clearFilters = () => moves++, openAddGame = () => moves++;
+</script>
+<script src="/web/actions.js"></script>
+<script src="/web/gamepad.js"></script>
+<script>
+const check = (value, message) => { if (!value) throw new Error(message); };
+const button = on => { pads[0].buttons[0] = {pressed: on, value: on ? 1 : 0}; };
+const neutral = () => { button(false); pads[0].axes.fill(0); pollPad(); };
+const flush = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
+(async () => {
+  neutral(); button(true); pollPad();
+  check(requests === 1 && launchPending, "launch suspends input before the response");
+  sel = "second"; neutral(); button(true); pollPad();
+  await launch(games[1]);
+  check(requests === 1, "pending launch prevents duplicate requests");
+  resolveLaunch({json: async () => ({status: "launched"})}); await flush();
+  check(running.has("first") && !launchPending, "successful response records tracked gameplay");
+  for (let i = 0; i < 10; i++) { neutral(); button(true); pads[0].axes[1] = 1; pollPad(); }
+  check(requests === 1 && moves === 0, "gameplay input cannot browse or launch another game");
+  running.clear(); pollPad();
+  check(requests === 1, "held gameplay buttons are not replayed on exit");
+  neutral(); button(true); pollPad();
+  check(requests === 2, "navigation resumes after neutral");
+  resolveLaunch({json: async () => ({error: "test failure"})}); await flush();
+  check(!launchPending && running.size === 0 && $("#toast").textContent.includes("test failure"), "failed launch unlocks and reports error");
+  focused = false; dispatchEvent(new Event("blur")); neutral(); button(true); pollPad();
+  check(requests === 2, "unfocused launcher ignores input");
+  focused = true; pollPad();
+  check(requests === 2, "focus regain requires neutral");
+  neutral(); hidden = true; document.dispatchEvent(new Event("visibilitychange")); button(true); pollPad();
+  check(requests === 2, "hidden launcher ignores input");
+  hidden = false; pollPad();
+  check(requests === 2, "visibility regain requires neutral");
+  neutral(); pads.push({buttons: [{pressed: true, value: 1}], axes: [0]});
+  dispatchEvent(new Event("blur")); pollPad(); button(true); pollPad();
+  check(requests === 2, "all connected controllers must return to neutral");
+  pads.pop(); neutral(); button(true); pollPad();
+  check(requests === 3, "fresh input resumes after focus and neutral");
+  rejectLaunch(new Error("offline")); await flush();
+  check(!launchPending && $("#toast").textContent.includes("offline"), "transport failure unlocks and reports error");
+  pads = []; pollPad();
+  pads = [{buttons: [{pressed: true, value: 1}], axes: [0, 0]}]; pollPad();
+  check(requests === 3, "reconnection with held input requires neutral");
+  $("#result").textContent = "PASS: gameplay, pending launch, failure, focus, visibility, neutral, multiple controllers and reconnection";
+})().catch(error => { $("#result").textContent = "FAIL: " + error.stack; });
+</script></body></html>

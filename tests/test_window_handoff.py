@@ -6,7 +6,7 @@ import unittest
 from unittest import mock
 
 import server
-from window_handoff import HandoffError, KioskHandoff
+from window_handoff import HandoffError, KioskHandoff, run_fullscreen
 
 
 class WindowHandoffTests(unittest.TestCase):
@@ -126,3 +126,72 @@ class WindowHandoffTests(unittest.TestCase):
                     mock.patch.object(server.HANDOFF, "restore") as restore:
                 server.track("game", process, 0)
                 self.assertEqual(restore.call_count, 0 if other_alive else 1)
+
+    def test_game_fullscreen_targets_only_unique_owned_window_and_preserves_exit(self):
+        process = mock.Mock(pid=123)
+        process.poll.return_value = None
+        process.wait.return_value = 7
+        with mock.patch("window_handoff.shutil.which", return_value="/usr/bin/tool"), \
+                mock.patch("window_handoff.subprocess.Popen", return_value=process) as launch, \
+                mock.patch.object(KioskHandoff, "_windows", return_value=[("0x999", 456), ("0x123", 123)]), \
+                mock.patch.object(KioskHandoff, "_set_fullscreen") as change:
+            self.assertEqual(run_fullscreen(["retroarch", "-f"]), 7)
+        launch.assert_called_once_with(["retroarch", "-f"])
+        change.assert_called_once_with("0x123", True)
+        process.wait.assert_called_once()
+
+    def test_game_window_timeout_reports_failure_without_touching_other_windows(self):
+        process = mock.Mock(pid=123)
+        process.poll.return_value = None
+        process.wait.return_value = 0
+        with mock.patch("window_handoff.shutil.which", return_value="/usr/bin/tool"), \
+                mock.patch("window_handoff.subprocess.Popen", return_value=process), \
+                mock.patch("window_handoff.time.monotonic", side_effect=[0, 0, 16]), \
+                mock.patch("window_handoff.time.sleep"), \
+                mock.patch.object(KioskHandoff, "_windows", return_value=[("0x999", 456)]), \
+                mock.patch.object(KioskHandoff, "_set_fullscreen") as change, \
+                mock.patch("window_handoff.sys.stderr") as stderr:
+            self.assertEqual(run_fullscreen(["retroarch", "-f"]), 0)
+        change.assert_not_called()
+        self.assertIn("No unique game window", "".join(call.args[0] for call in stderr.write.call_args_list))
+
+    def test_game_fullscreen_missing_tools_and_wayland_block_before_launch(self):
+        with mock.patch("window_handoff.shutil.which", return_value=None), \
+                mock.patch("window_handoff.subprocess.Popen") as launch:
+            with self.assertRaisesRegex(HandoffError, "requires wmctrl"):
+                run_fullscreen(["retroarch", "-f"])
+        launch.assert_not_called()
+        with mock.patch.dict(os.environ, XDG_SESSION_TYPE="wayland"), \
+                mock.patch("window_handoff.subprocess.Popen") as launch:
+            with self.assertRaisesRegex(HandoffError, "requires an X11"):
+                run_fullscreen(["retroarch", "-f"])
+        launch.assert_not_called()
+
+    def test_game_fullscreen_early_exit_never_changes_windows(self):
+        process = mock.Mock()
+        process.poll.return_value = 1
+        process.wait.return_value = 1
+        with mock.patch("window_handoff.shutil.which", return_value="/usr/bin/tool"), \
+                mock.patch("window_handoff.subprocess.Popen", return_value=process), \
+                mock.patch.object(KioskHandoff, "_windows") as windows:
+            self.assertEqual(run_fullscreen(["retroarch"]), 1)
+        windows.assert_not_called()
+
+    def test_game_fullscreen_ambiguity_and_refusal_are_reported(self):
+        for windows, error in (
+                ([("0x123", 123), ("0x456", 123)], None),
+                ([("0x123", 123)], HandoffError("WM refused"))):
+            with self.subTest(windows=windows):
+                process = mock.Mock(pid=123)
+                process.poll.return_value = None
+                process.wait.return_value = 0
+                with mock.patch("window_handoff.shutil.which", return_value="/usr/bin/tool"), \
+                        mock.patch("window_handoff.subprocess.Popen", return_value=process), \
+                        mock.patch("window_handoff.time.monotonic", side_effect=[0, 0, 16]), \
+                        mock.patch("window_handoff.time.sleep"), \
+                        mock.patch.object(KioskHandoff, "_windows", return_value=windows), \
+                        mock.patch.object(KioskHandoff, "_set_fullscreen", side_effect=error) as change, \
+                        mock.patch("window_handoff.sys.stderr") as stderr:
+                    self.assertEqual(run_fullscreen(["retroarch"]), 0)
+                self.assertEqual(change.call_count, 0 if error is None else 1)
+                self.assertIn("Fullscreen handoff failed", "".join(call.args[0] for call in stderr.write.call_args_list))

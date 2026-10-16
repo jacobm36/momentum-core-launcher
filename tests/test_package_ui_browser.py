@@ -25,6 +25,9 @@ class PackageBrowser(unittest.TestCase):
     def test_video_background_and_featured_artwork(self):
         self.check_fixture("library-media.html")
 
+    def test_controller_handoff(self):
+        self.check_fixture("gamepad.html")
+
     def check_fixture(self, fixture):
         chrome = shutil.which("google-chrome") or shutil.which("chromium")
         self.assertIsNotNone(chrome, "Chrome/Chromium is needed for the requested browser test")

@@ -1,8 +1,9 @@
-"""Release only Momentum's X11 kiosk fullscreen state while games run."""
+"""Hand off Momentum's kiosk window and opt in individual games to X11 fullscreen."""
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import time
 
 
@@ -99,3 +100,35 @@ class KioskHandoff:
             return
         self.window = None
         self.warning = None
+
+
+def run_fullscreen(command):
+    if not command:
+        raise HandoffError("A game command is required.")
+    if not os.environ.get("DISPLAY") or os.environ.get("XDG_SESSION_TYPE") == "wayland":
+        raise HandoffError("This per-game fullscreen wrapper requires an X11 session.")
+    if not shutil.which("wmctrl") or not shutil.which("xprop"):
+        raise HandoffError("This per-game fullscreen wrapper requires wmctrl and xprop.")
+    process = subprocess.Popen(command)
+    handoff = KioskHandoff(0)
+    try:
+        deadline = time.monotonic() + 15
+        while process.poll() is None and time.monotonic() < deadline:
+            windows = [window for window, pid in handoff._windows() if pid == process.pid]
+            if len(windows) == 1:
+                handoff._set_fullscreen(windows[0], True)
+                break
+            time.sleep(.1)
+        else:
+            if process.poll() is None:
+                raise HandoffError("No unique game window appeared within 15 seconds; fullscreen was not applied.")
+    except HandoffError as error:
+        print(f"Fullscreen handoff failed: {error}. The game is still under its own control.", file=sys.stderr)
+    return process.wait()
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(run_fullscreen(sys.argv[1:]))
+    except (HandoffError, OSError) as error:
+        sys.exit(str(error))

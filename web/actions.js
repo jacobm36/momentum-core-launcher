@@ -1,20 +1,29 @@
 // Launching, favorites, removal, media upload and the game editor.
 async function launch(g) {
-  if (running.has(g.id)) return;
-  $("#toast").textContent = "Launching…";
-  const r = await fetch(`/api/launch/${g.id}`, { method: "POST", headers: { "X-Token": token } });
-  const j = await r.json();
-  if (j.error) { $("#toast").textContent = "Error: " + j.error; if (typeof notify === "function") notify(j.error, { kind: "error", title: "Launch failed" }); sfx("err"); return; }
-  sfx("launch");
-  const pb = $("#play")?.getBoundingClientRect();
-  if (animOn()) {
-    const f = $("#flash");
-    if (pb) { f.style.setProperty("--fx", pb.left + pb.width / 2 + "px"); f.style.setProperty("--fy", pb.top + pb.height / 2 + "px"); }
-    f.classList.remove("on"); void f.offsetWidth; f.classList.add("on");
-    document.body.classList.add("blast"); setTimeout(() => document.body.classList.remove("blast"), 2800);
+  if (launchPending || running.has(g.id)) return;
+  launchPending = true;
+  try {
+    $("#toast").textContent = "Launching…";
+    const r = await fetch(`/api/launch/${g.id}`, { method: "POST", headers: { "X-Token": token } });
+    const j = await r.json();
+    if (j.error) { $("#toast").textContent = "Error: " + j.error; if (typeof notify === "function") notify(j.error, { kind: "error", title: "Launch failed" }); sfx("err"); return; }
+    sfx("launch");
+    const pb = $("#play")?.getBoundingClientRect();
+    if (animOn()) {
+      const f = $("#flash");
+      if (pb) { f.style.setProperty("--fx", pb.left + pb.width / 2 + "px"); f.style.setProperty("--fy", pb.top + pb.height / 2 + "px"); }
+      f.classList.remove("on"); void f.offsetWidth; f.classList.add("on");
+      document.body.classList.add("blast"); setTimeout(() => document.body.classList.remove("blast"), 2800);
+    }
+    running.add(g.id); renderList(); renderDetail();
+    if (animOn()) { $("#lname").textContent = g.name; const l = $("#launching"); l.classList.add("on"); setTimeout(() => l.classList.remove("on"), 2600); }
+  } catch (error) {
+    $("#toast").textContent = "Launch request failed: " + error.message;
+    if (typeof notify === "function") notify(error.message, { kind: "error", title: "Launch request failed" });
+    sfx("err");
+  } finally {
+    launchPending = false;
   }
-  running.add(g.id); renderList(); renderDetail();
-  if (animOn()) { $("#lname").textContent = g.name; const l = $("#launching"); l.classList.add("on"); setTimeout(() => l.classList.remove("on"), 2600); }
 }
 
 const post = (path, body, raw) => fetch(path, { method: "POST", headers: { "X-Token": token }, body: raw || JSON.stringify(body || {}) });
