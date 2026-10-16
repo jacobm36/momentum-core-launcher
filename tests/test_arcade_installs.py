@@ -38,7 +38,8 @@ class ArcadeInstalls(unittest.TestCase):
         return runner.get(jid)
 
     def exercise(self, game_id, software_missing=False, wrong_build=False):
-        version = {'star-wars-trilogy-arcade': '0.2.1', 'l-a-machineguns': '0.2.2'}.get(game_id, '0.1.0')
+        version = {'virtua-cop-2': '0.1.2', 'star-wars-trilogy-arcade': '0.2.1',
+                   'l-a-machineguns': '0.2.2'}[game_id]
         archive = PACKAGE_REPO / 'dist' / f'{game_id}-{version}.zip'
         source_package = PACKAGE_REPO / game_id / 'package'
         profile = json.loads((source_package / 'profile.json').read_text())
@@ -64,23 +65,61 @@ class ArcadeInstalls(unittest.TestCase):
                     software.rename(root / 'software-backup')
             else:
                 marker = root / 'flatpak-ready'
+                updated = root / 'flatpak-pinned'
                 if not software_missing:
                     marker.touch()
+                    updated.touch()
                 facts = json.loads((Path(installs.__file__).parent / 'docs/hod2-target-evidence.json').read_text())
-                metadata = f"    Version: {facts['emulator_version']}\n    Commit: {facts['emulator_commit']}"
+                version_info = f"    Version: {facts['emulator_version']}\n    Commit: {facts['emulator_commit']}"
                 if wrong_build:
-                    metadata = '    Version: untested\n    Commit: untested'
+                    version_info = '    Version: untested\n    Commit: untested'
+                app_metadata = ("[Application]\n"
+                                "name=org.flycast.Flycast\n"
+                                "runtime=org.freedesktop.Platform/x86_64/24.08\n"
+                                "command=flycast\n")
+                app_ref = "app/org.flycast.Flycast/x86_64/stable"
+                runtime_ref = "org.freedesktop.Platform/x86_64/24.08"
+                runtime_commit = 'a' * 64
                 flatpak = tools / 'flatpak'
                 flatpak.write_text(f"""#!{sys.executable}
+import os
 from pathlib import Path
 import sys
 ready=Path({str(marker)!r})
+updated=Path({str(updated)!r})
+app_ref={app_ref!r}
+runtime_ref={runtime_ref!r}
+runtime_commit={runtime_commit!r}
 if sys.argv[1]=='ps': pass
-elif sys.argv[1]=='remotes': print('flathub\\thttps://dl.flathub.org/repo/')
+elif sys.argv[1]=='remotes':
+    print('flathub\\thttps://dl.flathub.org/repo/\\t' if 'FLATPAK_USER_DIR' in os.environ else 'flathub\\thttps://dl.flathub.org/repo/')
 elif sys.argv[1]=='list':
-    if ready.exists(): print('org.flycast.Flycast')
-elif sys.argv[1]=='info': print({metadata!r})
+    if '--columns=application' in sys.argv:
+        if ready.exists(): print('org.flycast.Flycast')
+    elif ready.exists():
+        print(app_ref+'\\tflathub')
+        print('runtime/'+runtime_ref+'\\tflathub')
+elif sys.argv[1]=='remote-info':
+    print({app_metadata!r} if '--show-metadata' in sys.argv else 'Commit: '+{facts['emulator_commit']!r})
+elif sys.argv[1]=='info':
+    if '--show-ref' in sys.argv:
+        ref=sys.argv[sys.argv.index('--show-ref')+1]
+        print('runtime/'+runtime_ref if ref==runtime_ref else app_ref)
+    elif '--show-commit' in sys.argv:
+        ref=sys.argv[sys.argv.index('--show-commit')+1]
+        print(runtime_commit if ref==runtime_ref else
+              ({facts['emulator_commit']!r} if updated.exists() else 'b'*64))
+    elif '--show-origin' in sys.argv: print('flathub')
+    elif '--show-runtime' in sys.argv: print(runtime_ref)
+    elif '--show-metadata' in sys.argv: print({app_metadata!r})
+    else:
+        print({version_info!r} if updated.exists() or {wrong_build!r} else
+              '    Version: v2.7\\n    Commit: '+'b'*64)
+elif sys.argv[1]=='mask':
+    if len(sys.argv)>2 and '--columns' not in sys.argv: print('org.flycast.Flycast')
+elif sys.argv[1]=='remote-add': pass
 elif sys.argv[1]=='install': ready.touch()
+elif sys.argv[1]=='update': updated.touch()
 else: sys.exit('Game/emulator launch prohibited in this test')
 """)
                 flatpak.chmod(0o755)
@@ -110,6 +149,12 @@ else: sys.exit('Game/emulator launch prohibited in this test')
                     self.assertEqual(detail['install_enabled'], not (software_missing or wrong_build), detail)
                     jid = inst.submit_install(game_id, version, str(source), trusted_digest=info['digest'])
                     job = self.wait(runner, jid)
+                    if wrong_build:
+                        self.assertEqual(job['status'], 'needs-action', job)
+                        self.assertTrue(job.get('approval_blocked') or job.get('actions'), job)
+                        self.assertFalse((home / 'Games' / profile['destination_name']).exists())
+                        self.assertEqual(json.loads(catalog_path.read_text()), [])
+                        return
                     self.assertEqual(job['status'], 'awaiting-approval', job)
                     if software_missing:
                         self.assertEqual(job['plan']['operation'], 'prepare-dependency')
@@ -117,11 +162,6 @@ else: sys.exit('Game/emulator launch prohibited in this test')
                         self.assertIs(inst.approve(jid, job['plan_digest']), True)
                         job = self.wait(runner, jid)
                         self.assertEqual(job['status'], 'awaiting-approval', job)
-                    if wrong_build:
-                        self.assertIn('approval_blocked', job)
-                        self.assertIsNot(inst.approve(jid, job['plan_digest']), True)
-                        self.assertEqual(json.loads(catalog_path.read_text()), [])
-                        return
                     # Saved review reconnects to identical immutable plan.
                     runner.close()
                     runner = jobs.Jobs(app / 'jobs', on_success=inst.on_success, before_step=inst.before_step)

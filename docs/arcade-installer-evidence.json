@@ -58,6 +58,22 @@
     },
     {
       "id": "virtua-cop-2",
+      "version": "0.1.2",
+      "digest": "sha256:c2c3709af88bff503142e96a55e49eac50c9d9fca51a3f7e8b6be4936c7bb7a9",
+      "runtime": "flycast",
+      "software": {
+        "provider": "flatpak",
+        "scope": "user",
+        "app_id": "org.flycast.Flycast",
+        "version": "v2.7",
+        "commit": "86ec4d845a66ff07cdba8e003d8549e93cd7a814b519766e1f744e530c5d3e5b"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "2026-10-15: exact local 0.1.2 ZIP passed launcher intake, review/approval, install, receipt/catalog update, repeat-install cancellation, missing-software preparation and mismatched-build blocking in disposable homes with synthetic GDI/tracks and a Flatpak test double. Package tests separately verify copy-only migration from 0.1.0/0.1.1 while retaining the old folder. No real emulator or game launch; gameplay, fresh-machine, graphics/input/audio and universal hardware support remain untested."
+    },
+    {
+      "id": "virtua-cop-2",
       "version": "0.1.0",
       "digest": "sha256:e5f63fd17d5680609073880f2e14a0fa9fce1aba3c16d3ef5f6636de43f0113a",
       "runtime": "flycast",
