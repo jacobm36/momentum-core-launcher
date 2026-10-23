@@ -67,16 +67,6 @@ where Momentum goes further: guided, tested setups for the kinds of games that
 are usually the hardest to get right. Today it specializes in three areas, and
 it will grow one real game at a time.
 
-### OpenBOR: fan-made beat 'em ups, made Linux-native
-
-**OpenBOR, without the setup.** A Momentum package turns an OpenBOR game into a
-polished Linux experience. Each package can pin the engine version the game was
-tested with, configure the controller, apply display settings and shaders,
-preserve your saves and add the game to your library.
-No ROMs. No mystery configurations. Just games that work.
-
-The game files already existed. Momentum turns them into a polished Linux game.
-
 ### Momentum Mouse Arcade: rail shooters become mouse games
 
 Momentum Core can turn compatible light-gun and rail-shooter titles into
@@ -107,6 +97,22 @@ see the engine without having to configure it. The launcher also has adapters
 for EDuke32 and Ironwail. Packages bundle mod and engine components or fetch
 them from their sources; where a mod needs commercial base-game files, such as
 Quake's `pak0.pak`/`pak1.pak` or `DOOM2.WAD`, you supply them.
+
+### OpenBOR: fan-made beat 'em ups, made Linux-native
+
+**OpenBOR, without the setup.** A Momentum package turns an OpenBOR game into a
+polished Linux experience. Each package can pin the engine version the game was
+tested with, configure the controller, apply display settings and shaders,
+preserve your saves and add the game to your library.
+No ROMs. No mystery configurations. Just games that work.
+
+The game files already existed. Momentum turns them into a polished Linux game.
+
+> **Go behind the Play button.**
+> [Explore Momentum Core](https://jacobm36.github.io/momentum-core-explorer/)
+> in your browser: follow a package from store to library, click through the
+> system map, and try the interactive package lab. No downloads, installs or
+> sign-in required - just a hands-on look at how Momentum brings the setup.
 
 ## Not just a shortcut with a nice cover
 
