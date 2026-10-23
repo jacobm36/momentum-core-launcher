@@ -17,9 +17,9 @@ function pressed(key, on, fn, repeat = 180) {
   if (!on) { delete held[key]; return; }
   if (!held[key] || now - held[key].t > (held[key].n ? repeat : 400)) { held[key] = { t: now, n: true }; fn(); }
 }
-const topDlg = () => ["odlg", "qdlg", "rdlg", "pdlg", "gdlg", "bdlg", "idlg", "ndlg", "sdlg", "dlg"].map(i => $("#" + i)).find(d => d.open);
+const topDlg = () => ["odlg", "qdlg", "adlg", "fdlg", "rdlg", "pdlg", "gdlg", "bdlg", "idlg", "ndlg", "sdlg", "dlg"].map(i => $("#" + i)).find(d => d?.open);
 const FOCUSABLE = 'button,input:not([type=file]):not([type=hidden]),select,summary,textarea,a[href],[tabindex="0"]';
-const focusables = scope => [...scope.querySelectorAll(FOCUSABLE)].filter(e => !e.disabled && !e.hidden && e.getClientRects().length && !(e.closest("#odlg") && e.id === "oinp"));
+const focusables = scope => [...scope.querySelectorAll(FOCUSABLE)].filter(e => !e.disabled && !e.hidden && e.checkVisibility() && e.getClientRects().length && !(e.closest("#odlg") && e.id === "oinp"));
 function moveFocus(dir) {
   const scope = topDlg() || document.body, items = focusables(scope), cur = document.activeElement;
   if (!items.includes(cur)) { (items.find(e => e.id === "play") || items[0])?.focus(); return; }

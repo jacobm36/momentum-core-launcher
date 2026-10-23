@@ -31,6 +31,10 @@ copies with temporary home directories. Existing emulator/hardware support
 still requires its own evidence. Publish only after human approval; verify
 uploaded assets before promoting the catalog.
 
+Time Crisis II uses the separate `momentum-mame-flatpak-1` contract. Release
+checks bind its exact helper hash and package digest to MAME evidence, including
+the pinned app and KDE runtime commits; older Flatpak contracts are unchanged.
+
 ## Private acceptance bundles
 
 Build a complete local launcher with a selected set of exact-evidence candidates:

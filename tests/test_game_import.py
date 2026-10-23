@@ -63,6 +63,28 @@ class GameImport(unittest.TestCase):
         self.assertEqual(len(output), 1)
         self.assertEqual(len(result["skipped"]), 1)
 
+    def test_emulators_are_opt_in_but_game_shortcuts_using_engines_remain(self):
+        self.shortcut("uzdoom.desktop", "UZDoom", "uzdoom")
+        self.shortcut("mame.desktop", "MAME", "mame")
+        self.shortcut("unknown.desktop", "Another Emulator", "another",
+                      extra="Categories=Game;Emulator;\n")
+        self.shortcut("mod.desktop", "Brutal Doom", "uzdoom -file brutal.pk3")
+        self.shortcut("track.desktop", "TrackMania", "/snap/bin/tmnationsforever")
+        self.shortcut("arcade.desktop", "L.A. Machineguns", "/custom/game-launcher",
+                      extra="Categories=Game;Emulator;\n")
+        scan = game_import.discover([], self.apps)
+        self.assertEqual({c["entry"]["name"] for c in scan["candidates"]},
+                         {"Brutal Doom", "TrackMania", "L.A. Machineguns"})
+        self.assertEqual(scan["emulators_hidden"], 3)
+        expanded = game_import.discover([], self.apps, include_emulators=True)
+        self.assertEqual(len(expanded["candidates"]), 6)
+        self.assertEqual(expanded["emulators_hidden"], 0)
+        candidate = next(c for c in expanded["candidates"] if c["entry"]["name"] == "MAME")
+        selection = [{"source": candidate["source"], "sha256": candidate["sha256"]}]
+        with self.assertRaises(game_import.ImportError):
+            game_import.selected(scan, selection)
+        self.assertEqual(game_import.selected(expanded, selection), [candidate])
+
     def test_changed_missing_and_invalid_selections_make_no_changes(self):
         path = self.shortcut()
         scan = game_import.discover([], self.apps)
@@ -123,7 +145,7 @@ class GameImport(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("import_cli", Path(__file__).parents[1] / "import_games.py")
         cli = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cli)
-        with mock.patch.object(cli, "HERE", self.launcher), mock.patch("game_import.applications", return_value=self.apps):
+        with mock.patch.object(cli, "HERE", self.launcher), mock.patch("game_import.application_directories", return_value=[self.apps]):
             self.assertEqual(cli.main([]), 0)
             self.assertEqual(json.loads(library.read_text()), original)
             self.assertEqual(cli.main(["--update"]), 0)
@@ -143,3 +165,51 @@ class GameImport(unittest.TestCase):
         with mock.patch.object(game_import, "MAX_SHORTCUTS", 0):
             with self.assertRaisesRegex(game_import.ImportError, "Too many"):
                 game_import.discover([], self.apps)
+
+    def test_menu_roots_include_xdg_flatpak_snap_and_deduplicate(self):
+        with mock.patch.dict("os.environ", {
+                "XDG_DATA_HOME": str(self.root / "data"),
+                "XDG_DATA_DIRS": "/custom/share:/usr/share:/custom/share:relative:"}):
+            roots = game_import.application_directories()
+        self.assertEqual(roots[:3], [self.root / "data/applications",
+                                    Path("/custom/share/applications"), Path("/usr/share/applications")])
+        self.assertEqual(len(roots), len(set(roots)))
+        self.assertIn(Path("/var/lib/snapd/desktop/applications"), roots)
+        self.assertIn(Path("/var/lib/flatpak/exports/share/applications"), roots)
+        self.assertIn(Path.home() / ".local/share/flatpak/exports/share/applications", roots)
+
+    def test_multiple_roots_precedence_hidden_masks_and_selection_identity(self):
+        system = self.root / "system"
+        system.mkdir()
+        self.shortcut("override.desktop", command="user-game")
+        for name, command in (("override.desktop", "system-game"), ("hidden.desktop", "hidden-game"),
+                              ("utility.desktop", "old-game"), ("snap.desktop", "/snap/bin/tmnationsforever")):
+            (system / name).write_text(
+                f"[Desktop Entry]\nName={name}\nExec={command}\nCategories=Game;\n")
+        self.shortcut("hidden.desktop", extra="Hidden=true\n")
+        self.shortcut("utility.desktop").write_text(
+            "[Desktop Entry]\nName=Not a game\nExec=utility\nCategories=Utility;\n")
+        with mock.patch.object(game_import, "application_directories", return_value=[self.apps, system]), \
+                mock.patch("subprocess.Popen", side_effect=AssertionError("Discovery must not execute")):
+            scan = game_import.discover([])
+            self.assertEqual([c["entry"]["exec"] for c in scan["candidates"]],
+                             ["user-game", "/snap/bin/tmnationsforever"])
+            self.assertEqual(len(scan["skipped"]), 1)
+            selection = [{"source": c["source"], "sha256": c["sha256"]} for c in scan["candidates"]]
+            self.assertEqual(len(game_import.selected(scan, selection)), 2)
+            self.assertTrue(all(Path(c["source"]).is_absolute() for c in scan["candidates"]))
+            (system / "snap.desktop").write_text("[Desktop Entry]\nName=Changed\nCategories=Game;\nExec=other\n")
+            with self.assertRaisesRegex(game_import.ImportError, "changed"):
+                game_import.selected(game_import.discover([]), selection)
+
+    def test_nested_desktop_id_override_and_global_limit(self):
+        system = self.root / "system"
+        (system / "vendor").mkdir(parents=True)
+        (system / "vendor/game.desktop").write_text(
+            "[Desktop Entry]\nName=System\nExec=system\nCategories=Game;\n")
+        self.shortcut("vendor-game.desktop", command="user")
+        with mock.patch.object(game_import, "application_directories", return_value=[self.apps, system]):
+            self.assertEqual(len(game_import.discover([])["candidates"]), 1)
+            with mock.patch.object(game_import, "MAX_SHORTCUTS", 1):
+                with self.assertRaisesRegex(game_import.ImportError, "Too many"):
+                    game_import.discover([])

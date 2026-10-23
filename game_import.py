@@ -11,6 +11,24 @@ MAX_SHORTCUTS = 2000
 MAX_SHORTCUT_BYTES = 256 << 10
 MAX_ICON_BYTES = 8 << 20
 SKIP = {"steam", "momentum-core-launcher"}
+EMULATOR_NAMES = {
+    "mame", "uzdoom", "gzdoom", "lzdoom", "zdoom", "dsda-doom",
+    "prboom", "prboom+", "chocolate doom", "crispy doom",
+    "retroarch", "flycast", "dolphin", "dolphin emulator",
+    "pcsx2", "rpcs3", "ppsspp", "duckstation", "dosbox", "dosbox staging",
+    "dosbox-x", "scummvm", "mednafen", "snes9x", "fceux", "mgba",
+    "vice", "yabause", "yabasanshiro", "melonds", "desmume",
+}
+
+
+def is_emulator(entry):
+    # Match launcher names, not commands: a Doom mod can legitimately use UZDoom.
+    name = entry.get("Name", "").strip().casefold()
+    categories = entry.get("Categories", "").split(";")
+    # Some individual arcade games also carry Game;Emulator, so that alone
+    # cannot distinguish a game shortcut from an emulator frontend.
+    return (name in EMULATOR_NAMES or "emulator" in name.split()
+            or ("Emulator" in categories and "Game" not in categories))
 
 
 class ImportError(ValueError):
@@ -18,7 +36,22 @@ class ImportError(ValueError):
 
 
 def applications():
-    return Path.home() / ".local/share/applications"
+    value = os.environ.get("XDG_DATA_HOME", "")
+    return (Path(value) if Path(value).is_absolute() else Path.home() / ".local/share") / "applications"
+
+
+def application_directories():
+    roots = [applications()]
+    data_dirs = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
+    roots.extend(Path(value) / "applications" for value in data_dirs.split(":")
+                 if value and Path(value).is_absolute())
+    roots.extend([
+        Path("/usr/local/share/applications"), Path("/usr/share/applications"),
+        Path.home() / ".local/share/flatpak/exports/share/applications",
+        Path("/var/lib/flatpak/exports/share/applications"),
+        Path("/var/lib/snapd/desktop/applications"),
+    ])
+    return list(dict.fromkeys(roots))
 
 
 def command(value, name, source, icon):
@@ -45,17 +78,27 @@ def command(value, name, source, icon):
     return shlex.join(argv)
 
 
-def discover(games, directory=None):
-    directory = Path(directory) if directory is not None else applications()
+def discover(games, directory=None, *, include_emulators=False):
+    directories = [Path(directory)] if directory is not None else application_directories()
+    files, desktop_ids, scanned = [], set(), 0
     try:
-        files = sorted(p for p in directory.iterdir() if p.name.endswith(".desktop")) if directory.exists() else []
-        if len(files) > MAX_SHORTCUTS:
-            raise ImportError(f"Too many shortcuts to review (maximum {MAX_SHORTCUTS})")
+        for root in directories:
+            if not root.exists():
+                continue
+            for source in sorted(root.rglob("*.desktop")):
+                scanned += 1
+                if scanned > MAX_SHORTCUTS:
+                    raise ImportError(f"Too many shortcuts to review (maximum {MAX_SHORTCUTS})")
+                desktop_id = source.relative_to(root).as_posix().replace("/", "-")
+                if desktop_id in desktop_ids:
+                    continue
+                desktop_ids.add(desktop_id)
+                files.append(source)
     except OSError as exc:
         raise ImportError(f"Cannot scan game shortcuts: {exc}") from exc
     known = {g["id"] for g in games}
     commands = {g.get("exec") for g in games}
-    found, skipped, ignored = [], [], 0
+    found, skipped, ignored, emulators_hidden = [], [], 0, 0
     for source in files:
         if source.stem in SKIP or source.stem.startswith("chrome-"):
             ignored += 1
@@ -70,8 +113,12 @@ def discover(games, directory=None):
             parser.optionxform = str
             parser.read_string(raw.decode("utf-8"))
             entry = parser["Desktop Entry"]
-            if "Game" not in entry.get("Categories", "").split(";"):
+            emulator = is_emulator(entry)
+            if "Game" not in entry.get("Categories", "").split(";") and not emulator:
                 ignored += 1
+                continue
+            if emulator and not include_emulators:
+                emulators_hidden += 1
                 continue
             name = entry.get("Name", "").strip()
             if not name or any(ord(c) < 32 for c in name):
@@ -95,7 +142,8 @@ def discover(games, directory=None):
             reason = ("Already in your library; existing entry preserved" if gid in known or launch in commands
                       else "Duplicate of another discovered game" if any(
                           c["entry"]["id"] == gid or c["entry"]["exec"] == launch for c in found) else None)
-            candidate = {"source": source.name, "sha256": hashlib.sha256(raw).hexdigest(),
+            candidate = {"source": source.name if directory is not None else str(source),
+                         "sha256": hashlib.sha256(raw).hexdigest(),
                          "entry": {"id": gid, "name": name, "exec": launch, "tagline": "",
                                    "description": "", "tags": [], "cover": None, "video": None},
                          "icon_source": entry.get("Icon", ""), "reason": reason}
@@ -103,8 +151,10 @@ def discover(games, directory=None):
                 candidate["entry"]["cwd"] = cwd
             found.append(candidate)
         except (OSError, UnicodeError, configparser.Error, KeyError, ValueError) as exc:
-            skipped.append({"source": source.name, "name": name, "reason": str(exc)})
-    return {"directory": str(directory), "candidates": found, "skipped": skipped, "ignored": ignored}
+            skipped.append({"source": str(source), "name": name, "reason": str(exc)})
+    return {"directory": ", ".join(map(str, directories)), "directories": list(map(str, directories)),
+            "candidates": found, "skipped": skipped, "ignored": ignored,
+            "emulators_hidden": emulators_hidden}
 
 
 def selected(scan, selection):

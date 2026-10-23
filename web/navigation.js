@@ -86,7 +86,11 @@ async function refresh(first) {
   windowWarning = j.window_warning || null;
   token = j.token; games = j.games; stats = j.stats || {}; running = new Set(j.running); failed = j.failed || {};
   if (typeof handleJobs === "function") handleJobs(j.jobs);
-  if (first) { const last = localStorage.getItem("mcl-last"); sel = games.some(g => g.id === last) ? last : flat()[0]?.id; }
+  if (first) {
+    restoreBrowsing();
+    const last = localStorage.getItem("mcl-last");
+    sel = flat().some(g => g.id === last) ? last : flat()[0]?.id;
+  }
   if (!dragging) renderList();
   if (first || ($("#play") && $("#play").disabled !== running.has(sel)) || (sel && $("#detail .stats")?.textContent !== statText(sel))) renderDetail();
   const t = $("#toast");
@@ -100,6 +104,8 @@ $("#list").onclick = e => {
   const b = e.target.closest("[data-act]");
   if (b) { const c = b.closest(".cat").dataset.cat, act = b.dataset.act; return act === "rename" ? renameCat(c) : moveCat(c, act === "up" ? -1 : 1); }
    const i = e.target.closest(".item"); if (i) select(i.dataset.id); };
+$("#list").addEventListener("scroll", saveBrowsing);
+addEventListener("pagehide", saveBrowsing);
 if ($("#panel")) $("#panel").onclick = () => {
   localStorage.setItem("mcl-panel", featuredPanel() ? "classic" : "featured");
   applyPanel(); renderDetail();

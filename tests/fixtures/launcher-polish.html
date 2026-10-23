@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Launcher polish test</title>
+<link rel="stylesheet" href="/web/style.css"><style>#result{position:fixed;bottom:0;pointer-events:none}</style></head><body>
+<aside><header><img src="/web/logo-full.png" alt="Momentum"><span>CORE LAUNCHER</span></header>
+<input id="search"><div id="library-count"></div><button id="about">About Momentum</button>
+<div id="tagbar"></div><nav id="list"></nav><div class="side-btns"><button id="add">Add game</button>
+<button id="sort">Sort</button><button id="stats">Stats</button><button id="theme">Theme</button>
+<button id="bell">Notifications</button><button id="jobsbtn">Jobs</button><button id="backupbtn">Backup</button>
+<button id="panel">Panel</button><button id="fx">Animations</button><button id="snd">Sound</button>
+<button id="rum">Rumble</button><button id="full">Fullscreen</button><button id="quit">Exit</button></div>
+<footer id="hints">D-pad Move / A Play / B Back / Start Menu</footer></aside>
+<main id="stage"><div id="art"></div><video id="bg"></video><section id="detail"></section></main>
+<dialog id="adlg"></dialog><dialog id="fdlg"></dialog><dialog id="dlg"><form id="form"></form></dialog>
+<dialog id="odlg"></dialog><dialog id="qdlg"></dialog><dialog id="rdlg"></dialog><dialog id="pdlg"></dialog>
+<dialog id="gdlg"></dialog><dialog id="bdlg"></dialog><dialog id="idlg"></dialog><dialog id="ndlg"></dialog><dialog id="sdlg"></dialog>
+<pre id="result">RUNNING</pre>
+<script>
+const sfx = () => {}, hints = () => {}, galleryStrip = () => "", applyAccent = () => {};
+const editor = () => {}, openStats = () => {}, cycleTheme = () => {}, launch = () => {};
+const toggleFav = () => {}, removeGame = () => {};
+let errors = [], opened = [], failOpen = false;
+const notify = message => errors.push(message);
+const collection = Array.from({length:80}, (_, i) => ({
+  id:"game-" + i, name:"Game " + i + " with a long title for readability",
+  category:"Arcade", tags:["FPS"], description:"A long description. ".repeat(45)
+}));
+window.fetch = async (path, options) => {
+  let data, ok = true;
+  if (path === "/api/games") data = {games:collection, token:"test", running:[], stats:{}};
+  else if (path === "/api/about") data = {version:"test-build-dirty", platform:"Linux x86_64", directory:"/launcher"};
+  else if (options?.method === "POST") {
+    opened.push(path); ok = !failOpen; data = ok ? {status:"opened"} : {error:"desktop unavailable"};
+  } else data = {folders:[{kind:"game",label:"game folder",path:"/games/Example"},
+                          {kind:"state",label:"saves/settings folder",path:"/state/Example"}]};
+  return {ok, status:ok ? 200 : 400, json:async () => data};
+};
+const reopened = sessionStorage.getItem("polish-reopen") === "yes";
+if (!reopened) {
+  localStorage.setItem("mcl-search", "Game");
+  localStorage.setItem("mcl-tags", '["fps"]');
+  localStorage.setItem("mcl-last", "game-30");
+  localStorage.setItem("mcl-scroll", "600");
+}
+localStorage.setItem("mcl-anim", "off");
+</script>
+<script src="/web/core.js"></script><script src="/web/library.js"></script>
+<script src="/web/navigation.js"></script><script src="/web/gamepad.js"></script><script src="/web/info.js"></script>
+<script>
+const check = (value, message) => { if (!value) throw new Error(message); };
+const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+(async () => {
+  await refresh(true);
+  check(sel === "game-30" && filter === "Game" && tagSel.has("fps"), "restore selection/search/tags");
+  if (reopened) {
+    check($("#search").value === "Game" && $("#list").scrollTop === 700, "page reload restores persisted position");
+    $("#result").textContent = "PASS: page reload restoration, refresh/dialog scroll, About, folder actions/errors, controller focus and 720p panels";
+    return;
+  }
+  check($("#search").value === "Game" && $("#list").scrollTop === 600,
+    `restore search field and scroll: ${$("#search").value}, ${$("#list").scrollTop}, height ${$("#list").clientHeight}/${$("#list").scrollHeight}`);
+  $("#list").scrollTo({top:700, behavior:"instant"}); saveBrowsing();
+  await refresh();
+  check($("#list").scrollTop === 700, "periodic refresh preserves scroll");
+  filter = ""; tagSel.clear(); sel = null; $("#list").scrollTo({top:0, behavior:"instant"});
+  await refresh(true);
+  check(sel === "game-30" && tagSel.has("fps") && $("#list").scrollTop === 700, "restart restores saved browsing");
+  await openAbout();
+  check(topDlg().id === "adlg" && $("#adlg").textContent.includes("test-build-dirty"), "about build and dialog scope");
+  cancelDialog($("#adlg"));
+  check(!$("#adlg").open, "controller cancel closes about");
+  await openFolders(collection[30]);
+  check(topDlg().id === "fdlg" && $("#fdlg").textContent.includes("/state/Example"), "recorded folder paths");
+  $("#fdlg button[autofocus]").focus(); moveFocus("up");
+  check(document.activeElement.closest("#fdlg") && document.activeElement.dataset.folder,
+    "controller navigation stays inside folder dialog");
+  $("#fdlg [data-folder=state]").click(); await tick();
+  check(opened[0].endsWith("/folders/state"), "folder action targets recorded kind");
+  failOpen = true; $("#fdlg [data-folder=state]").click(); await tick();
+  check(errors.includes("desktop unavailable"), "folder errors are visible");
+  cancelDialog($("#fdlg"));
+  check($("#list").scrollTop === 700, "dialogs preserve browsing position");
+  for (const mode of ["classic", "featured"]) {
+    localStorage.setItem("mcl-panel", mode); applyPanel(); renderDetail();
+    document.documentElement.classList.add("gp");
+    const detail = $("#detail").getBoundingClientRect();
+    check(detail.top >= 0 && detail.bottom <= innerHeight && detail.right <= innerWidth, mode + " panel fits 720p");
+    for (const id of ["play", "fav", "folders", "edit", "del"]) {
+      const button = $("#" + id);
+      button.focus();
+      const bounds = button.getBoundingClientRect();
+      check(bounds.top >= 0 && bounds.bottom <= innerHeight && bounds.right <= innerWidth, mode + " action visible: " + id);
+      check(parseFloat(getComputedStyle(button).outlineWidth) >= 2.4, "controller focus contrast: " + id);
+    }
+    check($("#list").clientHeight >= 150, "library retains usable height");
+    check($("#detail").scrollWidth <= $("#detail").clientWidth + 1, mode + " no horizontal overflow");
+  }
+  filter = "missing"; renderList(); saveBrowsing(); await refresh(true);
+  check(!sel && $("#detail").textContent.includes("No games found"), "empty saved filter never launches hidden selection");
+  localStorage.setItem("mcl-tags", "{}"); restoreBrowsing();
+  check(tagSel.size === 0, "malformed saved filters recover");
+  filter = "Game"; tagSel = new Set(["fps"]); sel = "game-30";
+  $("#search").value = filter;
+  localStorage.setItem("mcl-last", sel);
+  renderList(); renderDetail();
+  $("#list").scrollTo({top:700, behavior:"instant"}); saveBrowsing();
+  sessionStorage.setItem("polish-reopen", "yes");
+  location.reload();
+})().catch(error => { $("#result").textContent = "FAIL: " + error.stack; });
+</script></body></html>

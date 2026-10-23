@@ -24,6 +24,8 @@ import vkquake
 import enyo
 import engines
 import managed_flatpak
+import mame
+import mame_flatpak
 import uzdoom
 import eduke32
 import ironwail
@@ -37,7 +39,7 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 RUNTIME_RESOLVERS = {
     "flycast": dependencies, "supermodel": supermodel, "vkquake": vkquake, "uzdoom": uzdoom,
-    "eduke32": eduke32, "ironwail": ironwail, "openbor": openbor,
+    "eduke32": eduke32, "ironwail": ironwail, "openbor": openbor, "mame": mame,
 }
 UBUNTU_2404_RUNTIME_PACKAGES = {
     "libSDL2-2.0.so.0": "libsdl2-2.0-0", "libSDL2_net-2.0.so.0": "libsdl2-net-2.0-0",
@@ -335,6 +337,11 @@ class Installs:
                         req.get("tested_version")) != (
                         "flatpak", "user", "flathub", uzdoom.APP, "5.0.1"):
                     raise InstallError("Only the approved Flathub UZDoom setup is supported")
+            elif runtime == "mame":
+                if (package_id, req.get("provider"), req.get("scope"), req.get("source"),
+                        req.get("app_id"), req.get("tested_version")) != (
+                        "time-crisis-ii", "flatpak", "user", "flathub", mame.APP, mame.VERSION):
+                    raise InstallError("Only the private Time Crisis II MAME 0.289 setup is supported")
             elif runtime == "eduke32":
                 if (req.get("provider"), req.get("scope"), req.get("source"), req.get("source_commit")) != (
                         "native", "user", "https://voidpoint.io/terminx/eduke32", eduke32.SOURCE_COMMIT):
@@ -416,7 +423,8 @@ class Installs:
                 "quake-brutalist-jam-3": "docs/qbj3-installer-evidence.json",
                 "duke-nukem-3d": "docs/duke-installer-evidence.json",
                 "marvel-infinity-war": "docs/openbor-installer-evidence.json",
-                "ultimate-double-dragon-3": "docs/openbor-installer-evidence.json"
+                "ultimate-double-dragon-3": "docs/openbor-installer-evidence.json",
+                "time-crisis-ii": "docs/mame-installer-evidence.json"
             }.get(package_id, "docs/arcade-installer-evidence.json")
             path = Path(__file__).parent / evidence_file
             record = compatibility.find_record(Path(__file__).parent, package_id, version, summary["digest"])
@@ -427,7 +435,7 @@ class Installs:
                 current = facts.get(runtime, {})
                 builds = compatibility.software_builds(record)
                 selection = engines.select(current, builds,
-                    RUNTIME_RESOLVERS[runtime].discover if runtime == "uzdoom" else None)
+                    RUNTIME_RESOLVERS[runtime].discover if runtime in ("uzdoom", "mame") else None)
                 expected = selection.build
                 current = selection.facts
                 facts[runtime] = current
@@ -449,7 +457,7 @@ class Installs:
                                     "The pinned AppImage requires the FUSE2 and Vulkan loader libraries.",
                                     [package_by_loader[name] for name in missing]))
                                 enabled = False
-                    if enabled and runtime in ("supermodel", "vkquake", "uzdoom", "eduke32", "ironwail", "openbor"):
+                    if enabled and runtime in ("supermodel", "vkquake", "uzdoom", "eduke32", "ironwail", "openbor", "mame"):
                         try:
                             current["host_checks"] = RUNTIME_RESOLVERS[runtime].check_host(current)
                         except dependencies.DependencyError as e:
@@ -464,27 +472,29 @@ class Installs:
                         current["capability_evidence"] = str(path.relative_to(Path(__file__).parent))
         runtime = next(iter(facts), None)
         contract = man.get("extensions", {}).get("managed_engine")
-        if supported and runtime in managed_flatpak.BUILDS and contract == managed_flatpak.CONTRACT:
-            if man["extensions"].get("managed_helper_sha256") != _hash_file(Path(managed_flatpak.__file__)):
+        managed = mame_flatpak if runtime == "mame" else managed_flatpak
+        if supported and runtime in managed.BUILDS and contract == managed.CONTRACT:
+            if man["extensions"].get("managed_helper_sha256") != _hash_file(Path(managed.__file__)):
                 raise InstallError("This package's retained engine helper differs from this launcher. "
                                    "Use the matching private candidate; no engine preparation was started.")
             previous = self._load_receipt(package_id)
             old = (previous or {}).get("dependencies", {}).get(runtime, {})
             try:
                 if old.get("managed"):
-                    managed_flatpak.validate_binding(old["managed"])
-                    current = managed_flatpak.facts(runtime, package_id)
+                    managed.validate_binding(old["managed"])
+                    current = managed.facts(runtime, package_id)
                 elif (not enabled or os.environ.get("MCL_TEST_ISOLATED_ENGINES") == "1") and (
-                        (facts[runtime].get("installed") or os.environ.get("MCL_TEST_ISOLATED_ENGINES") == "1")
+                        (facts[runtime].get("installed") or runtime == "mame"
+                         or os.environ.get("MCL_TEST_ISOLATED_ENGINES") == "1")
                         and facts[runtime].get("flatpak_available") and not previous):
                     enabled = False
-                    current = managed_flatpak.facts(runtime, package_id)
+                    current = managed.facts(runtime, package_id)
                     if current is None:
                         managed_fallback = {
-                            "runtime": runtime, "target": managed_flatpak.BUILDS[runtime],
-                            "slot": str(managed_flatpak.slot(runtime)),
-                            "profile": str(managed_flatpak.root() / "state" / package_id / "engine-profile-v1"),
-                            "space_required_bytes": managed_flatpak.SPACE[runtime],
+                            "runtime": runtime, "target": managed.BUILDS[runtime],
+                            "slot": str(managed.slot(runtime)),
+                            "profile": str(managed.root() / "state" / package_id / "engine-profile-v1"),
+                            "space_required_bytes": managed.SPACE[runtime],
                             "test_mode": os.environ.get("MCL_TEST_ISOLATED_ENGINES") == "1",
                             "existing": engines.identity(facts[runtime])}
                 else:
@@ -506,10 +516,10 @@ class Installs:
                                   "Engine/profile migration is not automatic.",
                         "instruction": "Keep the existing installation. Review repair or migration before changing its engine.",
                         "packages": [], "commands": []})
-            except managed_flatpak.ManagedError as exc:
+            except (managed_flatpak.ManagedError, mame_flatpak.ManagedError) as exc:
                 raise InstallError(str(exc)) from exc
         if not flatpak_prerequisite_added:
-            for runtime in ("flycast", "uzdoom"):
+            for runtime in ("flycast", "uzdoom", "mame"):
                 current = facts.get(runtime)
                 if isinstance(current, dict) and current.get("flatpak_available") is False:
                     host_prerequisites.append(_ubuntu_apt_prerequisite(
@@ -542,7 +552,8 @@ class Installs:
                 step["context"]["target_commit"] = target["commit"]
         if fallback is not None:
             for step in steps:
-                step["argv"][1] = str(Path(__file__).with_name("managed_flatpak.py"))
+                step["argv"][1] = str(Path(__file__).with_name(
+                    "mame_flatpak.py" if runtime == "mame" else "managed_flatpak.py"))
                 step["context"].update(runtime=runtime, package_id=package_id,
                                        existing=fallback["existing"])
                 step["name"] = ("Review tested isolated engine" if
@@ -787,7 +798,7 @@ class Installs:
                     return "This exact game package/software build lacks matching installer capability evidence"
                 if not preparing:
                     planned = job["steps"][-1]["context"].get("dependencies", {})
-                    for runtime in ("flycast", "uzdoom"):
+                    for runtime in ("flycast", "uzdoom", "mame"):
                         if runtime in planned and engines.identity(planned[runtime]) != engines.identity(
                                 detail["dependencies"].get(runtime, {})):
                             return "Selected engine installation changed; start a new review before approval."
@@ -803,6 +814,8 @@ class Installs:
                     return "Close vkQuake before approving this installation"
                 if "uzdoom" in detail["dependencies"] and uzdoom.running(detail["dependencies"]["uzdoom"]):
                     return "Close UZDoom before approving this installation"
+                if "mame" in detail["dependencies"] and mame.running(detail["dependencies"]["mame"]):
+                    return "Close MAME before approving this installation"
                 if "eduke32" in detail["dependencies"] and not preparing and eduke32.running(detail["dependencies"]["eduke32"]):
                     return "Close EDuke32 before approving this installation"
                 if "ironwail" in detail["dependencies"] and ironwail.running(detail["dependencies"]["ironwail"]):

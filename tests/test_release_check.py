@@ -13,6 +13,7 @@ import unittest
 from unittest import mock
 
 import compatibility
+import mame_flatpak
 from tests.test_packages import package_files, sums_for, write_tree, write_zip
 
 spec = importlib.util.spec_from_file_location("release_check", Path(__file__).parents[1] / "tools/check-release.py")
@@ -21,6 +22,43 @@ spec.loader.exec_module(release)
 
 
 class Diagnostics(unittest.TestCase):
+    def test_mame_helper_requires_exact_package_helper_and_pinned_runtime_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            launcher = Path(temporary)
+            helper = launcher / "mame_flatpak.py"
+            helper.write_bytes(b"retained MAME helper")
+            helper_sha = hashlib.sha256(helper.read_bytes()).hexdigest()
+            manifest = {"requires": [{"id": "mame"}], "extensions": {
+                "managed_engine": "momentum-mame-flatpak-1",
+                "managed_helper_sha256": helper_sha}}
+            info = {"id": "time-crisis-ii", "version": "0.1.1", "digest": "sha256:" + "a" * 64}
+            record = {"installer_validated": True, "runtime": "mame",
+                      "managed_helper_sha256": helper_sha,
+                      "software": dict(mame_flatpak.BUILDS["mame"])}
+            with mock.patch.object(compatibility, "find_record", return_value=record) as find:
+                release.check_managed_helper(manifest, info, launcher)
+                find.assert_called_with(launcher, info["id"], info["version"], info["digest"])
+                for field in ("app_id", "version", "commit", "runtime_ref", "runtime_commit"):
+                    with self.subTest(field=field):
+                        changed = {**record, "software": {**record["software"], field: "wrong"}}
+                        find.return_value = changed
+                        with self.assertRaisesRegex(ValueError, "pinned app/runtime"):
+                            release.check_managed_helper(manifest, info, launcher)
+                for changed in (None, {**record, "installer_validated": False},
+                                {**record, "managed_helper_sha256": "0" * 64}):
+                    find.return_value = changed
+                    with self.assertRaisesRegex(ValueError, "matching managed helper/package evidence"):
+                        release.check_managed_helper(manifest, info, launcher)
+                find.return_value = record
+                with self.assertRaisesRegex(ValueError, "Time Crisis II MAME"):
+                    release.check_managed_helper(manifest, {**info, "id": "other"}, launcher)
+                helper.write_bytes(b"changed helper")
+                with self.assertRaisesRegex(ValueError, "helper differs"):
+                    release.check_managed_helper(manifest, info, launcher)
+                manifest["extensions"]["managed_engine"] = "unknown"
+                with self.assertRaisesRegex(ValueError, "Unrecognized"):
+                    release.check_managed_helper(manifest, info, launcher)
+
     def test_reasons_do_not_mislabel_platform_or_software_as_launcher_updates(self):
         for platform, supported, enabled, prerequisites, facts, reason in (
             (["Wrong architecture"], False, False, [], {}, "unsupported-platform"),

@@ -18,6 +18,7 @@ import installs
 import catalog
 import jobs
 import server
+import steamgriddb
 
 
 PREFLIGHT = b"""#!/bin/bash
@@ -86,6 +87,102 @@ class PackageUiApi(Base):
         self.assertEqual(status, 200, data)
         return data
 
+    def test_about_reports_build_identity_and_metadata_errors(self):
+        status, data = self.request("/api/about")
+        self.assertEqual(status, 200)
+        self.assertEqual(data["version"], "Unversioned local build")
+        self.assertEqual(data["directory"], str(self.app))
+        (self.app / "candidate-build.json").write_text(json.dumps({
+            "launcher_base_revision": "a" * 40, "scope": "private-acceptance-only"}))
+        self.assertIn("a" * 40, self.request("/api/about")[1]["version"])
+        (self.app / "candidate-build.json").write_text("{")
+        self.assertEqual(self.request("/api/about")[0], 500)
+        (self.app / ".git").mkdir()
+        with mock.patch.object(server.subprocess, "run", return_value=mock.Mock(stdout="release-3-dirty\n")):
+            self.assertEqual(self.request("/api/about")[1]["version"], "release-3-dirty")
+
+    def test_steamgriddb_settings_search_and_metadata(self):
+        with mock.patch.object(steamgriddb, "key_path", return_value=self.t / "private-key"):
+            self.assertEqual(self.request("/api/steamgriddb/status"), (200, {"configured": False}))
+            self.assertEqual(self.request("/api/steamgriddb/key", {"key": "a" * 32}),
+                             (200, {"configured": True}))
+            self.assertNotIn("a" * 32, json.dumps(self.request("/api/steamgriddb/status")))
+            with mock.patch.object(steamgriddb, "search", return_value=[{"id": "123", "name": "A Game"}]) as search:
+                self.assertEqual(self.request("/api/steamgriddb/search", {"q": "Alias"})[1]["results"][0]["id"], "123")
+                search.assert_called_once_with("Alias")
+            with mock.patch.object(steamgriddb, "artwork", return_value=[]) as artwork:
+                self.assertEqual(self.request("/api/steamgriddb/artwork", {"id": "123", "kind": "icons"}),
+                                 (200, {"images": []}))
+                artwork.assert_called_once_with("123", "icons")
+            req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/steamgriddb/key", b'{"key":""}')
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(req)
+            self.assertEqual(error.exception.code, 403)
+            error.exception.close()
+            self.assertTrue((self.t / "private-key").exists())
+            self.assertEqual(self.request("/api/steamgriddb/key", {"key": ""}),
+                             (200, {"configured": False}))
+            self.assertEqual(self.request("/api/steamgriddb/key", {"key": "invalid"})[0], 400)
+        payload = {"name": "My display name", "exec": "/custom/launch", "tags": ["FPS"],
+                   "artwork_title": "Alternate title", "steamgriddb_id": "123"}
+        status, result = self.request("/api/save", payload)
+        self.assertEqual(status, 200)
+        game = next(g for g in server.read_raw() if g["id"] == result["id"])
+        self.assertEqual(game["artwork_title"], "Alternate title")
+        self.assertEqual(game["steamgriddb_id"], "123")
+        self.assertEqual(game["name"], payload["name"])
+        self.assertEqual(game["exec"], payload["exec"])
+        payload.update(id=result["id"], steamgriddb_id="", artwork_title="")
+        self.assertEqual(self.request("/api/save", payload)[0], 200)
+        self.assertNotIn("steamgriddb_id", server.read_raw()[0])
+        payload["steamgriddb_id"] = "invalid"
+        self.assertEqual(self.request("/api/save", payload)[0], 400)
+
+    def test_folder_shortcuts_use_only_recorded_existing_directories(self):
+        game_dir = self.t / "game with spaces"
+        state = self.t / "state"
+        game_dir.mkdir(); state.mkdir()
+        game = {"id": "test-game", "name": "Game", "exec": "/do/not/execute",
+                "cwd": str(game_dir), "package_id": "test-package"}
+        receipt = {"catalog": {"entry_id": game["id"]}, "game_directory": str(game_dir),
+                   "paths": {"state": str(state)}}
+        with mock.patch.object(server, "load_games", return_value=[game]), \
+                mock.patch.object(self.inst, "_load_receipt", return_value=receipt), \
+                mock.patch.object(server.shutil, "which", return_value="/usr/bin/xdg-open"), \
+                mock.patch.object(server.subprocess, "run", return_value=mock.Mock(returncode=0)) as run:
+            status, data = self.request("/api/games/test-game/folders")
+            self.assertEqual(status, 200)
+            self.assertEqual([f["kind"] for f in data["folders"]], ["working", "game", "state"])
+            self.assertEqual(self.request("/api/games/test-game/folders/state", {})[0], 200)
+            run.assert_called_once_with(["/usr/bin/xdg-open", state.as_uri()],
+                                        capture_output=True, text=True, timeout=10)
+            receipt["catalog"]["entry_id"] = "different-game"
+            self.assertEqual(self.request("/api/games/test-game/folders")[1]["folders"],
+                             [{"kind": "working", "label": "working folder", "path": str(game_dir)}])
+            self.assertEqual(self.request("/api/games/test-game/folders/state", {})[0], 400)
+            self.assertEqual(self.request("/api/games/missing/folders")[0], 404)
+            self.assertEqual(run.call_count, 1)
+
+    def test_folder_open_requires_token_and_reports_failures(self):
+        game = {"id": "test-game", "cwd": str(self.t)}
+        with mock.patch.object(server, "load_games", return_value=[game]), \
+                mock.patch.object(server.subprocess, "run") as run:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{self.port}/api/games/test-game/folders/working", b"{}")
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(req)
+            self.assertEqual(error.exception.code, 403)
+            error.exception.close()
+            run.assert_not_called()
+            with mock.patch.object(server.shutil, "which", return_value=None):
+                self.assertIn("xdg-open", self.request("/api/games/test-game/folders/working", {})[1]["error"])
+            with mock.patch.object(server.shutil, "which", return_value="/usr/bin/xdg-open"):
+                run.return_value = mock.Mock(returncode=1, stderr="desktop unavailable")
+                self.assertIn("desktop unavailable", self.request(
+                    "/api/games/test-game/folders/working", {})[1]["error"])
+            game["cwd"] = str(self.t / "absent")
+            self.assertEqual(self.request("/api/games/test-game/folders")[1], {"folders": []})
+
     def test_folder_picker_route_requires_token_and_returns_cancel_or_error(self):
         with mock.patch("picker.choose_directory", return_value=str(self.t)) as choose:
             self.assertEqual(self.request("/api/picker/directory", {"initial": str(self.t)}),
@@ -108,11 +205,11 @@ class PackageUiApi(Base):
         shortcut.write_text("[Desktop Entry]\nName=My Game\nExec=steam steam://rungameid/123\nCategories=Game;\n")
         second = apps / "other.desktop"
         second.write_text("[Desktop Entry]\nName=Other Game\nExec=/other/game\nCategories=Game;\n")
-        with mock.patch("game_import.applications", return_value=apps):
+        with mock.patch("game_import.application_directories", return_value=[apps]):
             status, scan = self.request("/api/library/discover", {})
             self.assertEqual(status, 200, scan)
             self.assertFalse((self.app / "games.json").exists())
-            candidate = next(c for c in scan["candidates"] if c["source"] == shortcut.name)
+            candidate = next(c for c in scan["candidates"] if c["source"] == str(shortcut))
             selection = [{"source": candidate["source"], "sha256": candidate["sha256"]}]
             status, result = self.request("/api/library/import", {"selection": selection})
             self.assertEqual(status, 200, result)
@@ -144,6 +241,27 @@ class PackageUiApi(Base):
             self.assertEqual(self.request("/api/library/discover", {}),
                              (400, {"error": "cannot read shortcuts"}))
         self.assertFalse((self.app / "games.json").exists())
+
+    def test_emulator_import_is_explicit(self):
+        apps = self.t / "emulator-shortcuts"
+        apps.mkdir()
+        (apps / "uzdoom.desktop").write_text(
+            "[Desktop Entry]\nName=UZDoom\nExec=uzdoom\nCategories=Game;Shooter;\n")
+        with mock.patch("game_import.application_directories", return_value=[apps]):
+            status, scan = self.request("/api/library/discover", {})
+            self.assertEqual(status, 200)
+            self.assertEqual(scan["candidates"], [])
+            self.assertEqual(scan["emulators_hidden"], 1)
+            status, scan = self.request("/api/library/discover", {"include_emulators": True})
+            self.assertEqual(status, 200)
+            candidate = scan["candidates"][0]
+            selection = [{"source": candidate["source"], "sha256": candidate["sha256"]}]
+            self.assertEqual(self.request("/api/library/import", {"selection": selection})[0], 400)
+            status, result = self.request("/api/library/import", {
+                "selection": selection, "include_emulators": True})
+            self.assertEqual(status, 200, result)
+            self.assertEqual(result["added"][0]["name"], "UZDoom")
+            self.assertEqual(self.request("/api/library/discover", {"include_emulators": "yes"})[0], 400)
 
     def test_zip_import_details_no_execution_and_corrupt_upload(self):
         data = self.upload()

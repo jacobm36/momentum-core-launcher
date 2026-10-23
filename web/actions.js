@@ -69,8 +69,7 @@ function editor(g, manual = false) {
     <small class="drop-hint">Drop a file here${k === "cover" ? " or paste an image" : ""}.
     ${g[k] ? `<a href="#" data-clear="${k}">Remove current</a>` : ""}${k === "video" ? ' <a href="#" id="frame" hidden>Use current frame as cover</a>' : ""}</small></div>`;
   f.innerHTML = `<h2>${isNew ? "Add game" : "Edit " + esc(g.name)}</h2>
-    <label>Name *<span class="row"><input name="name" required value="${esc(g.name || "")}"><button type="button" id="steam">Look up on Steam</button></span></label>
-    <div id="steamres"></div>
+    <label>Name *<input name="name" required value="${esc(g.name || "")}"></label>
     <label>Launch command or script path *<input name="exec" required value="${esc(g.exec || "")}" placeholder="/home/you/Games/game.sh"></label>
     <label>Working directory (optional)<input name="cwd" value="${esc(g.cwd || "")}"></label>
     <label>Category<input name="category" list="cats" value="${esc(g.category || "")}"><datalist id="cats">${cats.map(c => `<option value="${esc(c)}">`).join("")}</datalist></label>
@@ -82,6 +81,29 @@ function editor(g, manual = false) {
     <label>Description<textarea name="description" rows="4">${esc(g.description || "")}</textarea></label>
     <label>Tags (comma separated)<input name="tags" value="${esc((g.tags || []).join(", "))}"></label>
     ${chips("tags", allTags)}
+    <details id="online-lookup" class="editor-disclosure"><summary>Find details &amp; artwork online<span>Steam details · SteamGridDB images</span></summary>
+      <fieldset id="steam-details"><legend>Game details — Steam</legend>
+        <p class="lookup-hint">Descriptions, tags and screenshots. Searches your game name.</p>
+        <button type="button" id="steam">Get Steam details</button>
+        <div id="steamres"></div>
+      </fieldset>
+      <fieldset id="sgdb"><legend>Artwork — SteamGridDB</legend>
+        <p class="lookup-hint">Choose artwork without changing your game details.</p>
+        <label>Artwork type<select id="sgdb-kind"><option value="heroes">Backgrounds</option><option value="grids">Grid covers</option><option value="icons">Icons</option></select></label>
+        <div class="lookup-actions"><button type="button" id="sgdb-search">Search SteamGridDB</button>
+          <button type="button" id="sgdb-load">Load saved match</button></div>
+        <p id="sgdb-status" role="status"></p><div id="sgdb-results"></div>
+        <details id="sgdb-options"><summary>Search options &amp; game ID</summary>
+          <label>Artwork search title<input name="artwork_title" maxlength="100" value="${esc(g.artwork_title || "")}" placeholder="Uses game name when blank"></label>
+          <p class="lookup-hint">An alternate title for artwork only. Your library name stays the same.</p>
+          <label>SteamGridDB game ID<input name="steamgriddb_id" inputmode="numeric" pattern="[1-9][0-9]{0,9}" value="${esc(g.steamgriddb_id || "")}"></label>
+          <p class="lookup-hint">Remembered when you choose a match. Not a Steam app ID.</p>
+        </details>
+        <details id="sgdb-setup"><summary>API key setup</summary><p>Create a personal key in your SteamGridDB account preferences. Stored privately on this computer, not in games or packages. Blank removes it.</p>
+          <label>API key<input type="password" id="sgdb-key" autocomplete="new-password" spellcheck="false" maxlength="32"></label>
+          <button type="button" id="sgdb-save-key">Save / remove key</button></details>
+      </fieldset>
+    </details>
     ${["cover", "icon", "video"].map(slot).join("")}
     <div class="slot" data-kind="shot"><div class="slot-h">Screenshots</div><div class="shotgrid" id="shotgrid"></div>
       <div class="slot-in"><input type="file" name="shot" accept="image/*" multiple><input type="url" name="url-shot" placeholder="…or paste an image link and press Enter"></div>
@@ -97,6 +119,14 @@ function editor(g, manual = false) {
     if (k === "video") $("#frame").hidden = !src;
   };
   const setPending = (k, p) => { pending[k] = p; if (!p.file) f.elements[k].value = ""; f.elements["url-" + k].value = p.url || ""; preview(k); };
+  wireSteamGridDB(f, setPending);
+  f.querySelectorAll("input,select,textarea").forEach(input => {
+    input.oninvalid = () => {
+      for (let node = input.parentElement; node && node !== f; node = node.parentElement) {
+        if (node.tagName === "DETAILS") node.open = true;
+      }
+    };
+  });
   ["cover", "icon", "video"].forEach(k => {
     preview(k);
     f.elements[k].onchange = e => { const file = e.target.files[0]; if (file) setPending(k, { file }); };

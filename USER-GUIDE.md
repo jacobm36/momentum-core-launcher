@@ -2,6 +2,68 @@
 
 One window to launch all your games.
 
+## Finding your place and game folders
+
+The library count above the list shows total entries, or matching entries out
+of that total when search/tag filters are active. Favorites and Recently played
+are shortcuts to those entries, not extra games.
+
+Your selected game, search text, tag filters and library scroll position are
+remembered across launcher restarts using the same browser profile. Clear the
+search/tags (or press controller B outside menu mode) to see the whole library.
+If the remembered game no longer matches, reopening selects the first match.
+
+Choose **About Momentum** above the list for the version/build identity,
+platform and launcher folder. Development checkouts show their Git description,
+including a dirty marker for tracked local edits. Candidate bundles show their
+base revision and scope; copies without build metadata say unversioned.
+
+Choose **Folders** beside a game's Play controls to open recorded directories.
+The working folder comes from the library entry; managed installation receipts
+can also supply the game and saves/settings folders. Only existing directories
+are offered, and missing folder information is explained rather than guessed.
+Some engines store saves elsewhere. Opening a folder requires `xdg-open` and a
+working desktop file manager; it does not modify the game or run its launch
+command.
+
+On a controller, use Start for menu mode, move focus to About or Folders, and
+press A. In these dialogs, A activates a button and B closes the dialog. The
+Classic and Featured panels support 1280x720 with scrollable long descriptions
+and visible focus outlines.
+
+## SteamGridDB artwork
+
+Edit a game and expand **Find details & artwork online** below the game details.
+It groups **Game details — Steam** and **Artwork — SteamGridDB** without
+crowding the main form. Both lookups and all manual media controls remain available.
+In the artwork section, open **API key setup** and enter
+your personal key from https://www.steamgriddb.com/profile/preferences, then
+choose **Save / remove key**. The key is stored in
+`~/.config/momentum-core/steamgriddb-key` with owner-only permissions. It is
+not included in your library, launcher backups or game packages. It is stored
+as a local plaintext credential, not in an encrypted keyring. Leave the key
+field blank and use that same button to remove the stored key. Never share it
+in bug reports.
+
+Expand **Search options & game ID** to use an optional **Artwork search title**
+or edit a match manually. These advanced settings and API key setup start
+collapsed. An alternate title does not rename your game; otherwise the search
+uses the game name. Choose a result,
+then choose a background, grid cover or icon. Backgrounds and grid covers both
+fill Momentum's Background art slot; icons fill its Icon slot. They do not
+replace a configured background video. Save the game to apply the artwork and
+remember the selected SteamGridDB game ID. **Load saved match** fetches artwork
+for that ID without another title search. You may also enter a known
+SteamGridDB game ID manually; it is not a Steam app ID. Clear the ID or search
+title and save to remove those optional fields.
+
+Only explicitly selected full-size artwork is saved, through the normal media
+import flow. Search queries go to SteamGridDB and thumbnails load from its
+CDN; a network connection is required. Static artwork is requested with NSFW,
+humor and epilepsy-tagged results excluded. Missing matches, API errors and
+rate limits appear in the artwork section. This is separate from **Get
+Steam details**, which still provides Steam descriptions and screenshots.
+
 The supported public catalog contains SWTA 0.2.1, L.A. Machineguns 0.2.2,
 HOD2, Brutal Doom and Episode Enyo 0.3.0, and Marvel Infinity War 0.2.0.
 Use the current private launcher for these packages. Existing installations are
@@ -106,7 +168,7 @@ Typing in the search box filters by game name or tag. If your controller isn't d
 ### Using a gamepad for everything
 
 - **Menu mode:** press **Start** to move a focus ring between every button (Edit, Remove, the sidebar buttons ➕ ✨ 🔊 ⛶ ⏻, the search box and each category's ▲ ▼ ✎). The D-pad moves the ring, **A** presses the button and **B** or **Start** returns to the game list. Pressing PLAY also returns to the list.
-- **Add/edit form:** **X** or **Y** open it. The D-pad moves between fields, **A** on a text field opens an on-screen keyboard, **Start** saves and **B** cancels (if you changed anything it asks before discarding). **Look up on Steam** and its result thumbnails can be chosen with A, which fills in the description, tags and art without typing much.
+- **Add/edit form:** **X** or **Y** open it. The D-pad moves between fields, **A** on a text field opens an on-screen keyboard, **Start** saves and **B** cancels (if you changed anything it asks before discarding). **Get Steam details** and its result thumbnails can be chosen with A, which fills in the description, tags and art without typing much.
 - **On-screen keyboard:** D-pad to a key, **A** to type it, **X** backspace, **Y** space, **Start** done, **B** cancel. ⇧ Shift capitalizes the next letter. A real keyboard also works in it. Renaming a category uses the same keyboard.
 - **Confirmations** (Remove, Exit, Discard) are plain dialogs: D-pad to a button and press A, or B to cancel.
 - Choosing a file from disk and drag-and-drop still need a mouse. Pasting a link or using the Steam lookup is the controller-friendly way to add art.
@@ -144,7 +206,7 @@ Click the **⏻** button in the sidebar, or press **Ctrl+Q** (**Esc** only clear
 
 ### Sound effects
 
-Short synthesized sounds play for moving through the list, switching category, opening the form, saving, removing, errors and launching a game. There are no audio files to manage. Click the **🔊** button next to **✨** to mute (**🔇**). The setting is remembered. The splash intro builds a rising turbine-like whoosh with climbing arcade synth notes, then crests in a punchy electronic hit and short echo; it is switched off with the 🔇 button and with ✨ Off, which skips the intro. The launcher icon starts Chrome with autoplay allowed so the intro sound works without a click. If you open the page in a normal browser tab instead and hear nothing at first, click or press a key once; browsers only allow sound after you interact with the page.
+Short synthesized sounds play for moving through the list, switching category, opening the form, saving, removing, errors and launching a game. There are no audio files to manage. Click the **🔊** button next to **✨** to mute (**🔇**). The setting is remembered. The splash intro builds a jet-engine roar and rising turbine whine, then hits with an explosive bass impact, cyberpunk synth layers and a short echo; it is switched off with the 🔇 button and with ✨ Off, which skips the intro. The launcher icon starts Chrome with autoplay allowed so the intro sound works without a click. If you open the page in a normal browser tab instead and hear nothing at first, click or press a key once; browsers only allow sound after you interact with the page.
 
 ### Play tracking
 
@@ -190,7 +252,25 @@ You can do everything from the launcher window with the mouse and keyboard, and 
 
 **Add a game:** click **+ Add game** at the bottom of the sidebar. Three choices are visible here and on the empty-library welcome screen:
 
-- **Import installed games:** review game shortcuts from `~/.local/share/applications`. Select the games you trust, then choose **Import selected games**. Momentum shows what was added or skipped; existing entries and edited commands are never refreshed by this UI. Scanning and importing do not run game commands or install software. Steam games appear if they have game shortcuts in this folder; this does not enumerate every Steam library. Hidden, invalid and terminal-only game shortcuts are reported as skipped. File-based icons are copied only when absent; icon warnings are shown.
+- **Import installed games:** review game shortcuts from user and system application menus, including Flatpak and Snap exports. Select the games you trust, then choose **Import selected games**. Momentum shows what was added or skipped; existing entries and edited commands are never refreshed by this UI. Scanning and importing do not run game commands or install software. Steam games appear if they have game menu shortcuts; this does not enumerate every Steam library. Hidden, invalid and terminal-only game shortcuts are reported as skipped. File-based icons are copied only when absent; icon warnings are shown.
+
+  Discovery checks `$XDG_DATA_HOME/applications` (default
+  `~/.local/share/applications`), then applications directories in
+  `$XDG_DATA_DIRS` order. Standard system, user/system Flatpak and Snap menu
+  locations are included even when missing from the launcher's environment.
+  Emulator and game-engine launchers are excluded by default. Check **Include
+  emulators and game engines** to rescan with them included; changing this
+  option clears the current selections. Detection uses known launcher names
+  (including MAME and UZDoom), emulator names and non-game Emulator entries.
+  Game shortcuts are not excluded solely for also having an Emulator category.
+  Named games/mods that use an engine remain discoverable. Existing library
+  entries are unaffected. The command-line importer offers the same option as
+  `--include-emulators`.
+
+  Duplicate directories are scanned once. The first occurrence of a desktop
+  ID wins, including hidden/non-game overrides; nested desktop entries use
+  their standard dash-separated desktop IDs. Only entries categorized as
+  games are offered. The review shows each shortcut's full source path.
 - **Add a game manually:** use your own launch command or script. Name and launch command are required; working directory, category, tagline, runtime badge, description, tags and artwork are optional.
 - **Browse the package store:** choose a supported game and set it up from your local files. The store currently specializes in three areas: **OpenBOR** (fan-made beat 'em ups), **Momentum Mouse Arcade** (light-gun and rail shooters played with the mouse) and **Boomer Shooters** (Quake, Doom, Duke and community mods). These sections describe what the store offers, not what your library can hold. Each card shows a badge naming the engine the package uses, such as UZDoom, vkQuake, Flycast, Supermodel or OpenBOR 6391. See [guided setup](#notifications-installs-and-backups) below. The store is optional; existing Steam, native and emulator launches do not require a Momentum package.
 
@@ -212,7 +292,7 @@ Reordering and dragging are turned off while the search box has text, so clear t
 
 - **Choose, drop or paste:** for each of background art, icon and video you can click *Choose File*, drag a file onto its box, or paste a link (https://) and the launcher downloads it for you. In the form, pasting an image from your clipboard sets the background art. A preview appears before you save.
 - **Video frame as cover:** with a video file chosen, click **Use current frame as cover**. Pause the preview where you like first. This works for videos you've picked from your computer or already saved, not for pasted links.
-- **Look up on Steam:** type the game's name and click **Look up on Steam**, then click the right match. It fills in the description, tags and tagline (the developer), and offers screenshots to pick as the background, plus an icon. Check the result and edit it freely. Games that aren't on Steam (most Doom mods, arcade ports) usually won't match. Steam trailers can't be downloaded this way, so add videos yourself.
+- **Game details — Steam:** type the game's name and click **Get Steam details**, then click the right match. It fills in the description, tags and tagline (the developer), and offers screenshots to pick as the background, plus an icon. Check the result and edit it freely. Games that aren't on Steam (most Doom mods, arcade ports) usually won't match. Steam trailers can't be downloaded this way, so add videos yourself.
 - **Quick art without opening the form:** drop an image or video file on the game page to set its background art or video. Pasting an image (Ctrl+V) while the game page is showing sets the background art.
 - **Link safety:** only public http/https links are fetched. Addresses on your own computer or network are refused.
 
@@ -254,7 +334,7 @@ Changes show up within a few seconds, with no restart needed. If the launcher sh
 - Script: `/home/you/Games/GZDoom/Sigil.sh`
 - RetroArch: `/usr/bin/retroarch -f -L /path/to/core_libretro.so /path/to/rom.zip`
 
-**Easier option:** choose **Import installed games** to review and select `.desktop` game shortcuts. The command-line alternative, `./import_games.py`, imports all eligible user game shortcuts and reports additions/skips, leaving existing entries alone. Only the explicit CLI option `./import_games.py --update` refreshes matching entries' `exec`/`cwd`; the UI never uses this option.
+**Easier option:** choose **Import installed games** to review and select `.desktop` game shortcuts. The command-line alternative, `./import_games.py`, imports all eligible application-menu game shortcuts from the same locations and reports additions/skips, leaving existing entries alone. Only the explicit CLI option `./import_games.py --update` refreshes matching entries' `exec`/`cwd`; the UI never uses this option.
 
 **Game logs:** each launch writes the game's output to `logs/<game-id>.log`. If a game exits with an error within a few seconds, the launcher shows "Last launch exited with code N" next to the Play button.
 
@@ -302,7 +382,7 @@ The sidebar groups games by their `category` value. Groups appear in the order t
 
 ## Notifications, installs and backups
 
-- **🔔 Notifications (N):** pop-up messages (launch errors, finished installs, backups) also land in a history of the last 50.
+- **🔔 Notifications (N):** pop-up messages (launch errors, finished installs, backups) also land in a history of the last 50 for the current session. Reopening or refreshing the launcher starts with an empty notification history; old saved notifications are discarded. Install/job records remain available separately.
 - **📥 Installs & jobs (I):** background jobs with progress, a live log, Cancel, Retry and Dismiss.
   - **Exiting never stops a running job.** The window closes but the job finishes in the background.
   - **Cancel is a request, not a kill.** The job shows "cancel requested" and stops at the next safe point.

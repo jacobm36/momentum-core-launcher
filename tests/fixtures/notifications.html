@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Session notifications test</title></head><body>
+<button id="bell">Notifications</button><button id="jobsbtn">Jobs</button>
+<dialog id="ndlg"></dialog><dialog id="idlg"></dialog><div id="toasts" popover="manual"></div>
+<pre id="result">RUNNING</pre>
+<script>
+const $ = selector => document.querySelector(selector);
+const esc = value => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
+const topDlg = () => document.querySelector("dialog[open]");
+const sfx = () => {};
+const reopened = sessionStorage.getItem("notes-reopened") === "yes";
+if (!reopened) {
+  localStorage.setItem("mcl-notes", '[{"t":1,"msg":"Legacy notification"}]');
+  localStorage.setItem("mcl-notes-seen", "1");
+}
+</script>
+<script src="/web/notify.js"></script><script src="/web/jobs.js"></script>
+<script>
+try {
+  const check = (value, message) => { if (!value) throw new Error(message); };
+  check(notes().length === 0 && !$("#bell").dataset.badge, "new page starts empty");
+  check(localStorage.getItem("mcl-notes") === null
+    && localStorage.getItem("mcl-notes-seen") === null, "legacy persistent history removed");
+  handleJobs([{id:"old",status:"succeeded",title:"Old install"}]);
+  check(notes().length === 0, "historical jobs do not replay notifications");
+  notify("New message", {title:"This session"});
+  check(notes().length === 1 && $("#bell").dataset.badge === "1", "new notifications and badge work");
+  openNotes();
+  check($("#ndlg").textContent.includes("New message") && !unread(), "history opens and marks read");
+  $("#nclear").click();
+  check(notes().length === 0 && $("#ndlg").textContent.includes("Nothing yet."), "clear still works");
+  $("#nclose").click();
+  handleJobs([{id:"old",status:"running",title:"Install"}]);
+  handleJobs([{id:"old",status:"succeeded",title:"Install"}]);
+  check(notes().length === 1 && notes()[0].title === "Install complete", "live job transitions still notify");
+  if (!reopened) {
+    sessionStorage.setItem("notes-reopened", "yes");
+    location.reload();
+  } else {
+    $("#result").textContent = "PASS: fresh history on reopen, legacy cleanup, unread badge, clearing and live job notifications";
+  }
+} catch (error) { $("#result").textContent = "FAIL: " + error.stack; }
+</script></body></html>

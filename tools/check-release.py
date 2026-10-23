@@ -25,6 +25,40 @@ def require(condition, message):
         raise ValueError(message)
 
 
+def check_managed_helper(manifest, info, launcher):
+    extensions = manifest.get("extensions", {})
+    contract = extensions.get("managed_engine")
+    if contract is None:
+        return
+    require(contract in ("momentum-flatpak-1", "momentum-mame-flatpak-1"),
+            "Unrecognized managed engine binding contract")
+    is_mame = contract == "momentum-mame-flatpak-1"
+    helper = launcher / ("mame_flatpak.py" if is_mame else "managed_flatpak.py")
+    helper_sha = hashlib.sha256(helper.read_bytes()).hexdigest()
+    require(extensions.get("managed_helper_sha256") == helper_sha,
+            "Package managed helper differs from delivered launcher bytes")
+    if is_mame:
+        import mame_flatpak
+        require(info["id"] == "time-crisis-ii" and len(manifest["requires"]) == 1
+                and manifest["requires"][0]["id"] == "mame",
+                "MAME helper contract requires the Time Crisis II MAME package")
+        record = compatibility.find_record(launcher, info["id"], info["version"], info["digest"])
+        require(record and record.get("installer_validated") is True
+                and record.get("runtime") == "mame"
+                and record.get("managed_helper_sha256") == helper_sha,
+                "Delivered launcher lacks matching managed helper/package evidence")
+        build = mame_flatpak.BUILDS["mame"]
+        software = record["software"]
+        require(all(software.get(key) == build[key]
+                    for key in ("app_id", "version", "commit", "runtime_ref", "runtime_commit")),
+                "MAME evidence does not match the pinned app/runtime build")
+    else:
+        managed = json.loads((launcher / "docs/shared-engine-fallback-evidence.json").read_text())
+        require(managed.get("retained_helper_sha256") == helper_sha and
+                f"{info['id']} {info['version']}" in managed.get("candidate_enabled_for", []),
+                "Delivered launcher lacks matching managed helper/package evidence")
+
+
 def check(archive, package_repo, distribution, launcher, public=False):
     info = packages.check(archive)
     identity = f"{info['id']}-{info['version']}"
@@ -40,16 +74,7 @@ def check(archive, package_repo, distribution, launcher, public=False):
             require(source.is_dir(), "Package source directory is missing")
             require(inventory(source) == inventory(snapshot), "Source bytes/modes differ from the ZIP")
             manifest = json.loads((snapshot / "package.json").read_text())
-            if manifest.get("extensions", {}).get("managed_engine") is not None:
-                require(manifest["extensions"]["managed_engine"] == "momentum-flatpak-1",
-                        "Unrecognized managed engine binding contract")
-                helper_sha = hashlib.sha256((launcher / "managed_flatpak.py").read_bytes()).hexdigest()
-                require(manifest["extensions"].get("managed_helper_sha256") == helper_sha,
-                        "Package managed helper differs from delivered launcher bytes")
-                managed_evidence = json.loads((launcher / "docs/shared-engine-fallback-evidence.json").read_text())
-                require(managed_evidence.get("retained_helper_sha256") == helper_sha and
-                        f"{info['id']} {info['version']}" in managed_evidence.get("candidate_enabled_for", []),
-                        "Delivered launcher lacks matching managed helper/package evidence")
+            check_managed_helper(manifest, info, launcher)
             if manifest.get("extensions", {}).get("mod_download") is not None:
                 import enyo
                 require(enyo.enabled(snapshot, info["digest"]), "Unrecognized publisher source declaration")

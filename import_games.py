@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Import user game shortcuts; preserve existing entries unless --update is explicit."""
+"""Import application-menu game shortcuts; preserve entries unless --update is explicit."""
 import argparse
 import fcntl
 import json
@@ -17,13 +17,16 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--update", action="store_true",
                         help="Explicitly refresh matching entries' command and working directory")
+    parser.add_argument("--include-emulators", action="store_true",
+                        help="Include emulator and game-engine launchers (excluded by default)")
     args = parser.parse_args(argv)
     output = HERE / "games.json"
     try:
         with (HERE / "games.json.lock").open("w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             games = json.loads(output.read_text()) if output.exists() else []
-            scan = game_import.discover([] if args.update else games)
+            scan = game_import.discover([] if args.update else games,
+                                        include_emulators=args.include_emulators)
             updated = False
             if args.update:
                 by_id = {g["id"]: g for g in games}

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Library count test</title></head><body>
+<div id="library-count" role="status"></div><div id="tagbar"></div><nav id="list"></nav>
+<pre id="result">RUNNING</pre>
+<script>
+const $ = selector => document.querySelector(selector);
+const esc = value => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
+let games = [], stats = {}, running = new Set(), tagSel = new Set(), filter = "", sel = null, ver = 1;
+let restoredScroll = null, listFilterKey = null;
+const saveBrowsing = () => {};
+</script>
+<script src="/web/library.js"></script>
+<script>
+try {
+  const check = (expected, message) => {
+    renderList();
+    if ($("#library-count").textContent !== expected) throw new Error(message);
+  };
+  localStorage.setItem("mcl-sort", "cat");
+  check("0 games", "empty library");
+  games = [{id:"a",name:"Alpha",favorite:true,tags:["FPS"]}];
+  stats = {a:{last:Date.now() / 1000}};
+  check("1 game", "singular count despite favorite/recent duplicate rows");
+  games.push({id:"b",name:"Beta",tags:["Puzzle"]});
+  check("2 games", "added game");
+  filter = "Alpha";
+  check("1 of 2 games", "search matches");
+  filter = "missing";
+  check("0 of 2 games", "no search matches");
+  filter = ""; tagSel.add("fps");
+  check("1 of 2 games", "tag filter");
+  filter = "Beta";
+  check("0 of 2 games", "combined search and tag filter");
+  filter = ""; tagSel.clear();
+  localStorage.setItem("mcl-sort", "az");
+  check("2 games", "cleared filters and changed sort");
+  games.pop();
+  check("1 game", "removed game");
+  $("#result").textContent = "PASS: totals, duplicates, filters, sorting, additions and removals";
+} catch (error) {
+  $("#result").textContent = "FAIL: " + error.stack;
+}
+</script></body></html>

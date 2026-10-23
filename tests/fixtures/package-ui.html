@@ -102,6 +102,12 @@ async function until(fn) {
   await until(() => $("#discover-import"));
   check(topDlg().id === "pdlg", "discovery uses existing controller dialog");
   check($("#discover-import").disabled, "no automatic import or preselection");
+  check(!$("#discover-emulators").checked, "emulators excluded by default");
+  $("#discover-emulators").click();
+  await until(() => $("#discover-import"));
+  check($("#discover-emulators").checked, "emulator opt-in survives rescan");
+  check(submitted.filter(s => s.path === "/api/library/discover").at(-1).body.include_emulators === true,
+    "rescan requests emulator inclusion");
   check($("[data-candidate='2']").disabled, "existing entries cannot be selected");
   check($("#pdlg").textContent.includes("Missing launch command"), "skipped shortcut reason shown");
   check($("#pdlg").textContent.includes("<Native Game>") && !$("#pdlg Native"), "shortcut names escaped");
@@ -117,6 +123,7 @@ async function until(fn) {
   const importRequest = submitted.find(s => s.path === "/api/library/import");
   check(importRequest.body.selection.length === 2 && Object.keys(importRequest.body.selection[0]).join(",") === "source,sha256",
     "only selected reviewed identities sent, never launch commands");
+  check(importRequest.body.include_emulators === true, "import preserves emulator opt-in");
   $("#discover-again").click(); await until(() => $("#discover-import")); $("#discover-close").click();
   games = [{ id: "existing", name: "My existing entry" }];
   openJobs(); $("#ipackages").click(); $("#add-store").click(); await tick();

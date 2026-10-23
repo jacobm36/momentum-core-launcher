@@ -42,12 +42,14 @@ function openAddGame() {
   d.showModal(); sfx("open");
 }
 
-async function openInstalledGames() {
+async function openInstalledGames(includeEmulators = false) {
   const d = $("#pdlg");
   if (d.open) return;
   d.innerHTML = `<h2>Import installed games</h2>
-    <p class="bnote">Review game shortcuts in your user applications folder. This includes Steam games with shortcuts there, not every installed Steam game.
+    <p class="bnote">Review game shortcuts from user, system, Flatpak and Snap application menus. This includes Steam games with menu shortcuts, not every installed Steam game.
       No game is launched or installed. Existing entries and edited launch commands stay unchanged.</p>
+    <label class="bnote"><input type="checkbox" id="discover-emulators" ${includeEmulators ? "checked" : ""}>
+      Include emulators and game engines</label>
     <p class="pkg-error" role="alert" hidden></p>
     <div id="discovered-games"><p role="status">Finding game shortcuts...</p></div>
     <div class="btns"><button type="button" id="discover-back">Back</button>
@@ -57,13 +59,18 @@ async function openInstalledGames() {
     if (e.target.id === "discover-back") { d.close(); openAddGame(); }
   };
   d.showModal(); sfx("open");
+  d.querySelector("#discover-emulators").onchange = e => {
+    const include = e.target.checked;
+    d.close(); openInstalledGames(include);
+  };
   const panel = d.querySelector("#discovered-games");
   try {
-    const scan = await packageResponse(await post("/api/library/discover"));
+    const scan = await packageResponse(await post("/api/library/discover", { include_emulators: includeEmulators }));
     if (!d.open || !panel.isConnected) return;
     const skipped = scan.skipped;
     panel.innerHTML = `<p class="bnote">Scanned: ${esc(scan.directory)}</p>
-      <p role="status">${scan.candidates.length} game shortcut(s) found; ${skipped.length} skipped; ${scan.ignored} unrelated shortcut(s) ignored.</p>
+      <p role="status">${scan.candidates.length} game shortcut(s) found; ${skipped.length} skipped; ${scan.ignored} unrelated shortcut(s) ignored.
+        ${scan.emulators_hidden || 0} emulator/game-engine shortcut(s) hidden. Changing the emulator option rescans and clears selections.</p>
       <form id="discover-form">
         <div class="btns"><button type="button" id="discover-all">Select all available</button>
           <button type="button" id="discover-none">Select none</button></div>
@@ -90,17 +97,18 @@ async function openInstalledGames() {
         return { source: c.source, sha256: c.sha256 };
       });
       button.disabled = true;
+      d.querySelector("#discover-emulators").disabled = true;
       form.querySelectorAll("input,button").forEach(input => input.disabled = true);
       d.querySelector(".pkg-error").hidden = true;
       try {
-        const result = await packageResponse(await post("/api/library/import", { selection }));
+        const result = await packageResponse(await post("/api/library/import", { selection, include_emulators: includeEmulators }));
         if (!d.open || !panel.isConnected) return;
         panel.innerHTML = `<p role="status">${result.added.length} game(s) added; ${result.skipped.length} selected game(s) skipped.
           Existing entries were preserved.</p>
           <ul>${result.added.map(g => `<li>Added: ${esc(g.name)}</li>`).join("")}
           ${[...result.skipped, ...result.warnings].map(g => `<li>${esc(g.name)}: ${esc(g.reason)}</li>`).join("")}</ul>
           <button type="button" id="discover-again">Scan again</button>`;
-        panel.querySelector("#discover-again").onclick = () => { d.close(); openInstalledGames(); };
+        panel.querySelector("#discover-again").onclick = () => { d.close(); openInstalledGames(includeEmulators); };
         try { await refresh(true); }
         catch (error) {
           if (d.open && panel.isConnected) packageError(d, new Error(`Import finished, but the library could not refresh: ${error.message}. Reopen the launcher to see the saved entries.`));
@@ -108,6 +116,7 @@ async function openInstalledGames() {
       } catch (error) {
         if (!d.open || !panel.isConnected) return;
         packageError(d, error);
+        d.querySelector("#discover-emulators").disabled = false;
         form.querySelectorAll("input,button").forEach(input => input.disabled = false);
         form.querySelectorAll("input[data-candidate]").forEach(input => {
           input.disabled = !!scan.candidates[Number(input.dataset.candidate)].reason;
@@ -374,8 +383,8 @@ async function selectPackage(id, version) {
     if (!d.open) return;
     selectedPackage = detail;
     const m = detail.manifest;
-    const flatpak = detail.dependencies?.flycast || detail.dependencies?.uzdoom;
-    const flatpakId = detail.dependencies?.flycast ? "flycast" : "uzdoom";
+    const flatpak = detail.dependencies?.flycast || detail.dependencies?.uzdoom || detail.dependencies?.mame;
+    const flatpakId = detail.dependencies?.flycast ? "flycast" : detail.dependencies?.uzdoom ? "uzdoom" : "mame";
     const native = detail.dependencies?.supermodel || detail.dependencies?.vkquake || detail.dependencies?.eduke32 || detail.dependencies?.ironwail || detail.dependencies?.openbor;
     const source = m.inputs.find(f => f.id === "source_dir");
     const destination = m.inputs.find(f => f.id === "games_root");

@@ -25,9 +25,32 @@ the ones you want. Momentum leaves your existing commands and installations
 alone. Steam games with local shortcuts, native games and emulator launches can
 sit side by side.
 
+Discovery reads user and system application menus, including Flatpak and Snap
+exports. It respects XDG data locations and desktop-entry precedence: a user
+override, including a hidden entry, masks the same desktop ID in later locations.
+It does not scan your whole disk or enumerate Steam libraries.
+
 **Have your own setup? Make it yours.** Add a command or script, give it a name,
 drop in some artwork and hit Play. You don't need a Momentum package to use
 Momentum.
+
+The library shows its total game count above the list. Search and tag filters
+show matching games out of that total; Favorites and Recently played do not
+count the same library entry twice.
+
+Momentum remembers your selected game, search, tag filters and library scroll
+position across restarts in the same browser profile. **About Momentum** shows
+the launcher build identity and platform. A selected game's **Folders** action
+opens recorded working, game and saves/settings directories where available;
+it never guesses a save location from a launch command.
+
+The game editor separates **Game details — Steam** (**Get Steam details**) from
+**Artwork — SteamGridDB** in a compact **Find details & artwork online**
+section. Advanced search and key setup stay collapsed until needed, with an
+optional alternate search title and remembered SteamGridDB game ID. Choose
+background or icon artwork without renaming the game or changing its launch
+command. A personal API key is stored privately outside the library; see the
+[user guide](USER-GUIDE.md#steamgriddb-artwork) for setup and removal.
 
 **Want a supported game set up? Let the recipe do the work.** Browse the package
 store, supply the required game files and review the setup plan. Momentum checks

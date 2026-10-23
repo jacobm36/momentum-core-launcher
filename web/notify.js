@@ -1,7 +1,9 @@
-// Toast stack and notification history.
-const NKEY = "mcl-notes", NSEEN = "mcl-notes-seen";
-const notes = () => { try { return JSON.parse(localStorage.getItem(NKEY) || "[]"); } catch { return []; } };
-const unread = () => notes().filter(n => n.t > +(localStorage.getItem(NSEEN) || 0)).length;
+// Toast stack and history for this launcher page only.
+localStorage.removeItem("mcl-notes");
+localStorage.removeItem("mcl-notes-seen");
+let notificationHistory = [], notificationsSeen = 0;
+const notes = () => notificationHistory.slice();
+const unread = () => notes().filter(n => n.t > notificationsSeen).length;
 function updateBell() {
   const b = $("#bell"); if (!b) return;
   const n = unread();
@@ -10,7 +12,7 @@ function updateBell() {
 function notify(msg, { kind = "info", title = "", sticky = false } = {}) {
   const list = notes();
   list.push({ t: Date.now(), kind, title, msg });
-  try { localStorage.setItem(NKEY, JSON.stringify(list.slice(-50))); } catch { /* storage full */ }
+  notificationHistory = list.slice(-50);
   updateBell();
   const box = $("#toasts"); if (!box) return;
   const el = document.createElement("div");
@@ -33,11 +35,11 @@ function openNotes() {
     <div class="padhint pad-only"><kbd>A</kbd>Choose <kbd>B</kbd>Close</div>
     <div class="btns">${list.length ? '<button type="button" id="nclear">Clear</button>' : ""}<button type="button" id="nclose" class="primary" autofocus>Close</button></div>`;
   d.onclick = e => {
-    if (e.target.id === "nclear") { localStorage.removeItem(NKEY); openNotesAgain(d); }
+    if (e.target.id === "nclear") { notificationHistory = []; openNotesAgain(d); }
     else if (e.target.id === "nclose") d.close();
   };
   d.onkeydown = e => { if (e.key === "Escape") { e.preventDefault(); d.close(); } };
-  localStorage.setItem(NSEEN, Date.now()); updateBell();
+  notificationsSeen = Date.now(); updateBell();
   d.showModal(); sfx("open");
 }
 function openNotesAgain(d) { d.close(); openNotes(); }

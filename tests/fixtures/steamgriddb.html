@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>SteamGridDB editor test</title>
+<link rel="stylesheet" href="/web/style.css"></head><body>
+<dialog id="dlg"><form id="form"></form></dialog><pre id="result">RUNNING</pre>
+<script>
+const $ = selector => document.querySelector(selector);
+const esc = value => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
+const game = {id:"test",name:"My custom title",exec:"/my/command",tags:["FPS"],description:"My notes",
+  artwork_title:"Alternate search",steamgriddb_id:"123"};
+let games = [game], padOn = false, ver = 1, token = "local-token", calls = [], saved, uploads = [], key = "";
+let rejectSearch = false, emptyArtwork = false, lateSearch;
+const url = path => "/" + path;
+const sfx = () => {}, refresh = async () => {}, select = () => {};
+const check = (value, message) => { if (!value) throw new Error(message); };
+const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+window.fetch = async (path, options = {}) => {
+  const data = options.body ? JSON.parse(options.body) : undefined;
+  calls.push({path, data, options});
+  let result, ok = true;
+  if (path.endsWith("/status")) result = {configured:!!key};
+  else if (path.endsWith("/key")) { key = data.key; result = {configured:!!key}; }
+  else if (path.endsWith("/search")) {
+    if (lateSearch) return await new Promise(resolve => { lateSearch = resolve; });
+    ok = !rejectSearch; result = ok ? {results:[{id:"456",name:'Correct game <test>'}]} : {error:"SteamGridDB rate limit reached."};
+  } else if (path.endsWith("/artwork")) result = {images:emptyArtwork ? [] : [{url:"/web/icon-256.png",thumb:"/web/icon-256.png"}]};
+  else if (path === "/api/save") { saved = data; result = {id:"test"}; }
+  else if (path.startsWith("/api/fetch/")) { uploads.push({path,data}); result = {status:"ok"}; }
+  else throw new Error("Unexpected route " + path);
+  return {ok, status:ok ? 200 : 429, json:async () => result};
+};
+</script>
+<script src="/web/steamgriddb.js"></script><script src="/web/actions.js"></script>
+<script>
+(async () => {
+  editor(game); await tick();
+  const form = $("#form");
+  const checkEditorScroll = () => {
+    check(getComputedStyle($("#dlg")).overflowY === "hidden", "dialog does not add a second scrollbar");
+    check($("#dlg").scrollHeight <= $("#dlg").clientHeight + 1, "editor fits inside dialog");
+    check(form.scrollHeight > form.clientHeight, "long editor has one scrollable form");
+    check(getComputedStyle(form).scrollbarColor !== "auto"
+      && getComputedStyle(form).colorScheme === "dark", "editor uses a dark themed scrollbar");
+    form.scrollTop = form.scrollHeight;
+    const save = form.querySelector('button[type="submit"]').getBoundingClientRect();
+    const dialog = $("#dlg").getBoundingClientRect();
+    check(save.top >= dialog.top && save.bottom <= dialog.bottom, "Save remains reachable at bottom");
+    form.scrollTop = 0;
+  };
+  checkEditorScroll();
+  check($("#steam-details legend").textContent === "Game details — Steam"
+    && $("#steam").textContent === "Get Steam details", "Steam details section is distinct");
+  check($("#sgdb legend").textContent === "Artwork — SteamGridDB"
+    && !$("#sgdb-setup").open && !$("#sgdb-options").open, "advanced artwork settings start collapsed");
+  check(!$("#online-lookup").open && form.elements.name.checkVisibility()
+    && !$("#steam").checkVisibility(), "optional lookups start compact while game fields remain visible");
+  $("#online-lookup > summary").click();
+  check($("#steam").checkVisibility() && $("#sgdb-search").checkVisibility(),
+    "lookup actions accessible after expansion");
+  $("#sgdb-setup > summary").click();
+  checkEditorScroll();
+  check($("#sgdb-status").textContent.includes("API key setup"), "setup guidance without credentials");
+  $("#sgdb-key").value = "a".repeat(32); $("#sgdb-save-key").click(); await tick();
+  check(!$("#sgdb-key").value && $("#sgdb-status").textContent.includes("saved locally"), "key input cleared");
+  $("#sgdb-search").click(); await tick();
+  check(calls.at(-1).data.q === "Alternate search", "alternate title used");
+  check($("#sgdb-results").textContent.includes("<test>") && !$("#sgdb-results test"), "provider title escaped");
+  $("#sgdb-results [data-id]").click(); await tick();
+  check(form.elements.steamgriddb_id.value === "456", "explicit match stored in field");
+  check(calls.at(-1).data.kind === "heroes", "background artwork by default");
+  $("#sgdb-results [data-image]").click();
+  check(form.elements["url-cover"].value === "/web/icon-256.png", "chosen background staged");
+  $("#sgdb-kind").value = "icons"; $("#sgdb-kind").dispatchEvent(new Event("change")); await tick();
+  $("#sgdb-results [data-image]").click();
+  check(form.elements["url-icon"].value === "/web/icon-256.png", "chosen icon staged separately");
+  check(!uploads.length, "no media downloads before save");
+  check(form.elements.name.value === game.name && form.elements.exec.value === game.exec
+    && form.elements.description.value === game.description, "lookup preserves user metadata");
+  emptyArtwork = true; $("#sgdb-load").click(); await tick();
+  check($("#sgdb-status").textContent.includes("No artwork"), "empty artwork feedback");
+  rejectSearch = true; $("#sgdb-search").click(); await tick();
+  check($("#sgdb-status").textContent.includes("rate limit"), "provider errors visible");
+  rejectSearch = false; lateSearch = true; $("#sgdb-search").click(); await tick();
+  form.elements.steamgriddb_id.value = "789";
+  form.elements.steamgriddb_id.dispatchEvent(new Event("input"));
+  lateSearch({ok:true,json:async () => ({results:[{id:"999",name:"Stale match"}]})}); await tick();
+  check(!$("#sgdb-results").textContent.includes("Stale"), "stale response cannot replace new selection");
+  $("#sgdb-save-key").click(); await tick();
+  check(!key && $("#sgdb-status").textContent.includes("removed"), "remove key");
+  $("#sgdb-options").open = false; $("#online-lookup").open = false;
+  form.elements.steamgriddb_id.value = "invalid";
+  check(!form.elements.steamgriddb_id.checkValidity() && $("#online-lookup").open
+    && $("#sgdb-options").open, "invalid hidden field reveals containing sections");
+  form.elements.steamgriddb_id.value = "789";
+  $("#sgdb-options").open = false; $("#online-lookup").open = false;
+  await form.onsubmit(new Event("submit"));
+  check(saved.artwork_title === "Alternate search" && saved.steamgriddb_id === "789", "match saved with library entry");
+  check(!JSON.stringify(saved).includes("a".repeat(32)), "key excluded from game save");
+  check(uploads.length === 2 && uploads.some(item => item.path.endsWith("/cover"))
+    && uploads.some(item => item.path.endsWith("/icon")), "artwork reuses normal media downloads");
+  check(calls.filter(item => item.path.startsWith("/api/steamgriddb/") && item.options.method === "POST")
+    .every(item => item.options.headers["X-Token"] === token), "mutations authenticated");
+  $("#result").textContent = "PASS: key setup/removal, search aliases, explicit match, backgrounds/icons, errors, stale responses and saved media";
+})().catch(error => { $("#result").textContent = "FAIL: " + error.stack; });
+</script></body></html>

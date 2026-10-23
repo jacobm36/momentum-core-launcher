@@ -48,14 +48,14 @@ function voices(ctx, out, t0) {
       tone(180, 0.7, "sawtooth", 0.05, 1400); tone(360, 0.7, "triangle", 0.05, 2400); tone(1760, 0.3, "sine", 0.05, null, 0.55);
       sweep(200, 6000, 0.45, 0.22); tone(70, 0.6, "sine", 0.3, 28, 0.42, 0.004); sweep(3000, 150, 0.5, 0.18, 0.42);
     },
-    // A rising turbine rush and arcade arpeggio crest together as the splash bar completes.
+    // Jet spool-up into an explosive arcade impact as the splash bar completes.
     intro: () => {
       const lim = ctx.createDynamicsCompressor();
       lim.threshold.value = -14; lim.ratio.value = 8; lim.attack.value = 0.003; lim.release.value = 0.24;
-      const master = ctx.createGain(); master.gain.value = 1.18;
+      const master = ctx.createGain(); master.gain.value = 0.95;
       lim.connect(master).connect(out);
       const echo = ctx.createDelay(1), fb = ctx.createGain(), wet = ctx.createGain(), damp = ctx.createBiquadFilter();
-      echo.delayTime.value = 0.19; fb.gain.value = 0.3; wet.gain.value = 0.24; damp.type = "lowpass"; damp.frequency.value = 2800;
+      echo.delayTime.value = 0.12; fb.gain.value = 0.18; wet.gain.value = 0.12; damp.type = "lowpass"; damp.frequency.value = 1600;
       echo.connect(damp).connect(fb).connect(echo); damp.connect(wet).connect(lim);
       const bus = ctx.createGain(); bus.connect(lim); bus.connect(echo); out = bus;
       const noise = (d, kind, f, v, at) => {
@@ -74,20 +74,44 @@ function voices(ctx, out, t0) {
         g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(v, t0 + 1.45); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.35);
         o.connect(lp).connect(g).connect(out); o.start(t0); o.stop(t0 + 2.38);
       };
-      turbine(58, -7, 0.06); turbine(87, 7, 0.04);
-      sweep(110, 6800, 1.65, 0.17, 0.02);
-      tone(43, 1.8, "sine", 0.13, 92, 0, 1.4);
-      [146.8, 174.6, 220, 261.6, 293.7, 349.2, 440].forEach((f, i) => {
-        const at = 0.5 + i * 0.155;
-        tone(f, 0.28, "square", 0.025, f * 1.015, at, 0.004);
+      const roar = (at, d, attack, v, from, to) => {
+        const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * d), ctx.sampleRate);
+        const samples = buf.getChannelData(0);
+        for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1;
+        const src = ctx.createBufferSource(), hp = ctx.createBiquadFilter();
+        const lp = ctx.createBiquadFilter(), g = ctx.createGain();
+        src.buffer = buf; hp.type = "highpass"; hp.frequency.value = 55;
+        lp.type = "lowpass"; lp.Q.value = 0.7;
+        lp.frequency.setValueAtTime(from, t0 + at);
+        lp.frequency.exponentialRampToValueAtTime(to, t0 + at + attack);
+        lp.frequency.exponentialRampToValueAtTime(180, t0 + at + d);
+        g.gain.setValueAtTime(0.0001, t0 + at);
+        g.gain.exponentialRampToValueAtTime(v, t0 + at + attack);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + d);
+        src.connect(hp).connect(lp).connect(g).connect(out); src.start(t0 + at);
+      };
+      turbine(46.25, -9, 0.09); turbine(47, 9, 0.075);
+      roar(0, 2.35, 1.57, 0.42, 220, 5600);
+      tone(480, 1.68, "sine", 0.035, 2100, 0, 1.5);
+      sweep(110, 4800, 1.65, 0.17, 0.02);
+      tone(38, 1.7, "sine", 0.12, 65, 0, 1.3);
+      [0.08, 0.67, 1.18, 1.46].forEach(at => {
+        tone(125, 0.18, "sine", 0.22, 40, at, 0.003);
+        dark(73.42, 0.22, 0.09, 0.004, at, 900, 1800);
+        dark(110, 0.18, 0.045, 0.004, at, 650, 1400);
+        noise(0.09, "bandpass", 1800, 0.075, at);
       });
       const hit = 1.65, D = 73.42;
-      tone(46, 0.7, "sine", 0.2, 30, hit, 0.003);
-      tone(D, 0.9, "sine", 0.27, D / 2, hit, 0.004);
-      tone(D * 4, 0.65, "triangle", 0.05, D * 8, hit, 0.008);
-      tone(D * 6, 0.6, "square", 0.028, D * 8, hit, 0.008);
-      noise(0.5, "highpass", 2400, 0.105, hit);
-      sweep(6800, 260, 0.7, 0.1, hit);
+      roar(hit, 1.05, 0.008, 0.65, 5200, 6200);
+      noise(0.7, "lowpass", 320, 0.36, hit);
+      tone(155, 0.36, "sine", 0.34, 28, hit, 0.003);
+      tone(D / 2, 0.85, "sine", 0.24, 30, hit, 0.004);
+      dark(D, 0.85, 0.13, 0.006, hit, 180, 2400);
+      dark(D * 1.5, 0.75, 0.085, 0.006, hit, 150, 1800);
+      dark(D * 2, 0.65, 0.055, 0.006, hit, 220, 2800);
+      noise(0.14, "highpass", 1900, 0.12, hit);
+      noise(0.45, "bandpass", 850, 0.13, hit);
+      sweep(4200, 160, 0.65, 0.11, hit);
     },
   };
 }

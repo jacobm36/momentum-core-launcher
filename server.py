@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Momentum Core Launcher: tiny local server (stdlib only, localhost only)."""
-import fcntl, ipaddress, json, os, re, secrets, shlex, socket, subprocess, sys, tempfile, threading, time
+import fcntl, ipaddress, json, os, platform, re, secrets, shlex, shutil, socket, subprocess, sys, tempfile, threading, time
 import urllib.error, urllib.parse, urllib.request
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -12,6 +12,7 @@ import game_import
 import installs
 import packages
 import picker
+import steamgriddb
 from window_handoff import KioskHandoff
 from jobs import Jobs, RunnerBusy
 
@@ -141,7 +142,8 @@ def load_games():
     return games
 
 
-FIELDS = ("name", "exec", "cwd", "tagline", "description", "tags", "category", "accent", "runtime")
+FIELDS = ("name", "exec", "cwd", "tagline", "description", "tags", "category", "accent", "runtime",
+          "artwork_title", "steamgriddb_id")
 KINDS = {"cover": ("jpg", "jpeg", "png", "webp"), "icon": ("jpg", "jpeg", "png", "webp", "svg"),
          "video": ("mp4", "webm"), "shot": ("jpg", "jpeg", "png", "webp")}
 MAX_SHOTS = 24
@@ -173,6 +175,52 @@ def write_stats_obj(obj):
 
 JOBS = None  # created in __main__ after the port is bound, so a second copy never touches job records
 INSTALLS = None
+
+
+def app_info():
+    version = "Unversioned local build"
+    if (HERE / ".git").exists():
+        result = subprocess.run(
+            ["git", "-C", str(HERE), "describe", "--tags", "--always", "--dirty",
+             "--match", "momentum-core-launcher-*"],
+            capture_output=True, text=True, timeout=5, check=True)
+        version = result.stdout.strip()
+    elif (HERE / "candidate-build.json").is_file():
+        build = json.loads((HERE / "candidate-build.json").read_text())
+        if not isinstance(build, dict) or not all(
+                isinstance(build.get(key), str) and build[key].strip()
+                for key in ("launcher_base_revision", "scope")):
+            raise ValueError("Invalid candidate build metadata")
+        version = f"Snapshot based on {build['launcher_base_revision']} ({build['scope']})"
+    return {"version": version, "platform": f"{platform.system()} {platform.machine()}",
+            "directory": str(HERE)}
+
+
+def game_folders(game):
+    folders = []
+    def add(kind, label, value):
+        if isinstance(value, str) and Path(value).is_absolute() and Path(value).is_dir():
+            folders.append({"kind": kind, "label": label, "path": value})
+    add("working", "working folder", game.get("cwd"))
+    if INSTALLS and game.get("package_id"):
+        receipt = INSTALLS._load_receipt(game["package_id"])
+        if receipt and receipt.get("catalog", {}).get("entry_id") == game["id"]:
+            add("game", "game folder", receipt.get("game_directory"))
+            add("state", "saves/settings folder", receipt["paths"].get("state"))
+    return folders
+
+
+def open_game_folder(game, kind):
+    folder = next((f for f in game_folders(game) if f["kind"] == kind), None)
+    if not folder:
+        raise ValueError("This folder is not recorded or no longer exists")
+    opener = shutil.which("xdg-open")
+    if not opener:
+        raise ValueError("Opening folders requires xdg-open on your desktop")
+    result = subprocess.run([opener, Path(folder["path"]).as_uri()],
+                            capture_output=True, text=True, timeout=10)
+    if result.returncode:
+        raise ValueError(f"Could not open folder: {result.stderr.strip() or result.returncode}")
 DEV = os.environ.get("MCL_DEV") == "1"  # enables the harmless demo job endpoint
 
 
@@ -201,6 +249,10 @@ def clean(data):
             v = ""
         if k == "runtime":
             v = v[:40]
+        if k == "artwork_title":
+            v = v[:100]
+        if k == "steamgriddb_id" and v:
+            v = steamgriddb.game_id(v)
         if v or k in ("name", "exec", "tags"):
             g[k] = v
     return g
@@ -355,6 +407,25 @@ class Handler(SimpleHTTPRequestHandler):
         if not self._host_ok():
             return self.send_error(403)
         path = self.path.split("?")[0]
+        if path == "/api/about":
+            try:
+                return self._json(app_info())
+            except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+                return self._json({"error": f"Cannot read launcher build details: {exc}"}, 500)
+        if path == "/api/steamgriddb/status":
+            try:
+                return self._json({"configured": bool(steamgriddb.read_key())})
+            except OSError:
+                return self._json({"error": "Cannot read SteamGridDB key settings."}, 500)
+        m = re.fullmatch(r"/api/games/([a-z0-9-]+)/folders", path)
+        if m:
+            game = next((g for g in load_games() if g["id"] == m[1]), None)
+            if not game:
+                return self._json({"error": "unknown game"}, 404)
+            try:
+                return self._json({"folders": game_folders(game)})
+            except (OSError, ValueError) as exc:
+                return self._json({"error": str(exc)}, 400)
         if path == "/api/games":
             LAST_SEEN = time.time()
             with lock:
@@ -397,6 +468,16 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if not self._host_ok() or self.headers.get("X-Token") != TOKEN:
             return self.send_error(403)
+        m = re.fullmatch(r"/api/games/([a-z0-9-]+)/folders/(working|game|state)", self.path)
+        if m:
+            game = next((g for g in load_games() if g["id"] == m[1]), None)
+            if not game:
+                return self._json({"error": "unknown game"}, 404)
+            try:
+                open_game_folder(game, m[2])
+                return self._json({"status": "opened"})
+            except (OSError, ValueError, subprocess.SubprocessError) as exc:
+                return self._json({"error": str(exc)}, 400)
         if self.path in ("/api/library/discover", "/api/library/import"):
             try:
                 n = int(self.headers.get("Content-Length") or 0)
@@ -405,9 +486,12 @@ class Handler(SimpleHTTPRequestHandler):
                 data = json.loads(self.rfile.read(n) or b"{}")
                 if not isinstance(data, dict):
                     return self._json({"error": "Invalid import request"}, 400)
+                include_emulators = data.get("include_emulators", False)
+                if not isinstance(include_emulators, bool):
+                    return self._json({"error": "include_emulators must be a boolean"}, 400)
                 with lock:
                     games = read_raw()
-                    scan = game_import.discover(games)
+                    scan = game_import.discover(games, include_emulators=include_emulators)
                     if self.path == "/api/library/discover":
                         return self._json(scan)
                     candidates = game_import.selected(scan, data.get("selection"))
@@ -470,19 +554,39 @@ class Handler(SimpleHTTPRequestHandler):
             data = json.loads(self.rfile.read(n) or b"{}") if n < 1 << 20 else {}
         except ValueError:
             return self._json({"error": "bad json"}, 400)
+        if self.path.startswith("/api/steamgriddb/"):
+            try:
+                if not isinstance(data, dict):
+                    raise steamgriddb.GridError("Expected a JSON object.")
+                if self.path == "/api/steamgriddb/key":
+                    steamgriddb.save_key(data.get("key"))
+                    return self._json({"configured": bool(steamgriddb.read_key())})
+                if self.path == "/api/steamgriddb/search":
+                    return self._json({"results": steamgriddb.search(data.get("q"))})
+                if self.path == "/api/steamgriddb/artwork":
+                    return self._json({"images": steamgriddb.artwork(data.get("id"), data.get("kind"))})
+                return self._json({"error": "unknown SteamGridDB action"}, 404)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                # Never include credentials or provider response bodies in client errors.
+                message = str(exc) if isinstance(exc, steamgriddb.GridError) else "Cannot read SteamGridDB settings or response."
+                return self._json({"error": message}, 400)
         if self.path in ("/api/steam/search", "/api/steam/details") or self.path.startswith("/api/fetch/"):
             return self._net(data)
         with lock:
             games = read_raw()
             if self.path == "/api/save":
-                g = clean(data)
+                try:
+                    g = clean(data)
+                except steamgriddb.GridError as exc:
+                    return self._json({"error": str(exc)}, 400)
                 if not g.get("name") or not g.get("exec"):
                     return self._json({"error": "name and command are required"}, 400)
                 gid = data.get("id")
                 existing = next((x for x in games if x["id"] == gid), None) if gid else None
                 if existing:
                     existing.update(g)
-                    for k in ("tagline", "description", "cwd", "category", "accent", "runtime"):
+                    for k in ("tagline", "description", "cwd", "category", "accent", "runtime",
+                              "artwork_title", "steamgriddb_id"):
                         if k not in g:
                             existing.pop(k, None)
                 else:

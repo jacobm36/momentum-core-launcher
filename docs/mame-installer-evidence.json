@@ -1,0 +1,43 @@
+{
+  "evidence_version": 1,
+  "scope": "Exact Time Crisis II installer evidence. Existing-MAME lifecycle and synthetic acquisition are separately scoped. Owner accepted the package-installed 0.1.0 candidate and approved public 0.1.1 with unchanged runtime and seed on 2026-10-22.",
+  "packages": [
+    {
+      "id": "time-crisis-ii",
+      "version": "0.1.1",
+      "digest": "sha256:836e5a179c9a5547f9d3399578f1d30bb8b8208346b81ade833b73e59f24f6a1",
+      "zip_sha256": "ee8b984ceca4cdf62f13df06f396ef4b9412cc48b7f0d7abf18e0e7ec2d6c47e",
+      "runtime": "mame",
+      "managed_helper_sha256": "11e1fad71cef012374b132720eca315a2fa7c6202cf5044aac6811294442eeef",
+      "software": {
+        "provider": "flatpak",
+        "scope": "user",
+        "app_id": "org.mamedev.MAME",
+        "version": "0.289",
+        "commit": "41ebdb5c266627f4d1f02ba11f8109e793d2381081b68afc48714dd48a703788",
+        "runtime_ref": "org.kde.Platform/x86_64/6.11",
+        "runtime_commit": "fe192771c0992ad873e6a9ccc6e4f087c76314ce5ced165650cc7ea045a6bbaa"
+      },
+      "installer_validated": true,
+      "gameplay": "owner-accepted-matching-0.1.0-candidate",
+      "limits": "Final 0.1.1 ZIP passed package self-check, 15 package unit tests and launcher intake. On 2026-10-22 the real runner on installed system MAME passed install, no-change repeat, read-only verify, missing-launcher and missing-ROM repairs, removal preserving unknown content/state, retained-folder reinstall and clean-folder reinstall. Original manual launcher/settings/NVRAM/ROM/library were unchanged. Separate synthetic missing/incompatible-engine runs passed software/game approvals and the lifecycle; no real network acquisition is claimed. Runtime, launch/lifecycle code, controls and seed bytes match 0.1.0; public metadata/docs and version-sensitive fixtures changed. Owner reports testing and accepting the package-installed 0.1.0 candidate and explicitly approves public inclusion of the exact calibration/scores/bookkeeping seed. No individual gameplay checklist, separate 0.1.1 play session, full-speed performance or other-machine acceptance is claimed."
+    },
+    {
+      "id": "time-crisis-ii",
+      "version": "0.1.0",
+      "digest": "sha256:60537a844d0ba6bc5c90f3098b0efe33faa866b6c175b2c785eb6b94bce58245",
+      "zip_sha256": "be1f4918799268a1fd501c7269ce4b4bddbd08c2243fb38c13d199ca448865a2",
+      "runtime": "mame",
+      "software": {
+        "provider": "flatpak",
+        "scope": "user",
+        "app_id": "org.mamedev.MAME",
+        "version": "0.289",
+        "commit": "41ebdb5c266627f4d1f02ba11f8109e793d2381081b68afc48714dd48a703788"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "Exact ZIP passed package self-check, 15 package unit tests and actual launcher intake. Real runner on installed system MAME 0.289 with owner-supplied timecrs2.zip passed install, no-change repeat, read-only verify, missing-launcher repair, missing-ROM repair, removal retaining unknown content/state, retained-folder reinstall and clean-folder reinstall. Original manual launcher/settings/NVRAM/ROM/library were unchanged. Missing and incompatible engines passed separate software/game approvals and the same lifecycle with a synthetic Flatpak; this is NOT successful real network acquisition evidence. App and KDE runtime commits are pinned and checked, including at launch. Exact private CFG/free-play seed is owner-approved, including calibration/bookkeeping; public seed cleanup is deferred. Manual gameplay was accepted, but this isolated candidate still requires graphical owner acceptance. No performance or universal input claims."
+    }
+  ]
+}

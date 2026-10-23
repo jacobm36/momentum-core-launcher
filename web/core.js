@@ -14,6 +14,29 @@ function applyPanel() {
 }
 let games = [], token = "", running = new Set(), sel = null, filter = "", tagSel = new Set(), padOn = false, dragging = null, failed = {};
 let launchPending = false;
+let restoredScroll = null, listFilterKey = null, browsingReady = false;
+function restoreBrowsing() {
+  filter = localStorage.getItem("mcl-search") || "";
+  try {
+    const tags = JSON.parse(localStorage.getItem("mcl-tags") || "[]");
+    if (!Array.isArray(tags) || !tags.every(t => typeof t === "string")) throw new Error("Invalid saved tags");
+    tagSel = new Set(tags);
+  } catch (error) {
+    console.warn("Could not restore library tag filters.", error);
+    tagSel.clear();
+  }
+  const scroll = Number(localStorage.getItem("mcl-scroll"));
+  restoredScroll = Number.isFinite(scroll) && scroll >= 0 ? scroll : 0;
+  $("#search").value = filter;
+  browsingReady = true;
+}
+function saveBrowsing() {
+  const list = $("#list");
+  if (!browsingReady || !list) return;
+  localStorage.setItem("mcl-search", filter);
+  localStorage.setItem("mcl-tags", JSON.stringify([...tagSel]));
+  localStorage.setItem("mcl-scroll", String(list.scrollTop));
+}
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hue = s => [...s].reduce((a, c) => a + c.charCodeAt(0) * 7, 0) % 360;

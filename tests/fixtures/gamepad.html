@@ -64,6 +64,16 @@ const flush = async () => { await Promise.resolve(); await Promise.resolve(); aw
   pads = []; pollPad();
   pads = [{buttons: [{pressed: true, value: 1}], axes: [0, 0]}]; pollPad();
   check(requests === 3, "reconnection with held input requires neutral");
+  const disclosure = document.createElement("details");
+  disclosure.innerHTML = '<summary>Online lookup</summary><button>Hidden search</button>';
+  document.body.append(disclosure);
+  check(focusables(document.body).includes(disclosure.querySelector("summary"))
+    && !focusables(document.body).includes(disclosure.querySelector("button")),
+    "controller reaches collapsed summary but skips hidden controls");
+  disclosure.open = true;
+  check(focusables(document.body).includes(disclosure.querySelector("button")),
+    "controller reaches expanded lookup controls");
+  disclosure.remove();
   $("#result").textContent = "PASS: gameplay, pending launch, failure, focus, visibility, neutral, multiple controllers and reconnection";
 })().catch(error => { $("#result").textContent = "FAIL: " + error.stack; });
 </script></body></html>

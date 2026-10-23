@@ -73,8 +73,17 @@ function keepFocus(fn) {
   fn();
   if (sel) document.querySelector(sel)?.focus();
 }
-function renderList() { keepFocus(() => { renderTagBar(); renderListInner(); }); }
+function renderList() {
+  const list = $("#list"), key = JSON.stringify([filter, [...tagSel], sortMode()]);
+  const scroll = restoredScroll ?? (listFilterKey === key ? list.scrollTop : 0);
+  keepFocus(() => { renderTagBar(); renderListInner(); });
+  list.scrollTo({ top: scroll, behavior: "instant" });
+  restoredScroll = null; listFilterKey = key;
+  saveBrowsing();
+}
 function renderListInner() {
+  const count = $("#library-count");
+  if (count) count.textContent = `${filtering() ? visible().length + " of " : ""}${games.length} game${games.length === 1 ? "" : "s"}`;
   const rc = filtering() ? [] : recent(), fv = filtering() ? [] : favs();
   $("#list").innerHTML = (fv.length ? `<div class="cat favs"><span>★ Favorites</span></div>` + fv.map(g => row(g, false)).join("") : "") + (rc.length ? `<div class="cat recent"><span>Recently played</span></div>` + rc.map(g => row(g, false)).join("") : "") + ordered().map(c =>
     `<div class="cat" ${c.sorted ? "" : `data-cat="${esc(c.cat)}"`}><span>${c.sorted ? "Sorted: " : ""}${esc(c.cat)}</span>${filtering() || c.sorted ? "" : '<span class="catbtns"><b tabindex="0" role="button" data-act="up" title="Move category up">▲</b><b tabindex="0" role="button" data-act="down" title="Move category down">▼</b><b tabindex="0" role="button" data-act="rename" title="Rename category">✎</b></span>'}</div>` + c.items.map(g => row(g, !c.sorted)).join("")).join("");
@@ -90,8 +99,8 @@ function renderDetailInner() {
         <div class="btns"><button id="welcome-import" class="primary">Import installed games</button>
           <button id="welcome-manual">Add a game manually</button>
           <button id="welcome-store">Browse the package store</button></div>
-        <p class="hint">Import finds game shortcuts in your user applications folder. It does not scan every Steam library or install games.</p></div>`;
-    $("#welcome-import")?.addEventListener("click", openInstalledGames);
+        <p class="hint">Import finds user, system, Flatpak and Snap game menu shortcuts. It does not scan every Steam library or install games.</p></div>`;
+    $("#welcome-import")?.addEventListener("click", () => openInstalledGames());
     $("#welcome-manual")?.addEventListener("click", () => editor(null, true));
     $("#welcome-store")?.addEventListener("click", openPackages);
     return;
@@ -102,7 +111,7 @@ function renderDetailInner() {
   const runtime = g.runtime ? `<span class="runtime-badge" title="Runtime">${esc(g.runtime)}</span>` : "";
   const tags = `<div class="tags">${(g.tags || []).map(t => `<span data-tag="${esc(t)}" tabindex="0" role="button" aria-pressed="${tagSel.has(tagKey(t))}" class="${tagSel.has(tagKey(t)) ? "on" : ""}" title="${tagSel.has(tagKey(t)) ? "Remove" : "Add"} tag filter: ${esc(t)}">${esc(t)}</span>`).join("")}</div>`;
   const play = `<button id="play" ${on ? "disabled" : ""}>${on ? "RUNNING" : "▶ PLAY"}</button>`;
-  const actions = `${play}<span id="toast"></span><span class="manage"><button id="fav" aria-pressed="${!!g.favorite}">${g.favorite ? "★ Favorited" : "☆ Favorite"}</button><button id="edit">Edit</button><button id="del">Remove</button></span>`;
+  const actions = `${play}<span id="toast"></span><span class="manage"><button id="fav" aria-pressed="${!!g.favorite}">${g.favorite ? "★ Favorited" : "☆ Favorite"}</button><button id="folders">Folders</button><button id="edit">Edit</button><button id="del">Remove</button></span>`;
   if (featuredPanel()) {
     const image = g.cover || g.icon;
     const media = image
@@ -122,6 +131,7 @@ function renderDetailInner() {
   $("#fav").onclick = () => toggleFav(g);
   $("#edit").onclick = () => editor(g);
   $("#del").onclick = () => removeGame(g);
+  $("#folders").onclick = () => openFolders(g);
   applyAccent(g);
   if (g.cover) { art.classList.remove("fallback"); art.style.background = `center/cover url("${url(g.cover)}")`; }
   else { art.classList.add("fallback"); art.style.background = `radial-gradient(circle at 78% 25%, hsl(${hue(g.id)} 70% 28%), transparent 60%), radial-gradient(circle at 20% 90%, hsl(${(hue(g.id) + 80) % 360} 60% 18%), transparent 60%)`; }

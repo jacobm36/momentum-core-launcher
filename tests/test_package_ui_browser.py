@@ -28,7 +28,19 @@ class PackageBrowser(unittest.TestCase):
     def test_controller_handoff(self):
         self.check_fixture("gamepad.html")
 
-    def check_fixture(self, fixture):
+    def test_library_count(self):
+        self.check_fixture("library-count.html")
+
+    def test_session_notifications(self):
+        self.check_fixture("notifications.html")
+
+    def test_steamgriddb_editor(self):
+        self.check_fixture("steamgriddb.html", window="1280,720")
+
+    def test_browsing_state_info_and_720p_layout(self):
+        self.check_fixture("launcher-polish.html", window="1280,720")
+
+    def check_fixture(self, fixture, window="1280,900"):
         chrome = shutil.which("google-chrome") or shutil.which("chromium")
         self.assertIsNotNone(chrome, "Chrome/Chromium is needed for the requested browser test")
         with tempfile.TemporaryDirectory(prefix="mcl-ui-") as tmp:
@@ -42,6 +54,7 @@ class PackageBrowser(unittest.TestCase):
             try:
                 result = subprocess.run([
                     chrome, "--headless=new", "--disable-gpu", "--disable-background-networking",
+                    f"--window-size={window}", "--force-device-scale-factor=1",
                     "--disable-extensions", "--no-first-run", f"--user-data-dir={root / 'profile'}",
                     "--virtual-time-budget=5000", "--dump-dom",
                     f"http://127.0.0.1:{http.server_port}/test.html"

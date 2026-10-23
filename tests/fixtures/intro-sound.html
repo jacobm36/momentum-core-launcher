@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Intro audio render test</title></head><body>
+<pre id="result">RUNNING</pre>
+<script src="/web/sound.js"></script>
+<script>
+(async () => {
+  const context = new OfflineAudioContext(1, 44100 * 4, 44100);
+  voices(context, context.destination, 0).intro();
+  const buffer = await context.startRendering(), samples = buffer.getChannelData(0);
+  let peak = 0, earlyEnergy = 0, impactEnergy = 0, tailEnergy = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const sample = samples[i], time = i / buffer.sampleRate;
+    if (!Number.isFinite(sample)) throw new Error("Nonfinite audio sample");
+    peak = Math.max(peak, Math.abs(sample));
+    if (time >= 0.08 && time < 1.5) earlyEnergy += sample * sample;
+    if (time >= 1.65 && time < 2.2) impactEnergy += sample * sample;
+    if (time >= 3.5) tailEnergy += sample * sample;
+  }
+  if (peak < 0.1 || peak > 0.95) throw new Error("Intro peak outside headroom bounds: " + peak);
+  if (earlyEnergy < 1 || impactEnergy < 1) throw new Error("Missing build or impact");
+  if (tailEnergy / (buffer.sampleRate * 0.5) > 0.000001) throw new Error("Intro tail does not settle");
+  document.querySelector("#result").textContent = "PASS: offline intro renders with build, impact, finite samples, headroom and short tail";
+})().catch(error => { document.querySelector("#result").textContent = "FAIL: " + error.stack; });
+</script></body></html>
