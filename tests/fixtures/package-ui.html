@@ -221,7 +221,17 @@ async function until(fn) {
   await selectPackage("test-game", "1.0.0");
   check($("#pdlg").textContent.includes("CUE file and all matching BIN tracks together"), "HOD file requirements visible");
   check($("#pdlg").textContent.includes("package ZIP does not contain the game"), "package versus game explained");
+  check($(".pkg-requirements").textContent.includes("CUE file and all matching BIN tracks"),
+    "before-install card explains legacy HOD requirements");
+  check($(".pkg-requirements").textContent.includes("legally entitled"), "legal-use notice visible");
+  check(!$(".pkg-requirements input"), "requirements add no consent checkbox");
   detail.id = "test-game";
+  detail.manifest.inputs[0].help = "Keep timecrs2.zip zipped. <Only this archive> is copied.";
+  await selectPackage("test-game", "1.0.0");
+  check($(".pkg-requirements").textContent.includes("timecrs2.zip") &&
+    $(".pkg-requirements").textContent.includes("<Only this archive>") &&
+    !$(".pkg-requirements only"), "package instructions displayed and escaped");
+  delete detail.manifest.inputs[0].help;
   detail.compatibility = { reason: "missing-evidence", title: "Update Momentum or check package support",
     message: "A newer package may require a launcher update." };
   await selectPackage("test-game", "1.0.0");
@@ -238,8 +248,12 @@ async function until(fn) {
   $("#pkg-input-source_dir").value = "/home/test/disc";
   $("#pkg-association").value = "existing";
   $("#pkg-trust").click(); check(!$("#pkg-preflight").disabled, "trust enables preflight");
+  job.status = "running";
   $("#pkg-setup").requestSubmit();
-  await until(() => !$("#pdlg").open && $("#idlg [data-a=review]"));
+  await until(() => !$("#pdlg").open && $("#idlg").open);
+  check(!$("#rdlg").open, "running preflight does not open a premature approval");
+  job.status = "awaiting-approval";
+  handleJobs([job]);
   const install = submitted.find(s => s.path === "/api/packages/install");
   check(install.body.trusted_digest === digest, "trust bound to digest");
   check(install.body.inputs.optional === false, "boolean false stays typed");
@@ -249,15 +263,22 @@ async function until(fn) {
   check(install.body.inputs.games_root === "/home/test/Games", "default installation root sent");
   check(!$("#pdlg").open && $("#idlg").open, "returns to jobs");
   check(!$("#idlg [data-a=approve]"), "no unreviewed approve shortcut");
-  $("#idlg [data-a=review]").click(); await until(() => $("#plan-approve"));
+  await until(() => $("#plan-approve"));
+  check($("#rdlg").open, "requested setup automatically opens its ready approval");
+  check(!submitted.some(s => s.path.endsWith("/approve")), "guidance never posts an automatic approval");
   check(topDlg().id === "rdlg", "review dialog controller focus");
   const bounds = $("#rdlg").getBoundingClientRect();
   check(bounds.left >= 0 && bounds.right <= innerWidth && bounds.height <= innerHeight,
     "plan dialog stays inside the viewport");
   check($("#rdlg").textContent.includes("/home/test/backups/game"), "backup shown");
+  const fileDetails = [...$("#rdlg").querySelectorAll("details")].find(
+    element => element.querySelector("summary").textContent.includes("Planned file changes"));
+  check(fileDetails && !fileDetails.open, "file changes and backups remain available without overwhelming review");
   check($("#rdlg").textContent.includes("Confirm aiming"), "manual setup shown");
   check($("#plan-approve").disabled && $("#plan-consent").disabled, "capability gate disables approval");
   $("#plan-close").click();
+  handleJobs([job]); await tick();
+  check(!$("#rdlg").open, "closing a review does not reopen the same plan on polling");
   plan.compatibility = { reason: "host-prerequisites", title: "Action required: install system prerequisites",
     message: "Run the commands below yourself, then return and start a new setup review." };
   plan.host_prerequisites = [{ title: "vkQuake host libraries are missing",
@@ -280,6 +301,18 @@ async function until(fn) {
   check($("#plan-approve").disabled && !$("#plan-consent").checked, "stale consent reset");
   failApprove = false; $("#plan-consent").click(); $("#plan-approve").click(); await until(() => !$("#rdlg").open);
   check(!$("#rdlg").open, "successful approval closes review");
+  job.plan_digest = "sha256:" + "c".repeat(64);
+  plan.plan_digest = job.plan_digest;
+  handleJobs([job]);
+  await until(() => $("#rdlg").open && $("#plan-consent"));
+  check(!$("#plan-consent").checked && $("#plan-approve").disabled,
+    "next plan automatically opens but requires fresh explicit consent");
+  $("#plan-close").click();
+  job.plan_digest = jobDigest;
+  plan.plan_digest = jobDigest;
+  handleJobs([{ ...job, id: "unrelated", plan_digest: "sha256:" + "d".repeat(64) }, job]);
+  await tick();
+  check(!$("#rdlg").open, "unrelated approvals do not interrupt guided setup");
   job.status = "failed"; job.manual = true;
   handleJobs([job]);
   check($("#idlg [data-a=recovery]"), "manual failures have recovery review");
@@ -308,7 +341,9 @@ async function until(fn) {
   check(jobSub({ installation: "installed", readiness: "setup-required", actions: [] }).includes("setup required"), "readiness is separate from success");
   const approved = submitted.find(s => s.path.endsWith("/approve"));
   check(approved.body.plan_digest === jobDigest, "approval uses reviewed digest");
-  $("#idlg").close(); openPackages(); await tick();
+  $("#idlg").close(); handleJobs([job]);
+  check(guidedSetup === null, "closing jobs stops automatic guidance");
+  openPackages(); await tick();
   detail.install_enabled = true;
   await selectPackage("test-game", "1.0.0");
   check($("#pdlg").textContent.includes("supported by compatibility evidence"), "enabled target evidence explained");
@@ -400,9 +435,14 @@ async function until(fn) {
   openPackages(); await selectPackage("test-game", "1.0.0");
   check($("#pdlg").textContent.includes("bundled") && $("#pdlg").textContent.includes("No engine download or FUSE"), "OpenBOR bundled runtime explanation");
   check($("#pkg-input-download_game").checked && !$("#pkg-input-source_dir").required, "OpenBOR online default permits blank offline folder");
+  check($(".pkg-requirements").textContent.includes("Game content options") &&
+    $(".pkg-requirements").textContent.includes("Offline PAK folder only"),
+    "download-capable package does not claim ROM files are required");
   check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "OpenBOR preserves package trust gate");
   $("#pkg-trust").click(); $("#pkg-setup").requestSubmit();
   await until(() => !$("#pdlg").open);
+  await until(() => $("#rdlg").open && $("#plan-consent"));
+  $("#plan-close").click();
   const miwSubmit = submitted.filter(s => s.path === "/api/packages/install").at(-1);
   check(miwSubmit.body.inputs.download_game && !("source_dir" in miwSubmit.body.inputs), "online submission omits empty offline source");
   plan.plan = {operation:"prepare-dependency",dependency:"openbor",dependency_commands:[],actions:[],

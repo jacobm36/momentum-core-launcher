@@ -10,7 +10,8 @@ File count in a checkout is not the application's installed footprint.
 | Runtime evidence and runtime index JSON in `docs/` | Exact package/build gating and OpenBOR file verification | Included; not optional |
 | User guide, README and current supporting documentation/images | Instructions and references | Included |
 | `docs/acceptance-history.md`, `docs/history/` | Historical developer context | Acceptance bundles only |
-| `docs/development.md` | Current engineering reference; commands require the source checkout | Included as documentation, not tooling |
+| `docs/development.md` | Current engineering reference; commands require the source checkout | Acceptance bundles only |
+| `start-isolated-test.sh` | Developer acceptance launch with separate test state | Acceptance bundles only |
 | `tests/` | Regression suites and fixtures | Acceptance bundles only |
 | `tools/` | Builders, release checks and prototypes | Acceptance bundles only |
 | `.github/`, Git history | Contributor instructions and development metadata | Not needed by the runtime |
@@ -23,7 +24,7 @@ File count in a checkout is not the application's installed footprint.
 The existing default remains a **private acceptance bundle**, including tests
 and developer tools. No existing delivery or installed game is changed.
 
-For a smaller **runtime-only** private delivery, use the same builder:
+For a smaller **runtime-only** delivery, use the same builder:
 
 ```bash
 python3 tools/build-candidate.py /path/to/new-runtime.zip \
@@ -34,6 +35,13 @@ This ships the explicit allowlist in `tools/runtime-files.json`, without test
 suites, build tools or contributor instructions, and bundles no games. Store
 downloads, local package import, installed-game import, all runtime adapters and
 exact compatibility evidence remain available.
+
+Runtime deliveries include player-facing `START-HERE.txt` instructions and use
+`runtime-delivery` metadata rather than private-acceptance labels. This describes
+the archive's contents, not publication approval or completed release testing.
+Use `start-candidate.sh` for a windowed first launch or `launch.sh` for the normal
+fullscreen launch. Development-only isolated acceptance launch stays in source.
+Existing data locations and runtime/helper bindings are unchanged.
 
 To include a particular installer, replace `--launcher-only` with a selection:
 

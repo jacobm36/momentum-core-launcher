@@ -102,14 +102,30 @@ uncertain dependency transactions block automatic recovery. The screen explains
 the reason and tells you to retain the journal and consult the log. Pending
 catalog recovery resumes on restart. Do not delete journals to unblock installs.
 
+### Before installing a store game
+
+After the installer is downloaded (or when you open an already imported package),
+setup begins with **Before you install**. This section shows the package's declared
+source-folder instructions, distinguishes required files from optional/alternate
+sources, and explains software preparation. Download-capable packages show their
+content options rather than claiming ROMs are always required.
+
+Only use ROMs and other game files you are legally entitled to use. Momentum does
+not supply the original commercial game files required by these setups.
+The requirements notice adds no extra consent checkbox. Choose the source folder
+in the same window; preflight still validates actual contents, not just filenames.
+Older packages without detailed file instructions show general guidance rather
+than an invented compatibility claim.
+
 ### Using a supplied launcher bundle
 
-Extract a complete private launcher bundle into a new folder, without replacing
+Extract a complete launcher bundle into a new folder, without replacing
 an existing launcher. Run `bash start-candidate.sh` for a normal window. It
 refuses to reuse an already responding server and does not change shortcuts.
 Use the same entrypoint for subsequent launches.
 
-For separate test state, run `bash start-isolated-test.sh` instead. It uses an
+Private acceptance bundles also include `start-isolated-test.sh` for separate
+test state; runtime-only deliveries do not. In an acceptance bundle, it uses an
 acceptance HOME under your real
 `~/.local/share/momentum-core/isolated-acceptance-home-v1`; always relaunch with
 that script and do not install desktop shortcuts in isolated mode.
@@ -387,7 +403,7 @@ The sidebar groups games by their `category` value. Groups appear in the order t
   - **Exiting never stops a running job.** The window closes but the job finishes in the background.
   - **Cancel is a request, not a kill.** The job shows "cancel requested" and stops at the next safe point.
   - **Results:** *succeeded*, *needs action* (a prerequisite or manual setup needs attention; this does not necessarily mean installed), *conflicted* (existing files are in the way), *failed*, *cancelled*, or *interrupted* (the computer restarted or the launcher crashed mid-job).
-  - **Awaiting approval:** choose **Review plan** to see the saved plan's destination, changes, backups, dependency facts, preserved state and manual requirements. Approval requires a separate confirmation of those exact plan bytes. Closing the review does not cancel the job; **Cancel job** does.
+  - **Awaiting approval:** a setup you just started automatically opens each new plan while **Installs & jobs** remains the active screen. Nothing is approved automatically. Closing a review keeps that plan waiting without reopening it repeatedly; choose **Review plan** to return. Closing **Installs & jobs** stops automatic guidance, not the job. The review shows the destination, downloads and manual requirements; expand file changes, backups and technical details as needed. Approval requires a separate confirmation of those exact plan bytes. **Cancel job** cancels the job.
   - **Leftover processes:** if a job's programs are still running after a crash, Retry and Dismiss stay unavailable until they exit.
   - **Retry:** installs restart preflight; simple jobs resume from the failed step. If an install wrote mutation intents or its receipt/catalog commit was interrupted, automatic retry/new package jobs are blocked until those changes are reconciled. A failed install with a successful apply proposal may offer **Reconcile install**. After confirmation, Momentum revalidates the saved approval, mutation journal and current files before committing its receipt. Only missing optional `user-state` files from the approved media inventory can be omitted; missing or changed managed package files stop recovery and retain the journal. Recovery records cannot be dismissed until reconciled.
   - **Step progress:** bars show the current step's measurable progress, not an estimated overall installation percentage. Unknown totals display an indeterminate bar.
@@ -410,7 +426,7 @@ The sidebar groups games by their `category` value. Groups appear in the order t
     2. Open **Add game → Browse the package store → Local packages / import...** and **Choose package ZIP...**, or enter an absolute local package-folder/ZIP path and choose **Import path**. ZIP uploads are limited to 1 GiB. Intake validates and copies the package; no package code runs.
     3. Choose **Set up**. Under **Where are your game files?**, choose the folder where your game files already live, or enter its full path. For HOD2, keep the CUE file and all matching BIN tracks together in that folder; the package does not include them. Momentum copies the files and leaves your originals untouched. **Momentum will install your game here** shows the destination inside your own `~/Games`, using a simple folder named after the package, such as `~/Games/the-house-of-the-dead-2`. Expand **Change installation folder** only if you want a different location. A game Momentum already installed keeps its existing folder when you upgrade or repair it, even if it has an older name such as `House of the Dead 2, The (USA)`. **Use an existing library entry** optionally links the installation to an entry without claiming ownership of existing files.
     4. Check the trust box and choose **Check installation plan**. Momentum selects the software the game needs; you do not choose an emulator. If required software is missing, review and approve its downloads first. The same game job checks the installed build and then continues to the game-file plan. An untested build stops before changing game files. Package scripts run with your user permissions; checksums establish integrity, not publisher trust or sandboxing. Unsupported platforms cannot proceed.
-    5. In **Installs & jobs**, choose **Review plan**. Reopening the launcher retrieves the same saved waiting plan. **Approve and install** requires matching evidence for that exact package digest and software build. Approval rechecks evidence, receipt state and running software. Unknown builds remain gated, and game-package preflight does not install or upgrade an engine.
+    5. Keep **Installs & jobs** open: each approval step appears automatically when ready. If you closed it, choose **Review plan** to resume. Reopening the launcher retrieves the same saved waiting plan. **Approve and install** requires matching evidence for that exact package digest and software build. Approval rechecks evidence, receipt state and running software. Unknown builds remain gated, and game-package preflight does not install or upgrade an engine.
     - HOD2 0.1.1 and its approved artwork revisions 0.1.2/0.1.3 use the tested user-scope Flycast v2.7 build. These revisions inherit unchanged installer-code evidence, not separate gameplay runs. Version 0.1.3 restores the original t00ny icon; custom artwork and Steam lookup remain available. Other catalog games have separate installer evidence and do not inherit HOD2 gameplay confirmation.
     - The isolated target test confirmed fullscreen, Start, aiming, firing, off-screen reload and clean exit, with the original Flycast config/data unchanged. This is one laptop's evidence, not fresh-machine certification. A new installation still reports **installed / setup required** until its own gameplay is confirmed.
     - Successful HOD2 receipts are reconciled against approved actions, durable intents, publication inventories and file hashes. Repeat installs retain installation identity and personal library edits. An interrupted receipt/catalog commit retains a replayable journal; ambiguous or changed files stop recovery rather than claiming new ownership.

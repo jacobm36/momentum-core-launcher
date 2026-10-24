@@ -330,6 +330,10 @@ body.noanim #flash{display:none}
 .pkg-row .bsub{display:block;margin-top:5px}
 .pkg-error{color:#ff8096}
 .pkg-warning{color:var(--fg);border-left:3px solid #e9b34a;padding:10px 12px;font-size:13px;line-height:1.5}
+.pkg-requirements{border:1px solid var(--line);border-radius:10px;padding:16px;margin:16px 0;background:var(--panel)}
+.pkg-requirements h3{margin-top:0}
+.pkg-requirements h4{margin:16px 0 8px}
+.pkg-requirements li p{margin:6px 0 12px;font-size:13px;line-height:1.5}
 .pkg-digest,.pkg-path{display:block;overflow-wrap:anywhere;font-size:12px}
 .pkg-json{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);padding:12px;border-radius:7px;font-size:12px;max-height:320px;overflow:auto}
 .pkg-actions{max-height:280px;overflow:auto;border:1px solid var(--line);padding:0 12px;border-radius:7px}

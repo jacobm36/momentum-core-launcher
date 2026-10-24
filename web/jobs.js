@@ -1,5 +1,21 @@
 // Background jobs (installs): status badge, job list, live logs.
 let jobs = [], jobState = {}, jobsReady = false, logPoll = null, openLog = null;
+let guidedSetup = null;
+function guidePackageSetup(id) {
+  if (!$("#idlg").open) openJobs();
+  if (!$("#idlg").open) return;
+  guidedSetup = { id, reviewed: new Set() };
+  advanceGuidedSetup();
+}
+function advanceGuidedSetup() {
+  if (!$("#idlg")?.open) { guidedSetup = null; return; }
+  if (!guidedSetup || topDlg()?.id !== "idlg") return;
+  const job = jobs.find(j => j.id === guidedSetup.id);
+  if (!job || job.status !== "awaiting-approval" || !job.plan_digest) return;
+  if (guidedSetup.reviewed.has(job.plan_digest)) return;
+  guidedSetup.reviewed.add(job.plan_digest);
+  reviewPackagePlan(job.id);
+}
 const jobActive = j => ["queued", "running", "cancel-requested"].includes(j.status);
 function handleJobs(list) {
   jobs = list || [];
@@ -16,6 +32,7 @@ function handleJobs(list) {
   jobsReady = true;
   const b = $("#jobsbtn"); if (b) { const n = jobs.filter(jobActive).length; b.dataset.badge = n || ""; b.classList.toggle("busy", n > 0); }
   if ($("#idlg")?.open) renderJobs();
+  advanceGuidedSetup();
 }
 const jobPct = j => {
   if (j.status === "succeeded") return 100;
@@ -99,7 +116,7 @@ function openJobs() {
     finally { b.disabled = false; }
   };
   d.onkeydown = e => { if (e.key === "Escape") { e.preventDefault(); d.close(); } };
-  d.onclose = () => { clearInterval(logPoll); openLog = null; };
+  d.onclose = () => { clearInterval(logPoll); openLog = null; guidedSetup = null; };
   renderJobs(true); logPoll = setInterval(() => { refresh(); }, 1000);
   d.showModal(); sfx("open");
 }

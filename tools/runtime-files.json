@@ -6,7 +6,7 @@
     "install.sh", "installs.py", "ironwail.py", "jobs.py", "launch.sh",
     "launcher_probe.py", "managed_flatpak.py", "mame.py", "mame_flatpak.py", "mcl_intent.py", "openbor.py",
     "ownership.py", "packages.py", "picker.py", "server.py", "steamgriddb.py",
-    "start-candidate.sh", "start-isolated-test.sh", "supermodel.py",
+    "start-candidate.sh", "supermodel.py",
     "uzdoom.py", "vkquake.py", "window_handoff.py",
     "web/accent.js", "web/actions.js", "web/backup.js", "web/core.js",
     "web/gallery.js", "web/gamepad.js", "web/icon-256.png", "web/index.html",
@@ -22,6 +22,6 @@
     "docs/eduke32-preparation.md", "docs/ironwail-preparation.md",
     "docs/openbor.md", "docs/shared-engine-fallback.md",
     "docs/uzdoom-preparation.md", "docs/screenshot.png", "docs/stats.png",
-    "docs/delivery-layout.md", "docs/development.md"
+    "docs/delivery-layout.md"
   ]
 }

@@ -56,7 +56,7 @@ class CandidateBuild(unittest.TestCase):
             self.assertEqual([p["id"] for p in delivery["packages"]], list(selected))
             self.assertEqual(delivery["launcher_base_revision"], "a" * 40)
             guide = bundle.read("acceptance/ACCEPTANCE-GUIDE.txt").decode()
-            self.assertIn("six approved public games", guide)
+            self.assertIn("currently published games", guide)
             self.assertEqual(delivery["delivery_profile"], "acceptance")
             self.assertIn("bash start-candidate.sh", guide)
             self.assertFalse(any(name.startswith(("acceptance/jobs/", "acceptance/media/"))
@@ -81,16 +81,23 @@ class CandidateBuild(unittest.TestCase):
         with zipfile.ZipFile(self.output) as bundle:
             delivery = json.loads(bundle.read("acceptance/candidate-build.json"))
             self.assertEqual(delivery["delivery_profile"], "runtime")
+            self.assertEqual(delivery["scope"], "runtime-delivery")
             self.assertEqual(delivery["packages"], [])
             self.assertEqual(set(delivery["launcher_file_sha256"]), set(inventory))
             self.assertEqual(set(bundle.namelist()),
                              {f"acceptance/{name}" for name in inventory}
-                             | {"acceptance/ACCEPTANCE-GUIDE.txt", "acceptance/candidate-build.json"})
+                             | {"acceptance/START-HERE.txt", "acceptance/candidate-build.json"})
+            guide = bundle.read("acceptance/START-HERE.txt").decode()
+            self.assertIn("None. Use the store", guide)
+            self.assertIn("does not migrate", guide)
+            self.assertNotIn("private", guide.lower())
             for name, digest in delivery["launcher_file_sha256"].items():
                 self.assertEqual(hashlib.sha256(bundle.read(f"acceptance/{name}")).hexdigest(), digest)
             self.assertTrue(all(not name.startswith(("tests/", "tools/", ".github/"))
                                 for name in inventory))
             self.assertNotIn("docs/acceptance-history.md", inventory)
+            self.assertNotIn("docs/development.md", inventory)
+            self.assertNotIn("start-isolated-test.sh", inventory)
             extracted = self.root / "extracted"
             bundle.extractall(extracted)
         modules = [Path(name).stem for name in inventory if "/" not in name and name.endswith(".py")]

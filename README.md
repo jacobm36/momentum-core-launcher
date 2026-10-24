@@ -257,8 +257,10 @@ media-link fetching.
 - [OpenBOR setup](docs/openbor.md): Marvel Infinity War's runtime and controls.
 - [Shared-engine fallback](docs/shared-engine-fallback.md): how isolated runtimes work.
 - [Repository versus delivery contents](docs/delivery-layout.md): what actually ships.
-- [Development and release guide](docs/development.md): tests, build profiles,
-  engine integration and release checks.
+
+Developers: the source checkout also includes `docs/development.md` for tests,
+build profiles, engine integration and release checks. It is not shipped in
+runtime-only deliveries.
 
 ---
 

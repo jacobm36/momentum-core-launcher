@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a complete local acceptance bundle without personal runtime data."""
+"""Build a runtime delivery or acceptance bundle without personal runtime data."""
 import argparse
 import hashlib
 import json
@@ -128,7 +128,7 @@ def main(argv=None):
                 "Use normal start-candidate.sh to find this user's installed game shortcuts.\n"
                 "Isolated test mode sees only the separate acceptance HOME's shortcuts.\n\n"
                 "Use Add game > Browse the package store > Local packages for bundled candidates. The online Store\n"
-                "lists the six approved public games. Supply your own\n"
+                "lists the currently published games. Supply your own\n"
                 "original media; source and destination must not overlap. Missing host\n"
                 "prerequisites have manual system commands; no automatic administrator access.\n"
                 "Review software preparation separately from the game installation plan.\n\n"
@@ -188,6 +188,32 @@ def main(argv=None):
                          "the same user's installed-game receipts; do not delete journals.\n"
                          "See USER-GUIDE.md for current use and docs/delivery-layout.md for\n"
                          "repository versus shipped contents. This does not publish a frontend.\n")
+            if args.runtime_only:
+                guide = (
+                    "Momentum Core Launcher\n\n"
+                    "Your games. Your Linux arcade. Less setup. More PLAY.\n\n"
+                    "Extract into a NEW writable folder. Do not overwrite an existing\n"
+                    "installation or delete its library, media, receipts or journals.\n"
+                    "Close the old launcher before starting this copy.\n"
+                    "Run bash start-candidate.sh for a windowed first launch, or\n"
+                    "bash launch.sh for the normal fullscreen launch. To create desktop\n"
+                    "integration, review and run bash install.sh.\n\n"
+                    "Requires Python 3 and a Linux desktop; the supported baseline is\n"
+                    "Ubuntu 24.04 x86_64 with X11. See USER-GUIDE.md for browser and\n"
+                    "desktop prerequisites. Individual games have their own requirements.\n\n"
+                    "Import installed game shortcuts, add your own command, or browse\n"
+                    "the package store. Review software preparation and game changes\n"
+                    "before approving them. Supply original game files where requested.\n"
+                    "Package scripts run as your user; approve only publishers you trust.\n\n"
+                    "This archive excludes personal library data, development tools and\n"
+                    "tests. It does not migrate an existing library or game installation.\n"
+                    "Keep the original folder and all player data when trying this copy.\n"
+                    "Installer validation is not universal gameplay certification.\n\n"
+                    "Bundled game installers:\n"
+                    + ("".join(f"- {p['id']} {p['version']}\n" for p in delivery)
+                       or "None. Use the store or local package import.\n")
+                    + "\nSee USER-GUIDE.md and docs/delivery-layout.md for details.\n"
+                )
             fd, temporary_zip = tempfile.mkstemp(prefix=".momentum-candidate-", suffix=".zip",
                                                  dir=args.output.parent)
             os.close(fd)
@@ -199,9 +225,12 @@ def main(argv=None):
                     for path in sorted((root / "packages").rglob("*")):
                         if path.is_file() and path.name != ".lock":
                             bundle.write(path, f"{prefix}/{path.relative_to(root).as_posix()}")
-                    bundle.writestr(f"{prefix}/ACCEPTANCE-GUIDE.txt", guide)
+                    bundle.writestr(f"{prefix}/"
+                                    + ("START-HERE.txt" if args.runtime_only else "ACCEPTANCE-GUIDE.txt"),
+                                    guide)
                     bundle.writestr(f"{prefix}/candidate-build.json",
-                                    json.dumps({"scope": "private-acceptance-only",
+                                    json.dumps({"scope": "runtime-delivery" if args.runtime_only
+                                                else "private-acceptance-only",
                                                 "launcher_base_revision": revision,
                                                 "delivery_profile": "runtime" if args.runtime_only else "acceptance",
                                                 "launcher_file_sha256": launcher_files,

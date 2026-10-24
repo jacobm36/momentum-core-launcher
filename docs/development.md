@@ -62,6 +62,9 @@ engine adapter and required compatibility record, and omits developer tests,
 tools, contributor instructions and historical acceptance notes. Game packages
 can still be downloaded from the store or imported locally. To bundle an exact
 installer, use `--package <id>` instead of `--launcher-only`.
+Runtime archives use `START-HERE.txt` and the `runtime-delivery` scope; acceptance
+archives retain `ACCEPTANCE-GUIDE.txt` and `private-acceptance-only`. These labels
+describe delivery profiles, not publication or gameplay acceptance.
 See [repository and delivery contents](delivery-layout.md).
 Neither build profile publishes the private frontend or changes the online store.
 

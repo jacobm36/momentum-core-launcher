@@ -314,6 +314,36 @@ function packageInputLabel(field) {
   if (field.role === "destination" || field.id === "games_root") return "Install games in";
   return field.label || field.id.replace(/_/g, " ");
 }
+function packageFileHelp(field, detail) {
+  if (field.help) return field.help;
+  if (field.id === "source_dir" && detail.id === "the-house-of-the-dead-2") {
+    return "Choose the folder containing the CUE file and all matching BIN tracks together. The package ZIP does not contain the game.";
+  }
+  return "Choose the folder containing the game files required by this package. Its preflight checks the contents before installation; a matching filename alone does not establish compatibility.";
+}
+function packageRequirements(detail) {
+  const sources = detail.manifest.inputs.filter(field =>
+    field.type === "directory" && (field.role === "source" || ["source_dir", "mod_dir"].includes(field.id)));
+  const downloads = detail.manifest.inputs.filter(field => field.id === "download_game");
+  const engines = (detail.manifest.requires || []).map(requirement => requirement.id).filter(Boolean);
+  return `<section class="pkg-requirements" aria-labelledby="pkg-before-title">
+    <h3 id="pkg-before-title">Before you install</h3>
+    <p class="bnote">Check what you need before choosing your files. No installation changes are made on this screen.</p>
+    <h4>${sources.some(field => field.required) ? "Game files you provide" : "Game content options"}</h4>
+    ${sources.length ? `<ul>${sources.map(field => `<li><strong>${esc(packageInputLabel(field))}${field.required ? " (required)" : " (optional / alternate source)"}</strong>
+      <p>${esc(packageFileHelp(field, detail))}</p></li>`).join("")}</ul>`
+      : '<p>This package declares no game-file folder input. Review its content and download details below.</p>'}
+    ${downloads.length ? `<p>${downloads.map(field => esc(field.help || field.label || "Review the package's game download option below.")).join(" ")}</p>` : ""}
+    <h4>What Momentum handles</h4>
+    <p>The installer guides setup and creates the game launch entry.${engines.length
+      ? ` Required game software: ${esc(engines.join(", "))}. Existing compatible software is reused; any required preparation is reviewed separately.`
+      : " Review the declared software and content details below."}
+      Any declared bundled content comes with the package; other downloads are shown for approval.</p>
+    <p class="pkg-warning">Only use ROMs and other game files you are legally entitled to use.
+      Momentum does not supply the original commercial game files required by these setups.</p>
+    <p class="bnote">Keep your originals where they are. Choose the source folder below; preflight verifies the files before you approve installation.</p>
+  </section>`;
+}
 function packageInput(field, detail) {
   const id = `pkg-input-${field.id}`, label = packageInputLabel(field);
   const value = field.default === "home_games" ? detail.home_games : field.default;
@@ -390,6 +420,7 @@ async function selectPackage(id, version) {
     const destination = m.inputs.find(f => f.id === "games_root");
     d.innerHTML = `<h2>${esc(detail.name)} <small>${esc(detail.version)}</small></h2>
       <p class="pkg-error" role="alert" hidden></p>
+      ${packageRequirements(detail)}
       <p class="bnote">Package fingerprint (integrity, not proof of trust)</p><code class="pkg-digest">${esc(detail.digest)}</code>
       ${detail.platform_issues.length ? `<p class="pkg-warning" role="alert">Installation blocked: ${esc(detail.platform_issues.join("; "))}</p>` : ""}
       <details><summary>Declared actions and test evidence</summary>
@@ -423,7 +454,7 @@ async function selectPackage(id, version) {
         ${detail.dependencies?.ironwail ? '<p class="bnote">QBJ3 is downloaded separately from its official-site-linked mirror because its assets cannot be bundled. The pinned download is about 2.7 GB; allow about 17 GiB free for a fresh download and installation. A complete existing qbj3 folder is reused read-only. Review source/software preparation first, then approve the separate game installation plan.</p>' : ""}
         ${source ? `${packageInput(source, detail)}
           <p class="bnote">Leave your game files where they are. Choose their folder, or type/paste its full path; Momentum copies them and leaves your originals untouched.
-          ${source.help ? esc(source.help) : detail.id === "the-house-of-the-dead-2" ? "For HOD2, use the folder containing the CUE file and all matching BIN tracks together. The package ZIP does not contain the game." : ""}</p>` : ""}
+          ${esc(packageFileHelp(source, detail))}</p>` : ""}
         ${m.inputs.filter(f => f !== source && f !== destination).map(f =>
           packageInput(f, detail) + (f.help ? `<p class="bnote">${esc(f.help)}</p>` : "")).join("")}
         ${destination ? `<p class="bnote">Momentum will install your game here:</p>
@@ -487,9 +518,9 @@ async function selectPackage(id, version) {
           catalog_entry_id: d.querySelector("#pkg-association").value || null
         }));
         d.close();
-        notify("Preflight started. Review its plan in Installs & jobs.", { kind: "ok", title: detail.name });
+        notify("Checking your setup. Each approval step will open when ready; nothing is approved automatically.", { kind: "ok", title: detail.name });
         await refresh();
-        if (!$("#idlg").open) openJobs();
+        guidePackageSetup(data.id);
         const row = $(`#idlg .job[data-id="${data.id}"]`);
         row?.scrollIntoView({ block: "nearest" });
       } catch (error) { packageError(d, error); }
@@ -513,13 +544,13 @@ async function reviewPackagePlan(id) {
     d.innerHTML = `<h2>Review: ${esc(job.title)}</h2>
       <p class="pkg-error" role="alert" hidden></p>
       <p class="bnote">Approval is bound to these exact saved plan bytes. No installation changes have been authorized yet.</p>
-      <code class="pkg-digest">${esc(job.plan_digest)}</code>
+      <details><summary>Plan fingerprint</summary><code class="pkg-digest">${esc(job.plan_digest)}</code></details>
       ${plan.game_directory ? `<h3>Game destination</h3><p class="pkg-path">${esc(plan.game_directory)}</p>` : ""}
-      <h3>Planned file changes (${actions.length})</h3>
+      <details><summary>Planned file changes (${actions.length}), including backups</summary>
       ${actions.length ? `<div class="pkg-actions">${actions.map(a => `<article><b>${esc(a.op)} / ${esc(a.ownership)}</b>
         <p class="pkg-path">${esc(a.path)}</p><p class="bnote">${esc(a.before?.kind || "unknown")} → ${esc(a.after?.kind || "unknown")}</p>
         ${a.backup ? `<p class="bnote">Backup: <span class="pkg-path">${esc(a.backup)}</span></p>` : ""}</article>`).join("")}</div>`
-        : '<p class="bnote">No file changes listed.</p>'}
+        : '<p class="bnote">No file changes listed.</p>'}</details>
       <details><summary>Technical software and network details</summary>${packageJson(plan.dependencies || {})}</details>
       ${plan.package_id === "marvel-infinity-war" && Array.isArray(plan.network) && plan.network.length ? `<h3>Game content download</h3>
         <p class="bnote">The package will download this pinned game content only after you approve this game installation plan. Only the verified game PAK is extracted; upstream executables and settings are not imported.</p>
