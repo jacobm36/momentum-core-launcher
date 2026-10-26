@@ -351,6 +351,13 @@ class Installs:
                 if (req.get("provider"), req.get("scope"), req.get("source"), req.get("source_commit")) != (
                         "native", "user", "https://voidpoint.io/terminx/eduke32", eduke32.SOURCE_COMMIT):
                     raise InstallError("Only the approved official user-scope EDuke32 setup is supported")
+                if req.get("delivery") not in (None, "bundled"):
+                    raise InstallError("Unsupported EDuke32 delivery mode")
+                if eduke32.bundled_requirement(req):
+                    try:
+                        eduke32.bundled_payload({"package_root": str(snap), "package_digest": summary["digest"]})
+                    except dependencies.DependencyError as e:
+                        raise InstallError(str(e)) from e
             elif runtime == "ironwail":
                 if (req.get("provider"), req.get("scope"), req.get("source"), req.get("tested_version")) != (
                         "native", "user", "github:andrei-drexler/ironwail", ironwail.VERSION):
@@ -374,7 +381,7 @@ class Installs:
                     "Flatpak is required", "Momentum needs the Ubuntu Flatpak client before it can prepare UZDoom.",
                     ["flatpak"]))
                 flatpak_prerequisite_added = True
-            elif runtime == "eduke32" and not facts[runtime].get("installed"):
+            elif runtime == "eduke32" and not facts[runtime].get("installed") and not eduke32.bundled_requirement(req):
                 missing = eduke32.missing_build_prerequisites()
                 if missing["tools"] or missing["libraries"]:
                     host_prerequisites.append(_ubuntu_apt_prerequisite(
@@ -850,6 +857,11 @@ class Installs:
                     step["context"].update(package_root=str(snap), package_digest=base["package_digest"])
                     step["name"] = ("Check bundled OpenBOR runtime" if
                                     step["context"]["phase"] == "preflight" else "Prepare bundled OpenBOR runtime")
+            elif runtime == "eduke32" and eduke32.bundled_requirement(man["requires"][0]):
+                for step in steps[:2]:
+                    step["context"].update(package_root=str(snap), package_digest=base["package_digest"])
+                    step["name"] = ("Check bundled EDuke32 runtime" if
+                                    step["context"]["phase"] == "preflight" else "Prepare bundled EDuke32 runtime")
             meta["prepare_required_software"] = True
             if fallback:
                 meta["managed_fallback"] = fallback
@@ -973,6 +985,13 @@ class Installs:
                     retained = f"media/{gid}/package-{field}-{resource['sha256']}{suffix}"
                     if defaults.get(field) == retained:
                         expected[field] = retained
+            for index, asset in enumerate(expected.get("screenshots") or []):
+                source = Path(m["paths"]["support"]) / asset
+                resource = next((r for r in res["resources"] if r["path"] == str(source)), None)
+                if resource:
+                    retained = f"media/{gid}/package-screenshot-{index}-{resource['sha256']}{Path(asset).suffix}"
+                    if (defaults.get("screenshots") or [])[index:index + 1] == [retained]:
+                        expected["screenshots"][index] = retained
         if defaults != expected:
             raise InstallError("Catalog defaults differ from the validated package manifest")
         for key in ("pending_actions", "checks", "completed_steps", "recovery_notes"):
@@ -1136,7 +1155,7 @@ class Installs:
                     if recovery_policy:
                         marker["recovery_policy"] = recovery_policy
                     _write_atomic(journal, (json.dumps(marker, indent=2) + "\n").encode())
-            if any(defaults.get(field) for field in PRESENTATION_ASSETS):
+            if any(defaults.get(field) for field in PRESENTATION_ASSETS) or defaults.get("screenshots"):
                 for field, asset in PRESENTATION_ASSETS.items():
                     eligible = (_is_missing(existing.get(field)) if first else
                                 field not in existing and field not in rec["catalog"]["previous_defaults"])
@@ -1154,6 +1173,23 @@ class Installs:
                         raise InstallError(f"Catalog {field} must use the standard package asset {asset}")
                     _write_atomic(self.here / rel, source.read_bytes())
                     defaults[field] = rel.as_posix()
+                screenshots_eligible = (_is_missing(existing.get("screenshots")) if first else
+                                        "screenshots" not in existing and "screenshots" not in rec["catalog"]["previous_defaults"])
+                if screenshots_eligible and defaults.get("screenshots"):
+                    retained_shots = []
+                    assets = (json.loads((Path(rec["paths"]["support"]) / "package.json").read_text())
+                              ["catalog"].get("screenshots", []))
+                    for index, asset in enumerate(assets):
+                        source = ownership.safe_path(str(Path(rec["paths"]["support"]) / asset))
+                        resource = next((r for r in rec["resources"] if r["path"] == str(source)), None)
+                        if (not source.is_relative_to(Path(rec["paths"]["support"])) or not resource
+                                or resource["kind"] != "file" or resource["sha256"] != _hash_file(source)
+                                or source.suffix.lower() not in (".png", ".jpg", ".jpeg", ".webp")):
+                            raise InstallError("Catalog screenshot has no validated retained image resource")
+                        rel = Path("media") / rec["catalog"]["entry_id"] / f"package-screenshot-{index}-{resource['sha256']}{source.suffix}"
+                        _write_atomic(self.here / rel, source.read_bytes())
+                        retained_shots.append(rel.as_posix())
+                    defaults["screenshots"] = retained_shots
                 res["catalog_proposal"]["defaults"] = _json_copy(defaults)
                 if journal:
                     marker = {"commit_version": 1, "job_id": rec["last_job_id"], "receipt": rec, "result": res}

@@ -185,6 +185,9 @@ class InstallsTests(unittest.TestCase):
             rec["resources"].append({"path": str(path), "kind": "file", "ownership": "managed",
                                      "sha256": installs._hash_file(path)})
             defaults[field] = asset
+        defaults["screenshots"] = ["assets/cover.png"]
+        (Path(rec["paths"]["support"]) / "package.json").write_text(
+            json.dumps({"catalog": {"screenshots": defaults["screenshots"]}}))
         self.inst._commit_catalog(rec, result)
         game = json.loads(self.games_file.read_text())[-1]
         for field, asset in installs.PRESENTATION_ASSETS.items():
@@ -192,26 +195,39 @@ class InstallsTests(unittest.TestCase):
             self.assertEqual((self.root / game[field]).read_bytes(),
                              (Path(rec["paths"]["support"]) / asset).read_bytes())
         games = json.loads(self.games_file.read_text())
+        self.assertEqual((self.root / game["screenshots"][0]).read_bytes(),
+                         (self.root / game["cover"]).read_bytes())
         games[-1]["grid"] = None
+        games[-1]["screenshots"] = []
         self.inst.write_games(games)
         rec["last_job_id"] = "j00000002"
         self.inst._commit_catalog(rec, result)
         self.assertIsNone(json.loads(self.games_file.read_text())[-1]["grid"])
+        self.assertEqual(json.loads(self.games_file.read_text())[-1]["screenshots"], [])
+        games = json.loads(self.games_file.read_text())
+        games[-1]["screenshots"] = ["media/my-screenshot.png"]
+        self.inst.write_games(games)
+        self.inst._commit_catalog(rec, result)
+        self.assertEqual(json.loads(self.games_file.read_text())[-1]["screenshots"], ["media/my-screenshot.png"])
 
     def test_package_presentation_recovers_after_catalog_write_failure(self):
         job, result = self.fixture(association=None)
         paths = self.jobs.paths(job["id"])
         envelope = json.loads(paths["approved_plan_file"].read_text())
         seq = len(paths["intent_file"].read_text().splitlines())
-        for field, asset in installs.PRESENTATION_ASSETS.items():
+        result["catalog_proposal"]["defaults"]["screenshots"] = ["assets/cover.png"]
+        job["meta"]["catalog_defaults"]["screenshots"] = ["assets/cover.png"]
+        for field, asset in [*installs.PRESENTATION_ASSETS.items(), ("manifest", "package.json")]:
             path = Path(job["meta"]["paths"]["support"]) / asset
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(("validated " + field).encode())
+            path.write_bytes((json.dumps({"catalog": {"screenshots": ["assets/cover.png"]}})
+                              if field == "manifest" else "validated " + field).encode())
             resource = dict(path=str(path), kind="file", ownership="managed",
                             sha256=installs._hash_file(path))
             result["resources"].append(resource)
-            result["catalog_proposal"]["defaults"][field] = asset
-            job["meta"]["catalog_defaults"][field] = asset
+            if field != "manifest":
+                result["catalog_proposal"]["defaults"][field] = asset
+                job["meta"]["catalog_defaults"][field] = asset
             action = dict(path=str(path), op="create", ownership="managed",
                           before={"kind": "absent", "sha256": None},
                           after={"kind": "file", "sha256": resource["sha256"]}, backup=None)
@@ -235,6 +251,24 @@ class InstallsTests(unittest.TestCase):
             self.assertTrue(game[field].startswith("media/"))
             self.assertEqual((self.root / game[field]).read_bytes(),
                              (Path(job["meta"]["paths"]["support"]) / asset).read_bytes())
+        self.assertEqual((self.root / game["screenshots"][0]).read_bytes(),
+                         (self.root / game["cover"]).read_bytes())
+
+    def test_package_screenshots_refuse_unretained_or_non_image_resources(self):
+        job, result = self.fixture(association=None)
+        rec = self.inst._receipt_from(job, result)
+        support = Path(rec["paths"]["support"])
+        for asset in ("../outside.png", "assets/unowned.png", "assets/script.sh"):
+            with self.subTest(asset=asset):
+                source = support / asset
+                source.parent.mkdir(parents=True, exist_ok=True)
+                source.write_bytes(b"not an approved screenshot")
+                rec["resources"] = [{"path": str(source), "kind": "file", "ownership": "managed",
+                                     "sha256": installs._hash_file(source)}] if asset != "assets/unowned.png" else []
+                result["catalog_proposal"]["defaults"]["screenshots"] = [asset]
+                (support / "package.json").write_text(json.dumps({"catalog": {"screenshots": [asset]}}))
+                with self.assertRaises((installs.InstallError, ownership.OwnershipError)):
+                    self.inst._commit_catalog(rec, result)
 
     def test_ubuntu_prerequisite_instructions_are_copyable_and_never_run_by_momentum(self):
         with mock.patch("installs.platform.freedesktop_os_release",

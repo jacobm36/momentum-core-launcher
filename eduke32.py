@@ -17,6 +17,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 import urllib.parse
 import urllib.request
@@ -32,6 +33,8 @@ ASSET_SHA256 = "1a29b509a1e752a3bc37860593028f08bc8cc980d988574a83575e951521f4f2
 ASSET_SIZE = 29551166
 ENGINE_SHA256 = "bc3a5465c7e236f5f5662ccdc663c7f36ba375b70b4ccc5c2f3ca44f592e8270"
 ENGINE_SIZE = 3742920
+BUNDLED_ENGINE = "game-data/runtime/eduke32"
+BUNDLED_SOURCE = "game-data/runtime/eduke32-source.tar.gz"
 BUILD_ARGV = ["make", "-j2", "eduke32"]
 BUILD_TOOLS = ("make", "c++", "nasm", "pkg-config")
 BUILD_LIBRARIES = ("sdl2", "gl", "vpx", "flac", "gtk+-2.0")
@@ -78,7 +81,7 @@ def _elf(header):
             and header[18:20] == b"\x3e\x00")
 
 
-def _inspect(path):
+def _inspect(path, executable=True):
     """Hash an owned executable without following links or racing a replacement."""
     if not _safe_path(path):
         raise DependencyError(f"Unsafe EDuke32 path: {path}; reconcile manually.")
@@ -87,7 +90,7 @@ def _inspect(path):
         with os.fdopen(fd, "rb") as stream:
             before = os.fstat(stream.fileno())
             if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.getuid()
-                    or not before.st_mode & stat.S_IXUSR
+                    or (executable and not before.st_mode & stat.S_IXUSR)
                     or before.st_mode & (stat.S_IWOTH | stat.S_ISUID | stat.S_ISGID)
                     or (before.st_mode & stat.S_IWGRP and before.st_gid != os.getgid())
                     or not 64 <= before.st_size <= MAX_ENGINE_SIZE):
@@ -176,6 +179,13 @@ def _host_elf(path):
 def check_host(facts):
     """Inspect readelf and ldconfig metadata; never use ldd or execute any ELF."""
     executable = _require_runtime(facts)
+    result = _check_host(executable)
+    _require_runtime(facts)
+    return result
+
+
+def _check_host(executable):
+    metadata = _inspect(executable)
     if os.environ.get("LD_LIBRARY_PATH") or os.environ.get("LD_PRELOAD") or os.environ.get("LD_AUDIT"):
         raise DependencyError("Loader environment overrides prevent a reliable read-only host check.")
     readelf = shutil.which("readelf")
@@ -211,8 +221,9 @@ def check_host(facts):
         if path is None:
             raise DependencyError(f"Missing linked library {name}; use system tools. No elevation is attempted.")
         libraries[name] = _host_elf(path)
-    _require_runtime(facts)
-    return {"sha256": facts["sha256"], "bytes_verified": True, "elf_checked": True,
+    if _inspect(executable) != metadata:
+        raise DependencyError("EDuke32 changed during host checks.")
+    return {"sha256": metadata["sha256"], "bytes_verified": True, "elf_checked": True,
             "architecture": "x86_64", "interpreter": interpreter_path,
             "linked_libraries": libraries, "host_prerequisites_checked": True,
             "cli_checked": False, "capabilities_checked": False, "gameplay_checked": False,
@@ -276,7 +287,47 @@ def commands_for(facts):
     return [] if facts["installed"] else [list(BUILD_ARGV)]
 
 
-def make_plan(facts):
+def bundled_requirement(requirement):
+    return requirement.get("delivery") == "bundled"
+
+
+def bundled_payload(context):
+    import packages
+    root = Path(context["package_root"])
+    if not _safe_path(root) or packages.check(root)["digest"] != context["package_digest"]:
+        raise DependencyError("Bundled EDuke32 package snapshot changed.")
+    manifest = json.loads((root / "package.json").read_text())
+    requirements = manifest.get("requires", [])
+    if (manifest.get("id") != "duke-nukem-3d" or len(requirements) != 1
+            or requirements[0].get("id") != "eduke32"
+            or not bundled_requirement(requirements[0])
+            or requirements[0].get("executable_sha256") != ENGINE_SHA256
+            or requirements[0].get("source_commit") != SOURCE_COMMIT):
+        raise DependencyError("Unsupported bundled EDuke32 declaration.")
+    artifact = root / BUNDLED_ENGINE
+    metadata = _inspect(artifact, executable=False)
+    if metadata["sha256"] != ENGINE_SHA256 or metadata["size"] != ENGINE_SIZE:
+        raise DependencyError("Bundled EDuke32 executable size or SHA256 mismatch.")
+    source = root / BUNDLED_SOURCE
+    if not _safe_path(source) or not source.is_file() or source.stat().st_size != ASSET_SIZE:
+        raise DependencyError("Bundled EDuke32 source is missing or has the wrong size.")
+    _validate_bytes(source.read_bytes())
+    return artifact
+
+
+def make_plan(facts, context=None):
+    if context is not None:
+        return {"plan_version": 1, "operation": "prepare-dependency", "dependency": "eduke32",
+                "scope": "user", "dependencies": {"eduke32": facts}, "actions": [],
+                "dependency_commands": [], "package_root": context["package_root"],
+                "package_digest": context["package_digest"],
+                "runtime_publication": None if facts["installed"] else {
+                    "source": BUNDLED_ENGINE, "sha256": ENGINE_SHA256, "size": ENGINE_SIZE,
+                    "source_archive": BUNDLED_SOURCE, "source_sha256": ASSET_SHA256,
+                    "target": str(target_path())},
+                "notes": ["Copy the exact bundled native EDuke32 build; no download, compilation or elevation.",
+                          "Existing engines and player state are never replaced.",
+                          "Shared runtime is retained after game removal; gameplay acceptance remains separate."]}
     return {"plan_version": 1, "operation": "prepare-dependency", "dependency": "eduke32",
             "scope": "user", "dependencies": {"eduke32": facts}, "actions": [],
             "dependency_commands": commands_for(facts),
@@ -533,9 +584,18 @@ def run(context):
             raise NeedsAction("Native EDuke32 requires Linux x86_64; no provider fallback.")
         if facts["installed"] and running(facts):
             raise NeedsAction("Close EDuke32 before preparing or checking this runtime.")
-        plan = make_plan(facts)
+        bundled = bundled_payload(context) if context.get("package_root") else None
+        if bundled is not None and not facts["installed"]:
+            with tempfile.TemporaryDirectory(prefix="eduke32-host-", dir=jobdir) as temporary:
+                probe = Path(temporary) / "eduke32"
+                shutil.copyfile(bundled, probe)
+                probe.chmod(0o755)
+                _check_host(probe)
+        plan = make_plan(facts, context if bundled is not None else None)
         if phase == "preflight":
-            message = "Review native EDuke32 reuse or the separately approved pinned source download and build."
+            message = ("Review the exact bundled EDuke32 runtime publication; no download or build."
+                       if bundled is not None else
+                       "Review native EDuke32 reuse or the separately approved pinned source download and build.")
         else:
             raw = Path(context["approved_plan_file"]).read_bytes()
             if "sha256:" + hashlib.sha256(raw).hexdigest() != context["approved_plan_digest"]:
@@ -546,14 +606,16 @@ def run(context):
                     or envelope.get("plan") != plan):
                 code, outcome, message = 30, "conflicted", "Dependency facts changed; review a new preflight plan."
             elif not facts["installed"]:
-                check_build_prerequisites()
+                if bundled is None:
+                    check_build_prerequisites()
                 _cancel(context)
                 build = jobdir / "eduke32-build"
                 if os.path.lexists(build):
                     raise DependencyError("Build area exists; reconcile earlier work before retry.")
                 record = {"job_id": context["job_id"], "attempts": attempts,
                           "completed": completed, "before": facts,
-                          "active_command": ["download-eduke32-source", ASSET_URL],
+                          "active_command": (["validate-bundled-eduke32", str(bundled)] if bundled is not None
+                                             else ["download-eduke32-source", ASSET_URL]),
                           "detection_pending": False}
 
                 def checkpoint(**fields):
@@ -561,19 +623,24 @@ def run(context):
                     _write_durable(journal, (json.dumps(record, sort_keys=True) + "\n").encode())
 
                 checkpoint()
-                emit("step_started", "Downloading and building approved EDuke32 source; no engine execution.", step="resolve")
-                data = download(context)
-                checkpoint(active_command=["extract-eduke32-source", str(build)])
-                source = extract_source(data, build, context)
-                _cancel(context)
-                if detect() != facts:
-                    raise DependencyError("Dependency facts changed before build.")
-                checkpoint(active_command=list(BUILD_ARGV), build_directory=str(source))
-                _build(source)
+                if bundled is None:
+                    emit("step_started", "Downloading and building approved EDuke32 source; no engine execution.", step="resolve")
+                    data = download(context)
+                    checkpoint(active_command=["extract-eduke32-source", str(build)])
+                    source = extract_source(data, build, context)
+                    _cancel(context)
+                    if detect() != facts:
+                        raise DependencyError("Dependency facts changed before build.")
+                    checkpoint(active_command=list(BUILD_ARGV), build_directory=str(source))
+                    _build(source)
+                    artifact = source / "eduke32"
+                else:
+                    checkpoint(active_command=["validate-bundled-eduke32", str(bundled)])
+                    artifact = bundled_payload(context)
+                    emit("step_started", "Preparing the approved bundled EDuke32 build; no engine execution.", step="resolve")
                 checkpoint(active_command=None, detection_pending=True)
                 _cancel(context)
-                artifact = source / "eduke32"
-                metadata = _inspect(artifact)
+                metadata = _inspect(artifact) if bundled is None else _inspect(artifact, executable=False)
                 if detect() != facts:
                     raise DependencyError("Dependency facts changed before publication.")
                 checkpoint(active_command=["publish-eduke32", str(target_path())])
@@ -602,6 +669,8 @@ def run(context):
                 checkpoint(after=facts, detection_pending=False)
                 emit("step_completed", "Native EDuke32 published; target compatibility remains gated.", step="resolve")
                 _cancel(context)
+            if bundled is not None and outcome == "succeeded":
+                message = "Exact bundled EDuke32 runtime prepared; game installation requires separate approval."
     except Cancelled as e:
         code, outcome, message = 130, "cancelled", str(e)
     except NeedsAction as e:
@@ -623,7 +692,7 @@ def run(context):
         result["plan"] = plan
     if paths_checked:
         _write_durable(Path(context["result_file"]), (json.dumps(result, sort_keys=True) + "\n").encode())
-    if outcome == "needs_action" or (phase == "apply" and outcome == "succeeded"):
+    if outcome == "needs_action" or (phase == "apply" and outcome == "succeeded" and not context.get("package_root")):
         emit("needs_action", message, action_id="eduke32-capability-check", blocks_play=True)
     emit("result", message, outcome=outcome)
     return code

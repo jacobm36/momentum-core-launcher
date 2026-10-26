@@ -4,6 +4,20 @@
   "packages": [
     {
       "id": "duke-nukem-3d",
+      "version": "0.2.0",
+      "digest": "sha256:7624acef827b8cd2944d8df57b35ade79dd13437dfb539df269a24c8f677824c",
+      "runtime": "eduke32",
+      "software": {
+        "provider": "native",
+        "scope": "user",
+        "sha256": "bc3a5465c7e236f5f5662ccdc663c7f36ba375b70b4ccc5c2f3ca44f592e8270"
+      },
+      "installer_validated": true,
+      "gameplay": "owner-reported-candidate-acceptance",
+      "limits": "2026-10-25: 20 package lifecycle tests, full archive self-check and launcher intake passed. Four isolated full-payload runner checks cover fresh bundled preparation with separate approvals, reuse/repair/uninstall/reinstall and edited presentation preservation, cancel before publication, and unknown-engine gating. Exact owner EDuke32 and matching pinned source are bundled without compilation or download. Owner Grid/icon/gameplay screenshot reused; fullscreen requested without forcing resolution. Owner reported the candidate looks amazing and approved publication; final package changes only description, changelog and launcher-version documentation from the accepted candidate. Original/Atomic GRP only; World Tour, full Episode 4 voxel coverage, campaign and individual input/audio/save-relaunch checks are not certified. Automated checks use synthetic GRP and do not invoke the engine."
+    },
+    {
+      "id": "duke-nukem-3d",
       "version": "0.1.1",
       "digest": "sha256:fada5b3a6b6e04bbfc79239a5af216c9047a78cc3a2b1a62edb675bf477bc76b",
       "runtime": "eduke32",

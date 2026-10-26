@@ -141,6 +141,63 @@ class EDuke32(unittest.TestCase):
             "size": len(self.archive), "source_commit": eduke32.SOURCE_COMMIT,
             "target": str(self.managed)})
 
+    def bundled(self):
+        from tests.test_packages import manifest, package_files, write_tree
+        import packages
+        root = self.root / "package"
+        requirement = {"id": "eduke32", "provider": "native", "scope": "user",
+                       "source": "https://voidpoint.io/terminx/eduke32",
+                       "source_commit": eduke32.SOURCE_COMMIT, "delivery": "bundled",
+                       "executable_sha256": eduke32.ENGINE_SHA256}
+        files = package_files(manifest(id="duke-nukem-3d", requires=[requirement]), {
+            eduke32.BUNDLED_ENGINE: self.engine, eduke32.BUNDLED_SOURCE: self.archive})
+        write_tree(root, files)
+        self.context.update(package_root=str(root), package_digest=packages.check(root)["digest"])
+        return root
+
+    def test_bundled_runtime_needs_exact_approval_then_publishes_without_build(self):
+        root = self.bundled()
+        with mock.patch("eduke32._check_host", return_value={}), \
+                mock.patch("eduke32.download", side_effect=AssertionError("No download")), \
+                mock.patch("eduke32._build", side_effect=AssertionError("No build")), \
+                mock.patch("eduke32.check_build_prerequisites", side_effect=AssertionError("No compiler")):
+            self.approve()
+            self.assertFalse(self.managed.exists())
+            plan = json.loads(Path(self.context["approved_plan_file"]).read_text())["plan"]
+            self.assertEqual(plan["runtime_publication"]["sha256"], eduke32.ENGINE_SHA256)
+            self.assertEqual(plan["dependency_commands"], [])
+            code, result = self.execute()
+            self.assertEqual(code, 0)
+            self.assertEqual(self.managed.read_bytes(), self.engine)
+            self.assertTrue(eduke32.detect()["recognized_build"])
+            self.assertFalse((self.jobdir / "eduke32-build").exists())
+            self.assertEqual((root / eduke32.BUNDLED_ENGINE).read_bytes(), self.engine)
+            self.assertIn("separate approval", result["message"])
+
+    def test_bundled_runtime_rejects_tampering_and_host_failure_before_publication(self):
+        root = self.bundled()
+        with mock.patch("eduke32._check_host", side_effect=eduke32.DependencyError("Missing linked library test")):
+            self.assertEqual(self.execute()[0], 40)
+        self.assertFalse(self.managed.exists())
+        with mock.patch("eduke32._check_host", return_value={}):
+            self.approve()
+            (root / eduke32.BUNDLED_ENGINE).write_bytes(self.engine + b"changed")
+            self.assertEqual(self.execute()[0], 40)
+        self.assertFalse(self.managed.exists())
+
+    def test_bundled_runtime_cancellation_and_existing_engine_preservation(self):
+        self.bundled()
+        with mock.patch("eduke32._check_host", return_value={}):
+            self.approve()
+            Path(self.context["cancel_file"]).touch()
+            self.assertEqual(self.execute()[0], 130)
+            self.assertFalse(self.managed.exists())
+            Path(self.context["cancel_file"]).unlink()
+            self.seed(data=self.engine + b"personal build")
+            self.assertEqual(self.execute()[0], 30)
+            self.assertEqual(self.guide.read_bytes(), self.engine + b"personal build")
+            self.assertFalse(self.managed.exists())
+
     def test_selection_order_and_unknown_builds_are_installed_not_capable(self):
         self.seed(self.managed)
         self.assertEqual(eduke32.detect()["executable"], str(self.managed))

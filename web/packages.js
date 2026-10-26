@@ -489,6 +489,7 @@ async function selectPackage(id, version) {
     if (!d.open) return;
     selectedPackage = detail;
     const m = detail.manifest;
+    const bundledDuke = m.requires?.some(requirement => requirement.id === "eduke32" && requirement.delivery === "bundled");
     const flatpak = detail.dependencies?.flycast || detail.dependencies?.uzdoom || detail.dependencies?.mame;
     const flatpakId = detail.dependencies?.flycast ? "flycast" : detail.dependencies?.uzdoom ? "uzdoom" : "mame";
     const native = detail.dependencies?.supermodel || detail.dependencies?.vkquake || detail.dependencies?.eduke32 || detail.dependencies?.ironwail || detail.dependencies?.openbor;
@@ -516,6 +517,8 @@ async function selectPackage(id, version) {
         <p class="bnote">${native.installed ? "Required software is installed. Momentum will reuse it without upgrading or changing its settings."
           : detail.dependencies?.openbor
             ? "Momentum will prepare the exact OpenBOR 6391 runtime bundled in this package after your approval. No engine download or FUSE is required. Then review the separate game installation and download plan."
+          : bundledDuke
+            ? "Momentum will prepare the exact native EDuke32 build bundled in this package after your approval. No engine download or compilation is required. Then review the separate game installation plan."
           : detail.dependencies?.eduke32
             ? "Momentum will build the required software from pinned official source after your approval. Ubuntu build prerequisites must already be installed. Then review the game installation plan."
             : "Momentum will get the required software from its pinned official release after your approval. Then review the game installation plan."}</p>
@@ -648,7 +651,9 @@ async function reviewPackagePlan(id) {
           with separate settings and saves for this game. Allow at least ${Math.ceil(plan.space_required_bytes / 1073741824)} GiB free.</p>
           <p class="pkg-path">${esc(plan.slot)}</p>` : ""}
         <p class="bnote">${plan.runtime_publication
-          ? "Momentum will extract the verified OpenBOR 6391 runtime already bundled in this package into the location below. No engine download or FUSE is required."
+          ? plan.dependency === "eduke32"
+            ? "Momentum will copy the exact verified EDuke32 runtime bundled in this package into the location below. No engine download or compilation is required."
+            : "Momentum will extract the verified OpenBOR 6391 runtime already bundled in this package into the location below. No engine download or FUSE is required."
           : plan.dependency_download
           ? "Momentum will download the required software from its pinned official GitHub release for your account. No administrator access or automatic upgrade is requested."
           : plan.dependency_commands.length ? "Momentum will download the required software from Flathub for your account. No administrator access or automatic upgrade is requested."
