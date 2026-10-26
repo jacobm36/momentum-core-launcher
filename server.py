@@ -123,9 +123,10 @@ def read_raw():
 
 def load_games():
     games = read_raw()
-    # Drop-in media: media/<id>/cover.(jpg|png|webp) and media/<id>/video.(mp4|webm)
+    # Drop-in artwork and previews under media/<id>/.
     for g in games:
         for key, stem, exts in (("cover", "cover", ("jpg", "jpeg", "png", "webp")),
+                                ("grid", "grid", ("jpg", "jpeg", "png", "webp")),
                                 ("video", "video", ("mp4", "webm"))):
             if not g.get(key):
                 for e in exts:
@@ -145,6 +146,7 @@ def load_games():
 FIELDS = ("name", "exec", "cwd", "tagline", "description", "tags", "category", "accent", "runtime",
           "artwork_title", "steamgriddb_id")
 KINDS = {"cover": ("jpg", "jpeg", "png", "webp"), "icon": ("jpg", "jpeg", "png", "webp", "svg"),
+         "grid": ("jpg", "jpeg", "png", "webp"),
          "video": ("mp4", "webm"), "shot": ("jpg", "jpeg", "png", "webp")}
 MAX_SHOTS = 24
 SHOT_RE = re.compile(r"^shot-[0-9a-f]{8}\.(jpg|jpeg|png|webp)$")
@@ -396,6 +398,11 @@ class Handler(SimpleHTTPRequestHandler):
     def end_headers(self):
         # Always revalidate the UI files so a stale cached page can't mismatch a newer script.
         self.send_header("Cache-Control", "no-cache")
+        if Path(self.translate_path(self.path)).is_relative_to(HERE / "media"):
+            # Media is untrusted even when opened as a document rather than an image.
+            self.send_header("Content-Security-Policy",
+                             "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'")
+            self.send_header("X-Content-Type-Options", "nosniff")
         super().end_headers()
 
     def _host_ok(self):
@@ -437,7 +444,11 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/backups":
             return self._json({"backups": backup.list_backups(HERE)})
         if path == "/api/packages":
-            return self._json({"packages": packages.list_packages(HERE)})
+            try:
+                return self._json({"packages": packages.list_packages(HERE),
+                                   "installations": INSTALLS.list_installations()})
+            except (installs.InstallError, OSError, ValueError) as e:
+                return self._json({"error": str(e)}, 400)
         if path == "/api/catalog":
             try:
                 return self._json(catalog.load())
@@ -653,7 +664,7 @@ class Handler(SimpleHTTPRequestHandler):
                 (HERE / path).unlink(missing_ok=True)
                 write_games(games)
                 return self._json({"status": "deleted"})
-            m = re.fullmatch(r"/api/clear/([a-z0-9-]+)/(cover|icon|video)", self.path)
+            m = re.fullmatch(r"/api/clear/([a-z0-9-]+)/(cover|grid|icon|video)", self.path)
             if m:
                 game = next((x for x in games if x["id"] == m[1]), None)
                 if not game:
@@ -750,6 +761,18 @@ class Handler(SimpleHTTPRequestHandler):
                 jid = INSTALLS.submit_install(pid, ver, src, root, str(assoc) if assoc else None,
                                              trusted_digest=data.get("trusted_digest"), inputs=data.get("inputs"))
                 return self._json({"id": jid})
+            if path == "/api/packages/uninstall":
+                pid = str(data.get("id") or "")
+                receipt = INSTALLS._load_receipt(pid)
+                with lock:
+                    entry_id = (receipt or {}).get("catalog", {}).get("entry_id")
+                    if entry_id in running and alive(running[entry_id]):
+                        return self._json({"error": "Close this game before reviewing uninstall"}, 409)
+                    jid = INSTALLS.submit_uninstall(pid, data.get("trusted_digest"))
+                return self._json({"id": jid})
+            if path == "/api/packages/remove-cache":
+                INSTALLS.remove_cached_package(str(data.get("id") or ""), str(data.get("version") or ""))
+                return self._json({"status": "removed"})
             if path == "/api/dependencies/flycast/prepare":
                 return self._json({"id": INSTALLS.prepare_flycast()})
             if path == "/api/backups/create":
@@ -790,7 +813,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"results": steam_search(str(data.get("q") or "")[:100])})
             if self.path == "/api/steam/details":
                 return self._json(steam_details(data.get("appid")))
-            m = re.fullmatch(r"/api/fetch/([a-z0-9-]+)/(cover|icon|video|shot)", self.path)
+            m = re.fullmatch(r"/api/fetch/([a-z0-9-]+)/(cover|grid|icon|video|shot)", self.path)
             if not m:
                 return self._json({"error": "not found"}, 404)
             gid, kind = m.groups()
@@ -805,7 +828,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"error": str(e) or "bad request"}, 400)
 
     def _upload(self):
-        m = re.fullmatch(r"/api/upload/([a-z0-9-]+)/(cover|icon|video|shot)", self.path.split("?")[0])
+        m = re.fullmatch(r"/api/upload/([a-z0-9-]+)/(cover|grid|icon|video|shot)", self.path.split("?")[0])
         if not m:
             return self.send_error(404)
         gid, kind = m.groups()

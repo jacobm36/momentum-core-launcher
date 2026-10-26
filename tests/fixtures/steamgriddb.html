@@ -69,6 +69,10 @@ window.fetch = async (path, options = {}) => {
   check(calls.at(-1).data.kind === "heroes", "background artwork by default");
   $("#sgdb-results [data-image]").click();
   check(form.elements["url-cover"].value === "/web/icon-256.png", "chosen background staged");
+  $("#sgdb-kind").value = "grids"; $("#sgdb-kind").dispatchEvent(new Event("change")); await tick();
+  $("#sgdb-results [data-image]").click();
+  check(form.elements["url-grid"].value === "/web/icon-256.png"
+    && form.elements["url-cover"].value === "/web/icon-256.png", "grid cover staged without replacing background");
   $("#sgdb-kind").value = "icons"; $("#sgdb-kind").dispatchEvent(new Event("change")); await tick();
   $("#sgdb-results [data-image]").click();
   check(form.elements["url-icon"].value === "/web/icon-256.png", "chosen icon staged separately");
@@ -95,7 +99,7 @@ window.fetch = async (path, options = {}) => {
   await form.onsubmit(new Event("submit"));
   check(saved.artwork_title === "Alternate search" && saved.steamgriddb_id === "789", "match saved with library entry");
   check(!JSON.stringify(saved).includes("a".repeat(32)), "key excluded from game save");
-  check(uploads.length === 2 && uploads.some(item => item.path.endsWith("/cover"))
+  check(uploads.length === 3 && uploads.some(item => item.path.endsWith("/grid")) && uploads.some(item => item.path.endsWith("/cover"))
     && uploads.some(item => item.path.endsWith("/icon")), "artwork reuses normal media downloads");
   check(calls.filter(item => item.path.startsWith("/api/steamgriddb/") && item.options.method === "POST")
     .every(item => item.options.headers["X-Token"] === token), "mutations authenticated");

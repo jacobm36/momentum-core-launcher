@@ -5,6 +5,21 @@
   "package_digest": "sha256:1b6d80a851b550d03861863864f0aa87fe0886a126f470942441aa17415fe309",
   "derived_packages": [
     {
+      "version": "0.3.1",
+      "digest": "sha256:cb33b6695d791d03fa19b6bde97c55dc27b2d82716d9640f2330fe98789dcf9c",
+      "additional_software": [
+        {
+          "provider": "flatpak",
+          "scope": "user",
+          "app_id": "org.flycast.Flycast",
+          "version": "v2.7",
+          "commit": "0f8d2124d1c17696baec607c417d817f0331878c0e88f207c118b82c4dc7a9a1"
+        }
+      ],
+      "gameplay": "not-tested-for-this-package",
+      "basis": "2026-10-25: 31 package tests and exact synthetic-media ordinary/managed real-runner installs, separate software/game approvals, presentation retention, repeat, managed repair/removal/reinstall and descriptor-drift blocking passed. Ordinary user/system and managed wrappers seed exact owner MK-51002 mouse mapping only when absent, preserving personal mappings. The managed helper is unchanged. Grid, screenshot and video reuse existing library media; screenshot visually inspected. No new emulator/game launch, acquisition, right-click gameplay or final-ZIP target acceptance is claimed."
+    },
+    {
       "version": "0.3.0",
       "digest": "sha256:5dba413b80ed095c18933b55caf06b86d3c90bac15b7f95a4fa18b999e88d659",
       "additional_software": [

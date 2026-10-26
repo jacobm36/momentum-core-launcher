@@ -22,7 +22,7 @@ function handleJobs(list) {
   for (const j of jobs) {
     const prev = jobState[j.id]; jobState[j.id] = j.status;
     if (!jobsReady || prev === j.status || !prev) continue;
-    if (j.status === "succeeded") { notify(j.kind === "download" ? "Installer ready. Continue setup to choose your game files." : j.kind === "dependency" ? "Required software prepared. No game installed." : j.readiness === "setup-required" ? `${j.title} installed; manual setup is still required.` : `${j.title} finished.`, { kind: "ok", title: j.kind === "download" ? "Ready to set up" : j.kind === "dependency" ? "Software prepared" : "Install complete" }); sfx("ok"); }
+    if (j.status === "succeeded") { notify(j.installation === "removed" ? `${j.title} finished. Settings and saves were preserved.` : j.kind === "download" ? "Installer ready. Continue setup to choose your game files." : j.kind === "dependency" ? "Required software prepared. No game installed." : j.readiness === "setup-required" ? `${j.title} installed; manual setup is still required.` : `${j.title} finished.`, { kind: "ok", title: j.installation === "removed" ? "Uninstall complete" : j.kind === "download" ? "Ready to set up" : j.kind === "dependency" ? "Software prepared" : "Install complete" }); sfx("ok"); }
     else if (j.status === "failed") { notify(j.error || "A step failed.", { kind: "error", title: `${j.title} failed` }); sfx("err"); }
     else if (j.status === "interrupted") notify(j.error || "Stopped unexpectedly. You can retry it.", { kind: "warn", title: j.title });
     else if (j.status === "awaiting-approval") notify("Review the plan and approve it to continue.", { kind: "warn", title: j.title });

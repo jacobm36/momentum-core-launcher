@@ -52,8 +52,10 @@ class PriorityCandidates(unittest.TestCase):
     def exercise(self, game_id, reconcile_missing_state=False, prepare_missing=False,
                  uzdoom_version="5.0.1",
                  uzdoom_commit="d7b8ce76e5480a28d1e07400093a20d47f56c201fd974b0a5dbfa3b26bbd587e",
-                 flycast_commit=FLYCAST_COMMIT, publisher_download=False, competing_user=False):
+                 flycast_commit=FLYCAST_COMMIT, publisher_download=False, competing_user=False,
+                 package_version=None):
         version, runtime, evidence_name = CANDIDATES[game_id]
+        version = package_version or version
         if publisher_download:
             version = "0.3.0"
         native = {"supermodel": supermodel, "vkquake": vkquake}.get(runtime)
@@ -184,6 +186,12 @@ class PriorityCandidates(unittest.TestCase):
                         self.assertEqual(receipt["readiness"], "setup-required")
                         self.assertEqual(Path(receipt["game_directory"]).name, game_id)
                         self.assertEqual(len(json.loads(catalog.read_text())), 1)
+                        if package_version:
+                            game = json.loads(catalog.read_text())[0]
+                            support = Path(receipt["paths"]["support"])
+                            for field, asset in installs.PRESENTATION_ASSETS.items():
+                                self.assertTrue(game[field].startswith("media/"), game)
+                                self.assertEqual((app / game[field]).read_bytes(), (support / asset).read_bytes())
                         if game_id == "l-a-machineguns":
                             support = Path(receipt["paths"]["support"])
                             launch = runpy.run_path(str(support / "launch.py"))
@@ -232,6 +240,9 @@ class PriorityCandidates(unittest.TestCase):
 
     def test_hod2(self):
         self.exercise("the-house-of-the-dead-2")
+
+    def test_hod2_presentation_revision(self):
+        self.exercise("the-house-of-the-dead-2", package_version="0.3.1")
 
     def test_hod2_reuses_supported_system_when_user_copy_is_untested(self):
         self.exercise("the-house-of-the-dead-2", competing_user=True)

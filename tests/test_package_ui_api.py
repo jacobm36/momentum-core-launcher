@@ -2,6 +2,8 @@
 import io
 import json
 import os
+import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -19,6 +21,7 @@ import catalog
 import jobs
 import server
 import steamgriddb
+import backup
 
 
 PREFLIGHT = b"""#!/bin/bash
@@ -50,6 +53,7 @@ class PackageUiApi(Base):
             mock.patch.object(server, "INSTALLS", self.inst),
             mock.patch("packages._platform_issues", return_value=[]),
             mock.patch.object(self.inst, "_load_receipt", return_value=None),
+            mock.patch.object(self.inst, "list_installations", return_value=[]),
             mock.patch.object(self.inst, "_flycast_facts", return_value={"flycast": False}),
         ]
         for p in self.patches:
@@ -86,6 +90,131 @@ class PackageUiApi(Base):
         status, data = self.request("/api/packages/import-upload", stream.getvalue(), raw=True)
         self.assertEqual(status, 200, data)
         return data
+
+    def test_package_status_and_cache_removal(self):
+        imported = self.upload()
+        status, data = self.request("/api/packages")
+        self.assertEqual(status, 200)
+        self.assertEqual(data["installations"], [])
+        self.assertEqual(len(data["packages"]), 1)
+        status, data = self.request("/api/packages/remove-cache",
+                                    {"id": imported["id"], "version": imported["version"]})
+        self.assertEqual(status, 200, data)
+        self.assertEqual(self.request("/api/packages")[1]["packages"], [])
+        status, data = self.request("/api/packages/uninstall",
+                                    {"id": imported["id"], "trusted_digest": imported["digest"]})
+        self.assertEqual(status, 400, data)
+        self.assertIn("receipt", data["error"])
+
+    def test_cache_removal_refuses_active_download(self):
+        imported = self.upload()
+        self.runner.jobs["j00000001"] = {
+            "id": "j00000001", "status": "running",
+            "meta": {"kind": "download", "package_id": imported["id"],
+                     "package_version": imported["version"]}}
+        status, data = self.request("/api/packages/remove-cache",
+                                    {"id": imported["id"], "version": imported["version"]})
+        self.assertEqual(status, 400, data)
+        self.assertIn("active", data["error"])
+        self.runner.jobs.clear()
+        self.assertEqual(len(self.request("/api/packages")[1]["packages"]), 1)
+
+    def test_uninstall_refuses_a_running_game_before_preflight(self):
+        receipt = {"catalog": {"entry_id": "test-game"}}
+        with mock.patch.object(self.inst, "_load_receipt", return_value=receipt), \
+                mock.patch.object(server, "running", {"test-game": object()}), \
+                mock.patch.object(server, "alive", return_value=True), \
+                mock.patch.object(self.inst, "submit_uninstall") as submit:
+            status, data = self.request("/api/packages/uninstall",
+                                        {"id": "test-game", "trusted_digest": "anything"})
+            self.assertEqual(status, 409, data)
+            self.assertIn("Close this game", data["error"])
+            submit.assert_not_called()
+
+    def test_untrusted_media_is_sandboxed_including_path_aliases(self):
+        media = self.app / "media/test"
+        media.mkdir(parents=True)
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg"><text>Artwork</text></svg>'
+        (media / "icon.svg").write_bytes(svg)
+        for method in ("GET", "HEAD"):
+            for path in ("/media/test/icon.svg", "/web/%2e%2e/media/test/icon.svg?v=1"):
+                req = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}", method=method)
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+                    policy = response.headers["Content-Security-Policy"]
+                    self.assertIn("sandbox;", policy)
+                    self.assertNotIn("allow-scripts", policy)
+                    self.assertNotIn("allow-same-origin", policy)
+                    self.assertIn("default-src 'none'", policy)
+                    self.assertEqual(response.read(), svg if method == "GET" else b"")
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/api/id", timeout=5) as response:
+            self.assertIsNone(response.headers.get("Content-Security-Policy"),
+                              "media sandbox must not disable the application")
+
+    @unittest.skipUnless(os.environ.get("MCL_BROWSER_TESTS") == "1", "opt-in browser security test")
+    def test_direct_svg_navigation_cannot_execute_script(self):
+        chrome = shutil.which("google-chrome") or shutil.which("chromium")
+        self.assertIsNotNone(chrome, "Chrome/Chromium is needed for the requested browser test")
+        media = self.app / "media/test"
+        media.mkdir(parents=True)
+        (media / "icon.svg").write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40">'
+            '<text id="status" x="4" y="20">SAFE ARTWORK</text>'
+            '<script>document.getElementById("status").textContent="SCRIPT EXECUTED";</script>'
+            '</svg>')
+        result = subprocess.run([
+            chrome, "--headless=new", "--disable-gpu", "--disable-background-networking",
+            "--disable-extensions", "--no-first-run", f"--user-data-dir={self.t / 'svg-profile'}",
+            "--virtual-time-budget=1000", "--dump-dom",
+            f"http://127.0.0.1:{self.port}/media/test/icon.svg",
+        ], capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr[-1500:])
+        self.assertIn('y="20">SAFE ARTWORK</text>', result.stdout)
+        self.assertNotIn('y="20">SCRIPT EXECUTED</text>', result.stdout)
+
+    def test_grid_media_round_trip_preserves_background_and_package_edits(self):
+        original = {"id": "test", "name": "Test", "exec": "/not/executed",
+                    "cover": "media/test/cover.png", "video": "media/test/video.mp4"}
+        server.write_games([original])
+        media = self.app / "media/test"
+        media.mkdir(parents=True)
+        (media / "cover.png").write_bytes(b"background")
+        (media / "video.mp4").write_bytes(b"preview")
+        self.assertEqual(self.request("/api/upload/test/grid?ext=png", b"portrait", raw=True)[0], 200)
+        game = server.load_games()[0]
+        self.assertEqual(game["grid"], "media/test/grid.png")
+        self.assertEqual(game["cover"], original["cover"])
+        self.assertEqual((media / "cover.png").read_bytes(), b"background")
+        self.assertEqual(self.request("/api/upload/test/grid?ext=svg", b"<svg/>", raw=True)[0], 400)
+        with mock.patch.object(server, "http_get", return_value=(b"downloaded portrait", "image/webp")):
+            self.assertEqual(self.request("/api/fetch/test/grid", {"url": "https://example.test/grid.webp"})[0], 200)
+        self.assertFalse((media / "grid.png").exists())
+        self.assertEqual((media / "grid.webp").read_bytes(), b"downloaded portrait")
+        self.assertEqual(self.request("/api/save", {**original, "description": "Edited"})[0], 200)
+        game = server.load_games()[0]
+        self.assertEqual(game["grid"], "media/test/grid.webp")
+        for first in (True, False):
+            merged = installs._merge_catalog(game, {"name": "Package title"}, {}, first)
+            self.assertEqual(merged["grid"], game["grid"])
+        name = backup.make_backup(self.app, include_media=True)
+        raw, _, members = backup.read_backup(self.app / "backups" / name)
+        self.assertEqual(json.loads(raw)[0]["grid"], game["grid"])
+        self.assertTrue(any(path == game["grid"] for path, _, _ in members))
+        restored = self.app / "restored"
+        restored.mkdir()
+        restored_games = []
+        backup.restore(restored, self.app / "backups" / name, restored_games.extend, lambda stats: None)
+        self.assertEqual(restored_games[0]["grid"], game["grid"])
+        self.assertEqual((restored / game["grid"]).read_bytes(), b"downloaded portrait")
+        with self.assertRaises(backup.BackupError):
+            backup._check_games(json.dumps([{**game, "grid": "../portrait.png"}]))
+        server.write_games([original])
+        self.assertEqual(server.load_games()[0]["grid"], "media/test/grid.webp", "drop-in artwork")
+        self.assertEqual(self.request("/api/clear/test/grid", {})[0], 200)
+        self.assertFalse((media / "grid.webp").exists())
+        self.assertFalse(server.load_games()[0].get("grid"))
+        self.assertEqual((media / "video.mp4").read_bytes(), b"preview")
 
     def test_about_reports_build_identity_and_metadata_errors(self):
         status, data = self.request("/api/about")

@@ -4,9 +4,27 @@ const animOn = () => localStorage.getItem("mcl-anim") !== "off";
 function applySound() { $("#snd").textContent = soundOn() ? "🔊" : "🔇"; }
 function applyFx() { document.body.classList.toggle("noanim", !animOn()); $("#fx").textContent = animOn() ? "✨ On" : "✨ Off"; }
 const featuredPanel = () => localStorage.getItem("mcl-panel") === "featured";
+const libraryView = () => ["tiles", "grid"].includes(localStorage.getItem("mcl-view")) ? localStorage.getItem("mcl-view") : "list";
+const tiledLibrary = () => libraryView() !== "list";
+const libraryScrollKey = () => libraryView() === "list" ? "mcl-scroll" : `mcl-scroll-${libraryView()}`;
+function applyLibraryView() {
+  const tiles = tiledLibrary(), list = $("#list"), stage = $("#stage"), button = $("#library-view");
+  document.body.classList.toggle("tiles", tiles);
+  document.body.classList.toggle("portrait-grid", libraryView() === "grid");
+  stage.classList.toggle("featured", !tiles && featuredPanel());
+  if (tiles) stage.insertBefore(list, $("#detail"));
+  else document.querySelector("aside").insertBefore(list, $(".side-btns"));
+  if (button) {
+    button.value = libraryView();
+    button.title = "Library layout: List, landscape Tiles, or portrait Grid";
+  }
+  if ($("#tile-help")) $("#tile-help").hidden = !tiles;
+  if ($("#library-nav")) $("#library-nav").hidden = !tiles;
+  if ($("#panel")) $("#panel").hidden = tiles;
+}
 function applyPanel() {
   const featured = featuredPanel(), button = $("#panel");
-  $("#stage")?.classList.toggle("featured", featured);
+  $("#stage")?.classList.toggle("featured", featured && !tiledLibrary());
   if (!button) return;
   button.textContent = featured ? "▣ Featured" : "▣ Classic";
   button.title = `Selected-game panel: ${featured ? "Featured" : "Classic"} (click to switch)`;
@@ -15,8 +33,15 @@ function applyPanel() {
 let games = [], token = "", running = new Set(), sel = null, filter = "", tagSel = new Set(), padOn = false, dragging = null, failed = {};
 let launchPending = false;
 let restoredScroll = null, listFilterKey = null, browsingReady = false;
+let libraryCollection = "all";
 function restoreBrowsing() {
   filter = localStorage.getItem("mcl-search") || "";
+  libraryCollection = localStorage.getItem("mcl-collection") || "all";
+  if (!["all", "favorites", "recent"].includes(libraryCollection)
+      && !games.some(g => `category:${g.category || "Other"}` === libraryCollection)) {
+    console.warn("Saved library collection no longer exists.", libraryCollection);
+    libraryCollection = "all";
+  }
   try {
     const tags = JSON.parse(localStorage.getItem("mcl-tags") || "[]");
     if (!Array.isArray(tags) || !tags.every(t => typeof t === "string")) throw new Error("Invalid saved tags");
@@ -25,7 +50,7 @@ function restoreBrowsing() {
     console.warn("Could not restore library tag filters.", error);
     tagSel.clear();
   }
-  const scroll = Number(localStorage.getItem("mcl-scroll"));
+  const scroll = Number(localStorage.getItem(libraryScrollKey()));
   restoredScroll = Number.isFinite(scroll) && scroll >= 0 ? scroll : 0;
   $("#search").value = filter;
   browsingReady = true;
@@ -35,7 +60,8 @@ function saveBrowsing() {
   if (!browsingReady || !list) return;
   localStorage.setItem("mcl-search", filter);
   localStorage.setItem("mcl-tags", JSON.stringify([...tagSel]));
-  localStorage.setItem("mcl-scroll", String(list.scrollTop));
+  localStorage.setItem("mcl-collection", libraryCollection);
+  localStorage.setItem(libraryScrollKey(), String(list.scrollTop));
 }
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

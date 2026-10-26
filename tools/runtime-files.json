@@ -12,7 +12,7 @@
     "web/gallery.js", "web/gamepad.js", "web/icon-256.png", "web/index.html",
     "web/jobs.js", "web/library.js", "web/info.js", "web/logo-full.png", "web/logo-icon.png",
     "web/main.js", "web/navigation.js", "web/notify.js", "web/packages.js",
-    "web/shell.js", "web/sound.js", "web/stats.js", "web/style.css", "web/steamgriddb.js",
+    "web/shell.js", "web/sound.js", "web/stats.js", "web/style.css", "web/steamgriddb.js", "web/tile-preview.js",
     "docs/arcade-installer-evidence.json", "docs/doom-installer-evidence.json",
     "docs/duke-installer-evidence.json", "docs/hod2-target-evidence.json",
     "docs/openbor-installer-evidence.json", "docs/openbor-runtime-index.json",

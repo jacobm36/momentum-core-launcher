@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Tile frame capture regression</title>
+<link rel="stylesheet" href="/web/style.css"></head><body>
+<dialog id="dlg"><form id="form"></form></dialog><pre id="result">RUNNING</pre>
+<script>
+// Original 64x36 red/blue canvas recording, generated locally for this fixture.
+const clip = "GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQRChYECGFOAZwEAAAAAAAGuEU2bdLlNu4tTq4QVSalmU6yBbk27i1OrhBZUrmtTrIGTTbuLU6uEH0O2dVOsgcFNu4xTq4QcU7trU6yCAZzsrgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmoCrXsYMPQkBEiYRDFiFITYCGQ2hyb21lV0GGQ2hyb21lFlSua6mup9eBAXPFh+Zb+SZaeaGDgQFV7oEBhoVWX1ZQOOCKsIFAuoEkU8CBAR9DtnUBAAAAAAAAz+eBAKD0ocOBAAAAcAMAnQEqQAAkAAAHCIWFiJmEiAEkEBOtUB/AEDhHB++hNnlwAP76eV//U4/Jx+Tj+vt//gEL+AQv4BC/9/rAdaGspqrugQGlpdACAJ0BKkAAJAAABwiFhYiZhIgBJBAANHJ+ZjzfisAA/v+6gwCg1KGzgQCWAJECAAAQCSAAwDnAQOfN/5YAXvGhCj4A/v29oP/2zP4LhZn/2zR/+HH1GFB/4X8AdaGZppfugQGlktEBAAAQCSAAwADCwX+gAERgAPuBABxTu2uNu4uzgQC3hveBAfGBwQ==";
+const $ = selector => document.querySelector(selector);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const game = {id:"test",name:"Test game",exec:"/do/not/launch",tags:[],cover:"/web/logo-full.png",grid:"/web/icon-256.png",
+  video:"data:video/webm;base64," + clip};
+let games = [game], padOn = false, token = "test", ver = 1, uploads = [], saves = 0;
+const url = path => path;
+const wireSteamGridDB = () => {}, sfx = () => {}, refresh = async () => {}, select = () => {};
+const reportFetch = window.fetch.bind(window);
+window.fetch = async (path, options) => {
+  if (path === "/api/save") { saves++; return {json:async () => ({id:"test"})}; }
+  if (path.startsWith("/api/upload/")) { uploads.push({path,file:options.body}); return {json:async () => ({status:"ok"})}; }
+  throw new Error("Unexpected route: " + path);
+};
+</script>
+<script src="/web/actions.js"></script>
+<script>
+const check = (value, message) => { if (!value) throw new Error(message); };
+const report = message => {
+  $("#result").textContent = message;
+  if (new URLSearchParams(location.search).has("report")) {
+    reportFetch("/test-result", {method:"POST", body:message}).catch(error => console.error("Could not report fixture result", error));
+  }
+};
+const wait = ms => new Promise(resolve => setTimeout(resolve,ms));
+const until = async predicate => { for (let i=0;i<150;i++) { if (predicate()) return; await wait(10); } throw new Error("Timed out waiting for video/capture"); };
+const imagePixels = async src => {
+  const image = new Image(); image.src = src; await until(() => image.complete && image.naturalWidth);
+  const canvas = document.createElement("canvas"); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d"); context.drawImage(image,0,0);
+  return {width:canvas.width,height:canvas.height,pixel:context.getImageData(48,18,1,1).data};
+};
+(async () => {
+  editor(game);
+  check(!$("#frame-tools").hidden && $("#frame").disabled && $("#frame-review").hidden, "capture tools visible with initial loaded-frame guard");
+  const video = $("#pv-video video");
+  await until(() => video.readyState >= 2 && !$("#frame").disabled);
+  check(video.videoWidth === 64 && video.videoHeight === 36, "real video decoded");
+  let presented = false;
+  video.requestVideoFrameCallback(() => { presented = true; });
+  $("#frame-pause").click(); await until(() => $("#frame-pause").textContent === "Pause preview");
+  check($("#frame-pause").textContent === "Pause preview", "explicit video play");
+  await until(() => presented);
+  $("#frame-pause").click(); check(video.paused, "explicit video pause");
+  video.currentTime = 0;
+  await until(() => !video.seeking && video.readyState >= 2);
+  const decoded = document.createElement("canvas"); decoded.width = 64; decoded.height = 36;
+  const decodedContext = decoded.getContext("2d");
+  await until(() => {
+    decodedContext.drawImage(video,0,0);
+    const pixel = decodedContext.getImageData(48,18,1,1).data;
+    return pixel[0] > 150 && pixel[2] < 100;
+  });
+  $("#frame").click(); await until(() => !$("#frame-review").hidden);
+  const pixels = await imagePixels($("#frame-review img").src);
+  check(pixels.width === 64 && pixels.height === 36 && pixels.pixel[0] > 150 && pixels.pixel[2] < 100, "captured actual red video pixels at native resolution: " + pixels.width + "x" + pixels.height + " " + [...pixels.pixel]);
+  check($("#form").dirty() && saves === 0 && uploads.length === 0, "capture stages artwork without saving");
+  check($("#pv-cover img").src === $("#frame-review img").src
+    && $("#pv-grid img").src.endsWith("/web/icon-256.png"), "tile preview updates without replacing portrait Grid cover");
+  if (new URLSearchParams(location.search).has("preview")) {
+    $("#frame-tools").scrollIntoView({block:"center"}); $("#result").hidden = true; return;
+  }
+  $("#frame-discard").click();
+  check($("#frame-review").hidden && $("#pv-cover img").src.endsWith("/web/logo-full.png") && !$("#form").dirty(), "discard restores original artwork and clean state");
+  const artworkFile = new File(["pending art"],"chosen.png",{type:"image/png"});
+  const data = new DataTransfer(); data.items.add(artworkFile);
+  $("#form").elements.cover.files = data.files;
+  $("#form").elements.cover.dispatchEvent(new Event("change"));
+  const pendingArt = $("#pv-cover img").src;
+  $("#frame").click(); await until(() => !$("#frame-review").hidden);
+  $("#frame-discard").click();
+  check($("#pv-cover img").src === pendingArt && $("#form").dirty(), "discard restores a prior unsaved art choice");
+  const nativeBlob = HTMLCanvasElement.prototype.toBlob;
+  HTMLCanvasElement.prototype.toBlob = function(callback) { callback(null); };
+  $("#frame").click();
+  check($("#frame-status").textContent.includes("Could not capture") && $("#pv-cover img").src === pendingArt, "encoding failure is explicit and preserves artwork");
+  HTMLCanvasElement.prototype.toBlob = function() { throw new DOMException("Tainted canvas","SecurityError"); };
+  $("#frame").click();
+  check($("#frame-status").textContent.includes("already saved video") && $("#pv-cover img").src === pendingArt, "cross-origin capture error guides local import");
+  HTMLCanvasElement.prototype.toBlob = nativeBlob;
+  $("#frame-back").click(); await until(() => !video.seeking && !$("#frame").disabled);
+  check(video.paused && video.currentTime === 0, "back control seeks and clamps to start");
+  $("#frame").click(); await until(() => !$("#frame-review").hidden);
+  const form = $("#form");
+  form.scrollTop = form.scrollHeight;
+  check(form.scrollWidth <= form.clientWidth + 1 && $("#frame-review img").getBoundingClientRect().width <= form.clientWidth, "capture review fits editor without horizontal overflow");
+  await form.onsubmit(new Event("submit"));
+  check(saves === 1 && uploads.length === 1 && uploads[0].path === "/api/upload/test/cover?ext=jpg"
+    && uploads[0].file instanceof File && uploads[0].file.type === "image/jpeg", "Save uploads one JPEG to Background art only");
+  const uploaded = await imagePixels(URL.createObjectURL(uploads[0].file));
+  check(uploaded.width === 64 && uploaded.height === 36 && uploaded.pixel[0] > 150, "saved JPEG contains actual captured pixels");
+  await until(() => !video.getAttribute("src")); check(video.paused, "editor close releases preview");
+  editor(game); await until(() => !$("#frame").disabled);
+  let finishCapture;
+  HTMLCanvasElement.prototype.toBlob = function(callback) { finishCapture = callback; };
+  $("#frame").click();
+  await $("#form").onsubmit(new Event("submit"));
+  check(saves === 1 && $("#ferr").textContent.includes("Wait for frame capture"), "Save cannot race an unfinished capture");
+  $("#cancel").click(); await wait(0); finishCapture(uploads[0].file);
+  check($("#frame-review").hidden && uploads.length === 1, "cancelled capture cannot stage late results or upload");
+  HTMLCanvasElement.prototype.toBlob = nativeBlob;
+  check(game.cover === "/web/logo-full.png" && game.grid === "/web/icon-256.png", "original library objects not modified by capture or Cancel");
+  report("PASS: actual video decode, pause/seek, native-size pixels, review/discard, preserved Grid, capture errors, staged save, JPEG upload, cancellation and media cleanup");
+})().catch(error => { report("FAIL: " + error.stack); });
+</script></body></html>

@@ -3,7 +3,7 @@ const galleryStrip = g => (g.screenshots || []).length
   ? `<div class="gallery" aria-label="Screenshots">${g.screenshots.map((p, i) => `<button type="button" data-shot="${i}" title="Screenshot ${i + 1}"><img src="${esc(url(p))}" alt="Screenshot ${i + 1}" loading="lazy"></button>`).join("")}</div>` : "";
 function openGallery(g, start = 0) {
   const d = $("#gdlg"), list = g?.screenshots || [];
-  if (!d || !list.length || topDlg()) return;
+  if (!d || !list.length || (topDlg() && topDlg().id !== "game-details")) return;
   let i = Math.min(Math.max(start, 0), list.length - 1);
   d.innerHTML = `<div class="gimg"><img alt=""></div>
     <div class="padhint pad-only"><kbd>←</kbd><kbd>→</kbd>Browse <kbd>B</kbd>Close</div>
@@ -25,7 +25,10 @@ function openGallery(g, start = 0) {
     else if (e.key === "ArrowLeft") { e.preventDefault(); d.nav(-1); }
     else if (e.key === "ArrowRight") { e.preventDefault(); d.nav(1); }
   };
-  d.onclose = () => { d.nav = null; };
+  d.onclose = () => {
+    d.nav = null;
+    if (g.id === sel) $(`#detail [data-shot="${start}"]`)?.focus({preventScroll:true});
+  };
   show(i); d.showModal(); sfx("open");
 }
 $("#detail").addEventListener("click", e => {

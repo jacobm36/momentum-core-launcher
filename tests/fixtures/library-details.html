@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Grid and game details regression</title>
+<link rel="stylesheet" href="/web/style.css">
+<style>#result{position:fixed;bottom:0;pointer-events:none;z-index:20;background:#05060c}</style></head><body>
+<aside><header>Momentum</header><input id="search"><div id="library-count"></div>
+<select id="library-view"><option value="list">List</option><option value="tiles">Tiles</option><option value="grid">Grid</option></select>
+<div id="tagbar"></div><nav id="list"></nav><div class="side-btns">
+<button id="add">Add</button><button id="sort">Sort</button><button id="stats">Stats</button>
+<button id="theme">Theme</button><button id="panel">Panel</button><button id="rum">Rumble</button></div><footer id="hints"></footer></aside>
+<main id="stage"><p id="tile-help" hidden>Open a game for details, then Play.</p>
+<div id="art"></div><video id="bg"></video><section id="detail"></section></main>
+<dialog id="dlg"></dialog><dialog id="odlg"></dialog><dialog id="qdlg"></dialog><dialog id="gdlg"></dialog><dialog id="fdlg"></dialog>
+<pre id="result">RUNNING</pre>
+<script>
+if (!sessionStorage.getItem("grid-reopen")) localStorage.clear();
+localStorage.setItem("mcl-anim", "off");
+const sfx = () => {}, applyAccent = () => {}, cycleTheme = () => {}, openStats = () => {};
+const notify = () => {};
+let edited = null, requests = [], runningIds = [], launchError = false, removed = false;
+const playHistory = {"game-0":{last:Math.floor(Date.now()/1000)-86400, launches:12, seconds:12240}};
+const collection = Array.from({length:45}, (_, i) => ({
+  id:"game-" + i, name:"Game " + i, category:"Arcade", ...(i !== 1 ? {runtime:"OpenBOR 6391"} : {}),
+  tags:["Action"], description:i === 1 ? "" : "A game description. ".repeat(i === 0 ? 300 : 1),
+  ...(i === 0 ? {package_id:"test-game", package_version:"1.2 <local>", grid:"web/icon-256.png", cover:"web/logo-full.png", video:"missing-preview.webm",
+    screenshots:["web/logo-full.png","web/icon-256.png"]} : {}),
+  ...(i === 2 ? {grid:"missing-grid.png", cover:"web/logo-full.png", icon:"web/icon-256.png"} : {}),
+  ...(i === 3 ? {cover:"web/logo-full.png"} : {}),
+  ...(i === 4 ? {icon:"web/icon-256.png"} : {})
+}));
+const openFolders = g => { $("#fdlg").innerHTML = "<button autofocus>Close folders</button>"; $("#fdlg").showModal(); };
+let managedPackage = null;
+const openPackageManagement = id => { managedPackage = id; };
+window.fetch = async (path, options) => {
+  if (path === "/api/games") return {json:async () => ({
+    games:removed ? collection.filter(g => g.id !== "game-0") : collection,
+    token:"test", running:runningIds, stats:playHistory
+  })};
+  requests.push(path);
+  if (path.startsWith("/api/favorite/")) collection.find(g => path.endsWith(g.id)).favorite = JSON.parse(options.body).on;
+  if (path.startsWith("/api/delete/")) removed = true;
+  return {json:async () => launchError ? {error:"Test launch failed"} : {status:"launched"}};
+};
+</script>
+<script src="/web/core.js"></script><script src="/web/library.js"></script>
+<script src="/web/actions.js"></script><script src="/web/navigation.js"></script>
+<script src="/web/gamepad.js"></script><script src="/web/shell.js"></script><script src="/web/gallery.js"></script>
+<script>
+editor = g => { edited = g.id; };
+ask = async () => true;
+const check = (value, message) => { if (!value) throw new Error(message); };
+const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+const key = (name, target = document.activeElement) => target.dispatchEvent(new KeyboardEvent("keydown", {key:name, bubbles:true, cancelable:true}));
+const launches = () => requests.filter(p => p.startsWith("/api/launch/")).length;
+const view = mode => { $("#library-view").value = mode; $("#library-view").dispatchEvent(new Event("change")); };
+const inViewport = el => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth; };
+(async () => {
+  applyLibraryView(); applyPanel(); await refresh(true);
+  const preview = new URLSearchParams(location.search).get("preview");
+  if (preview) {
+    view("grid"); select("game-0");
+    if (preview === "details") openGameDetails();
+    $("#result").hidden = true;
+    return;
+  }
+  if (sessionStorage.getItem("grid-reopen")) {
+    check(libraryView() === "grid" && sel === "game-5" && filter === "Game"
+      && tagSel.has("action") && $("#list").scrollTop === 400, "Grid reload restores layout, selection, filters and scroll");
+    check(!gameDetailsOpen(), "reload does not reopen stale details or video");
+    $("#result").textContent = "PASS: portrait Grid, independent state/reload, fallback, details, media, screenshots, actions, input, focus, errors and List preservation";
+    return;
+  }
+  const viewKey = new KeyboardEvent("keydown", {key:"ArrowDown", bubbles:true, cancelable:true});
+  $("#library-view").dispatchEvent(viewKey);
+  check(sel === "game-0" && !viewKey.defaultPrevented, "List view chooser retains native keyboard input");
+  $("#list").scrollTo({top:200, behavior:"instant"}); saveBrowsing();
+  check($("#list").scrollTop === 200, "initial List scrolling " + $("#list").scrollHeight + "/" + $("#list").clientHeight);
+  view("tiles");
+  $("#list").scrollTop = 300; saveBrowsing();
+  view("grid");
+  check(libraryView() === "grid" && tiledLibrary() && $("#library-view").value === "grid", "explicit Grid preference");
+  check($("#hints").textContent.includes("EnterDetails"), "keyboard hints describe card activation");
+  padOn = true; hints(); check($("#hints").textContent.includes("ADetails"), "controller hints describe card activation");
+  padOn = false; hints();
+  const card = selectedItem(), rect = card.querySelector(".tile-art").getBoundingClientRect();
+  check(Math.abs(rect.width / rect.height - 2/3) < .01, "2:3 portrait artwork");
+  check($("#list").scrollWidth <= $("#list").clientWidth + 1, "no Grid overflow");
+  check(document.querySelector('.tile[data-id="game-3"] img').getAttribute("src").includes("logo-full"), "existing cover fallback");
+  check(document.querySelector('.tile[data-id="game-4"] .tile-icon'), "icon fallback");
+  check(!document.querySelector('.tile[data-id="game-5"] img'), "initial fallback");
+  const broken = document.querySelector('.tile[data-id="game-2"] img');
+  broken.dispatchEvent(new Event("error"));
+  check(broken.src.includes("logo-full"), "broken grid falls back to cover");
+  broken.dispatchEvent(new Event("error"));
+  check(broken.classList.contains("tile-icon") && broken.src.includes("icon-256"), "broken cover falls back to icon");
+  broken.dispatchEvent(new Event("error"));
+  check(!broken.isConnected, "broken icon falls back to initial");
+  $("#list").scrollTop = 350; saveBrowsing();
+  view("list"); check($("#list").scrollTop === 200, "List scroll preserved: " + $("#list").scrollTop + " saved " + localStorage.getItem("mcl-scroll"));
+  view("tiles"); check($("#list").scrollTop === 300, "Tiles scroll independent");
+  view("grid"); check($("#list").scrollTop === 350, "Grid scroll independent");
+  select("game-0"); selectedItem().focus(); const position = tilePosition, scroll = $("#list").scrollTop;
+  key("Enter");
+  check(gameDetailsOpen() && launches() === 0, "Enter opens details without launch");
+  check(document.activeElement.id === "play" && topDlg().id === "game-details", "details Play focus and dialog priority");
+  const heldEnter = new KeyboardEvent("keydown", {key:"Enter", repeat:true, bubbles:true, cancelable:true});
+  $("#play").dispatchEvent(heldEnter);
+  check(heldEnter.defaultPrevented && launches() === 0, "held activation cannot repeat into Play");
+  check($("#game-details-title").textContent === "Game 0"
+    && $("#game-details .desc").textContent.includes("A game description.")
+    && $("#game-details .details-version dd").textContent === "OpenBOR 6391"
+    && $("#game-details .details-category").textContent === "Arcade", "recorded metadata");
+  check([...document.querySelectorAll("#game-details .details-history dt")].map(el => el.textContent).join("|")
+    === "Time played|Last played|Launches", "clearly labeled play history");
+  check([...document.querySelectorAll("#game-details .details-history dd")].map(el => el.textContent).join("|")
+    === "3h 24m|1 day ago|12", "recorded time, last played and launch count");
+  check($("#game-details .details-note").textContent.includes("when the game closes"), "tracking scope and update timing explained");
+  check([...document.querySelectorAll("#game-details .details-version dd")][1].textContent === "1.2 <local>",
+    "runtime and escaped installed package version");
+  check(!$("#game-details .runtime-badge") && !$("#game-details .stats"), "metadata not duplicated");
+  check(inViewport($("#play")) && inViewport($("#details-close")), "Play and Close visible with long description");
+  check($("#game-details").scrollWidth <= $("#game-details").clientWidth + 1, "no details horizontal overflow");
+  check(document.querySelectorAll("#play").length === 1 && document.querySelectorAll("#detail").length === 1, "unique shared action IDs");
+  const video = $("#game-details video");
+  check($("#game-details .feature-art img").getAttribute("src").includes("logo-full.png"),
+    "screenshot is the video fallback rather than stacked cover artwork");
+  check(getComputedStyle(video).visibility === "hidden", "video does not obscure fallback before playback");
+  video.dispatchEvent(new Event("error"));
+  check(video.hidden && $("#preview-status").textContent.includes("unavailable")
+    && !$("#game-details .feature-art img").hidden, "video failure explains still-art fallback");
+  $("#folders").focus(); await refresh();
+  check($("#game-details video") === video && document.activeElement.id === "folders"
+    && $("#preview-status").textContent.includes("unavailable"), "refresh preserves video, focus and status");
+  playHistory["game-0"].seconds += 120; await refresh();
+  check($("#game-details .details-history dd").textContent === "3h 26m"
+    && $("#game-details video") === video && document.activeElement.id === "folders",
+    "refreshed play history preserves media and action focus");
+  $("#folders").click(); check(topDlg().id === "fdlg" && gameDetailsOpen(), "folders dialog above details");
+  $("#fdlg").close(); await tick();
+  $("#game-details [data-shot]").click();
+  check(topDlg().id === "gdlg", "screenshot lightbox above details");
+  $("#gnext").click(); check($("#gdlg .gcount").textContent.includes("2 / 2"), "screenshot navigation");
+  $("#gclose").click(); await tick();
+  for (let i = 0; i < 20 && document.activeElement.dataset.shot !== "0"; i++) await tick();
+  check(topDlg().id === "game-details" && document.activeElement.dataset.shot === "0", "closing lightbox retains details and thumbnail focus");
+  video.removeAttribute("src"); video.load(); await tick();
+  video.hidden = false;
+  video.play = () => Promise.reject(new Error("Simulated load failure"));
+  wireDetailsPreview(video); video.onerror(); await tick();
+  check($("#preview-status").textContent.includes("unavailable") && $("#preview-toggle").hidden,
+    "late autoplay rejection cannot replace load failure with an inaccessible retry");
+  let playing = false, playCalls = 0, pauseCalls = 0;
+  Object.defineProperty(video, "paused", {get:() => !playing});
+  video.play = () => { playing = true; playCalls++; video.dispatchEvent(new Event("playing")); return Promise.resolve(); };
+  video.pause = () => { playing = false; pauseCalls++; video.dispatchEvent(new Event("pause")); };
+  video.hidden = false; $("#preview-status").textContent = "";
+  wireDetailsPreview(video); await tick();
+  check(playing && $("#preview-toggle").getAttribute("aria-label") === "Pause preview"
+    && $("#preview-toggle svg") && !$("#preview-toggle").textContent.trim(),
+    "playing preview exposes a labeled pause icon without text clutter");
+  check($("#game-details .feature-art img").hidden && !video.hidden, "playing video replaces the still image");
+  check(getComputedStyle($("#preview-toggle")).opacity === (matchMedia("(hover:none)").matches ? "1" : "0"),
+    "playing control is unobtrusive off hover, but remains available on touch");
+  $("#preview-toggle").focus();
+  check(getComputedStyle($("#preview-toggle")).opacity === "1", "keyboard focus reveals playback control");
+  $("#preview-toggle").click();
+  check(!playing && pauseCalls === 1 && $("#preview-toggle").getAttribute("aria-label") === "Play preview"
+    && getComputedStyle($("#preview-toggle")).opacity === "1", "paused preview keeps resume icon visible");
+  await refresh();
+  check(!playing && playCalls === 1, "refresh preserves explicit pause");
+  $("#preview-toggle").click(); await tick();
+  check(playing && playCalls === 2, "preview resumes explicitly");
+  await refresh();
+  check($("#game-details video") === video && playing && playCalls === 2, "refresh does not restart a playing preview");
+  const getVideoAttribute = video.getAttribute.bind(video);
+  video.getAttribute = name => name === "src" ? "simulated-preview.webm" : getVideoAttribute(name);
+  let pageHidden = true;
+  Object.defineProperty(document, "hidden", {configurable:true, get:() => pageHidden});
+  document.dispatchEvent(new Event("visibilitychange"));
+  check(!playing, "hidden page suspends preview");
+  await refresh();
+  check(!playing && playCalls === 2, "hidden refresh cannot resume preview");
+  pageHidden = false; document.dispatchEvent(new Event("visibilitychange")); await tick();
+  check(playing && playCalls === 3, "visible page resumes only previously playing preview");
+  $("#preview-toggle").click(); pageHidden = true;
+  document.dispatchEvent(new Event("visibilitychange"));
+  pageHidden = false; document.dispatchEvent(new Event("visibilitychange")); await tick();
+  check(!playing && playCalls === 3, "visibility does not override explicit pause");
+  delete video.getAttribute;
+  $("#preview-toggle").click(); await tick();
+  for (const element of [document.documentElement, $("#game-details"), $("#game-details .desc")]) {
+    check(getComputedStyle(element).colorScheme === "dark"
+      && getComputedStyle(element).scrollbarColor !== "auto", "dark native controls and scrollbars throughout details");
+  }
+  const tag = $("#game-details [data-tag]"); tag.focus(); key("Enter", tag);
+  check(tagSel.has("action"), "keyboard tag filtering inside details");
+  $("#fav").click(); await tick();
+  check(collection[0].favorite && $("#fav").getAttribute("aria-pressed") === "true", "favorite synchronizes details and cards");
+  launchError = true; $("#play").click(); await tick();
+  check(launches() === 1 && $("#toast").textContent.includes("Test launch failed"), "one request and visible launch failure");
+  await refresh(); check($("#toast").textContent.includes("Test launch failed"), "refresh retains launch failure");
+  launchError = false; $("#play").click(); await tick();
+  check(launches() === 2 && $("#play").disabled && video.paused, "successful Play updates running and pauses preview");
+  runningIds = ["game-0"]; await refresh();
+  check($("#play").disabled && $("#preview-toggle").disabled, "running refresh preserves disabled Play/preview");
+  runningIds = []; running.clear(); await refresh();
+  const beforeClose = $("#list").scrollTop;
+  $("#details-close").click(); await tick();
+  check(!gameDetailsOpen() && $("#stage").contains($("#detail")) && !video.getAttribute("src"), "close restores compact bar and releases preview");
+  check(document.activeElement.dataset.id === "game-0" && tilePosition === position
+    && $("#list").scrollTop === beforeClose, "card focus/section/scroll restored");
+  selectedItem().click(); check(gameDetailsOpen() && launches() === 2, "mouse opens without launch");
+  closeGameDetails(); selectedItem().click();
+  $("#game-details").dispatchEvent(new Event("close"));
+  check(gameDetailsOpen() && $("#game-details").contains($("#detail")), "delayed close cannot dismantle reopened details");
+  const cancel = new Event("cancel", {cancelable:true}); $("#game-details").dispatchEvent(cancel);
+  await tick(); check(!gameDetailsOpen() && cancel.defaultPrevented, "Escape cancel uses dialog cleanup");
+  collection[3].screenshots = ["web/icon-256.png"];
+  select("game-3"); openGameDetails();
+  check(!$("#game-details video") && $("#game-details .feature-art img").src.includes("icon-256"),
+    "without video the main details media prefers a screenshot over background art");
+  closeGameDetails(); await tick();
+  select("game-4"); openGameDetails();
+  check(!$("#game-details video") && $("#game-details .feature-art img.icon").src.includes("icon-256"),
+    "icon is the final details image fallback");
+  closeGameDetails(); await tick();
+  select("game-1"); selectedItem().focus(); key(" ");
+  check(gameDetailsOpen() && !$("#game-details video") && !$("#game-details .gallery")
+    && $("#play") && launches() === 2, "Space and missing media/description");
+  check($("#game-details .details-unplayed").textContent === "Not played yet"
+    && !$("#game-details .details-history dl") && !$("#game-details .details-version"),
+    "unplayed game stays quiet and unknown version information is omitted");
+  playHistory["game-1"] = {launches:1, seconds:0}; collection[1].package_version = "2.0";
+  await refresh();
+  check([...document.querySelectorAll("#game-details .details-history dd")].map(el => el.textContent).join("|")
+    === "0 min|Not recorded|1", "zero time and missing last-played timestamp are explicit");
+  check($("#game-details .details-version dt").textContent === "Package version"
+    && $("#game-details .details-version dd").textContent === "2.0",
+    "package-only metadata does not invent an engine");
+  $("#edit").click(); await tick(); check(edited === "game-1" && !gameDetailsOpen(), "Edit closes details before editor");
+  collection[1].name = "Edited title"; await refresh(); selectedItem().click();
+  check($("#game-details-title").textContent === "Edited title", "edited metadata used on reopen");
+  closeGameDetails(); await tick();
+  document.hasFocus = () => true; padNeedsNeutral = false; uiMode = false;
+  for (const key in held) delete held[key];
+  padAction(i => i === 0, 0, 0);
+  check(gameDetailsOpen() && launches() === 2, "controller A opens instead of launching");
+  padAction(() => false, 0, 0); padAction(i => i === 1, 0, 0); await tick();
+  check(!gameDetailsOpen(), "controller B closes details");
+  select("game-0"); selectedItem().click();
+  check($("#manage-package") && $("#del").textContent === "Remove from library", "package management and library removal are separate");
+  $("#manage-package").click();
+  check(managedPackage === "test-game" && !gameDetailsOpen(), "package management closes details first");
+  selectedItem().click();
+  collection[0].install_status = "removed";
+  await refresh();
+  check($("#play").disabled && $("#play").textContent === "UNINSTALLED", "removed receipt disables Play");
+  const previousLaunches = launches();
+  await launch(collection[0]);
+  check(launches() === previousLaunches, "keyboard/direct launch cannot launch uninstalled game");
+  delete collection[0].install_status;
+  removed = true; await refresh(); await tick();
+  check(!gameDetailsOpen() && sel !== "game-0", "externally removed game closes stale details");
+  filter = "not present"; renderList();
+  check(!sel && !$("#play"), "empty filter has no stale actions");
+  key("Enter", document.body); check(!gameDetailsOpen() && launches() === 2, "empty library cannot activate");
+  clearFilters(); view("list"); select("game-1"); key("Enter", document.body); await tick();
+  check(launches() === 3, "List direct-launch behavior preserved");
+  check($("#hints").textContent.includes("EnterPlay"), "List hints retain launch behavior");
+  running.clear(); view("grid"); filter = "Game"; tagSel = new Set(["action"]); renderList(); select("game-5");
+  $("#list").scrollTo({top:400, behavior:"instant"}); saveBrowsing();
+  sessionStorage.setItem("grid-reopen", "yes"); location.reload();
+})().catch(error => { $("#result").textContent = "FAIL: " + error.stack; });
+</script></body></html>

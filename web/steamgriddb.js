@@ -30,7 +30,7 @@ function wireSteamGridDB(form, setPending) {
       const button = event.target.closest("[data-image]");
       if (!button) return;
       const image = data.images[Number(button.dataset.image)];
-      setPending(kind === "icons" ? "icon" : "cover", {url: image.url});
+      setPending(kind === "icons" ? "icon" : kind === "grids" ? "grid" : "cover", {url: image.url});
       results.querySelectorAll("button").forEach(item => item.classList.toggle("picked", item === button));
       status.textContent = "Artwork selected. Save the game to apply it.";
     };

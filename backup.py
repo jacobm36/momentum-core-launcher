@@ -122,7 +122,7 @@ def _check_games(raw):
                 and isinstance(g.get("name"), str) and isinstance(g.get("exec"), str)) or g["id"] in seen:
             raise BackupError("games.json in the backup has an invalid or duplicate entry")
         seen.add(g["id"])
-        for k in ("cover", "icon", "video"):
+        for k in ("cover", "grid", "icon", "video"):
             v = g.get(k)
             if v is not None and not (isinstance(v, str) and v.startswith("media/") and ".." not in v):
                 raise BackupError(f"invalid {k} path for {g['id']}")

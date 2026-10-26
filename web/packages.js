@@ -18,6 +18,19 @@ const STORE_PILLARS = [
   { id: "boomer-shooters", title: "Boomer Shooters", note: "Quake • Doom • Duke • Community Mods. Classic engines. Modern mods. Less setup." },
 ];
 
+function packageStoreState(game, imported) {
+  const installation = (imported.installations || []).find(
+    item => item.package_id === game.id && item.installation === "installed");
+  if (installation) {
+    const newer = game.version.split(".").map(Number);
+    const installed = installation.package_version.split(".").map(Number);
+    const different = newer.findIndex((part, i) => part !== installed[i]);
+    return different >= 0 && newer[different] > installed[different] ? "New version available" : "Installed";
+  }
+  return imported.packages.some(p => p.id === game.id && p.version === game.version && p.digest === game.digest)
+    ? "Installer ready" : "Set up game";
+}
+
 function openAddGame() {
   const d = $("#pdlg");
   if (d.open) return;
@@ -173,13 +186,15 @@ async function loadGameCatalog() {
     ]);
     if (!d.open || !list.isConnected) return;
     const card = g => {
-      const ready = imported.packages.some(p => p.id === g.id && p.version === g.version && p.digest === g.digest);
+      const status = packageStoreState(g, imported);
+      const installed = (imported.installations || []).some(p => p.package_id === g.id && p.installation === "installed");
       return `<article class="catalog-card"><img src="${esc(g.icon_url)}" alt="" referrerpolicy="no-referrer">
         <div><h3>${esc(g.name)}</h3>${g.runtime ? `<span class="runtime-badge" title="Runtime">${esc(g.runtime)}</span>` : ""}
         <p class="bnote">${esc(g.description)}</p>
         ${g.platform_issues.length ? `<p class="pkg-warning">${esc(g.platform_issues.join("; "))}</p>` : ""}
         <button type="button" class="primary" data-game="${esc(g.id)}" ${g.platform_issues.length ? "disabled" : ""}>
-          ${ready ? "Continue setup" : "Set up game"}</button></div></article>`;
+          ${status}</button>${installed && status !== "Installed"
+            ? `<button type="button" data-manage="${esc(g.id)}">Manage installation</button>` : ""}</div></article>`;
     };
     const sections = [...STORE_PILLARS, { id: null, title: "More games", note: "" }].map(p => ({
       ...p, games: catalog.games.filter(g => p.id ? g.pillar === p.id : !STORE_PILLARS.some(s => s.id === g.pillar))
@@ -188,8 +203,13 @@ async function loadGameCatalog() {
       <h3 class="pillar-title">${esc(p.title)}</h3>${p.note ? `<p class="pillar-note">${esc(p.note)}</p>` : ""}
       ${p.games.map(card).join("")}</section>`).join("") : '<p class="sempty">No games available yet.</p>';
     list.onclick = async e => {
+      const manage = e.target.closest("[data-manage]");
+      if (manage) { d.close(); return openPackageManagement(manage.dataset.manage); }
       const button = e.target.closest("[data-game]"); if (!button || button.disabled) return;
       const game = catalog.games.find(g => g.id === button.dataset.game);
+      if (packageStoreState(game, imported) === "Installed") {
+        d.close(); return openPackageManagement(game.id);
+      }
       const ready = imported.packages.some(p => p.id === game.id && p.version === game.version && p.digest === game.digest);
       if (ready) return selectPackage(game.id, game.version);
       button.disabled = true;
@@ -255,7 +275,10 @@ async function loadPackages() {
     d.querySelector(".pkg-list").innerHTML = data.packages.length ? data.packages.map(p =>
       `<div class="pkg-row"><div><b>${esc(p.name)}</b><span class="bsub">Version ${esc(p.version)}</span>
       ${p.platform_issues.length ? `<p class="pkg-warning">${esc(p.platform_issues.join("; "))}</p>` : ""}</div>
-      <button type="button" data-package="${esc(p.id)}" data-version="${esc(p.version)}">Set up</button></div>`
+      ${packageStoreState(p, data) === "Installed"
+        ? `<button type="button" data-manage="${esc(p.id)}">Manage installation</button>`
+        : `<button type="button" data-package="${esc(p.id)}" data-version="${esc(p.version)}">Set up</button>`}
+      <button type="button" data-cache-id="${esc(p.id)}" data-version="${esc(p.version)}">Remove cached installer</button></div>`
     ).join("") : '<p class="sempty">No packages imported. Choose a ZIP or enter a local package folder.</p>';
   } catch (error) { packageError(d, error); }
 }
@@ -280,6 +303,17 @@ function openImportedPackages() {
     if (b.id === "pkg-close") return d.close();
     if (b.id === "pkg-catalog") { d.close(); return openPackages(); }
     if (b.id === "pkg-zip") return d.querySelector("#pkg-file").click();
+    if (b.dataset.manage) { d.close(); return openPackageManagement(b.dataset.manage); }
+    if (b.dataset.cacheId) {
+      if (!await ask("Remove cached installer?", "This removes only the downloaded installer. It does not uninstall a game or delete settings/saves. Installed versions and active recovery records are protected.", "Remove installer")) return;
+      b.disabled = true;
+      try {
+        await packageResponse(await post("/api/packages/remove-cache", { id: b.dataset.cacheId, version: b.dataset.version }));
+        await loadPackages();
+      } catch (error) { packageError(d, error); }
+      finally { if (b.isConnected) b.disabled = false; }
+      return;
+    }
     if (b.dataset.package) return selectPackage(b.dataset.package, b.dataset.version);
     if (b.id !== "pkg-import-path") return;
     b.disabled = true;
@@ -306,6 +340,48 @@ function openImportedPackages() {
   d.onclose = () => { selectedPackage = null; };
   d.showModal(); sfx("open");
   loadPackages();
+}
+
+async function openPackageManagement(packageId) {
+  const d = $("#pdlg");
+  if (d.open) return;
+  d.innerHTML = '<h2>Manage installation</h2><p class="pkg-error" role="alert" hidden></p><p role="status">Reading installation receipt...</p><button id="manage-close">Close</button>';
+  d.onclick = e => { if (e.target.id === "manage-close") d.close(); };
+  d.showModal();
+  try {
+    const data = await packageResponse(await fetch("/api/packages"));
+    if (!d.open) return;
+    const receipt = (data.installations || []).find(item => item.package_id === packageId);
+    if (!receipt) throw new Error("No package installation receipt was found. Removing a library entry is not an uninstall.");
+    d.innerHTML = `<h2>Manage ${esc(games.find(g => g.package_id === packageId)?.name || packageId)}</h2>
+      <p class="pkg-error" role="alert" hidden></p>
+      <p>Package ${esc(receipt.package_version)} · ${esc(receipt.installation)}</p>
+      <p class="pkg-path">${esc(receipt.game_directory)}</p>
+      <p>Uninstall removes unchanged installer-owned files. Original sources, saves, settings,
+        custom/modified files, shared engines and retained support stay intact.
+        The library entry remains, without Play; remove it separately if desired.</p>
+      ${receipt.installation === "installed" ? `<label class="pkg-check"><input id="uninstall-trust" type="checkbox">
+        I trust this installed package's code to check an uninstall plan.</label>
+      <p class="pkg-warning">Package scripts run as your user. No removal happens until you review and approve the exact plan.</p>` : ""}
+      <div class="btns"><button type="button" id="manage-close" autofocus>Close</button>
+        ${receipt.installation === "installed" ? '<button type="button" id="uninstall-check" disabled>Review uninstall</button>' : ""}</div>`;
+    const button = d.querySelector("#uninstall-check");
+    if (button) d.querySelector("#uninstall-trust").onchange = e => { button.disabled = !e.target.checked; };
+    d.onclick = async e => {
+      if (e.target.id === "manage-close") return d.close();
+      if (e.target.id !== "uninstall-check" || button.disabled) return;
+      button.disabled = true;
+      try {
+        const job = await packageResponse(await post("/api/packages/uninstall", {
+          id: packageId, trusted_digest: receipt.package_digest
+        }));
+        d.close();
+        await refresh();
+        guidePackageSetup(job.id);
+      } catch (error) { packageError(d, error); }
+      finally { if (button.isConnected) button.disabled = !d.querySelector("#uninstall-trust").checked; }
+    };
+  } catch (error) { if (d.open) packageError(d, error); }
 }
 
 function packageInputLabel(field) {
@@ -399,7 +475,7 @@ function compatibilityNotice(detail) {
   if (!guidance) return "";
   return `<section class="pkg-warning"><strong>${esc(guidance.title)}</strong>
     <p>${esc(guidance.message)}</p>${guidance.reason === "missing-evidence"
-      ? '<p><a href="https://github.com/jacobm36/momentum-distribution/releases/latest" target="_blank" rel="noopener noreferrer">Get the latest Momentum launcher</a></p><p>Close this launcher before starting the updated copy. Keep your old folders and journals.</p>'
+      ? '<p><a href="https://github.com/jacobm36/momentum-core-launcher/releases" target="_blank" rel="noopener noreferrer">Get the latest Momentum launcher</a></p><p>Close this launcher before starting the updated copy. Keep your old folders and journals.</p>'
       : ""}${guidance.reason === "software-mismatch"
         ? `<details><summary>Required build and detected software</summary>${packageJson({
             required: detail.supported_software || {}, detected: detail.dependencies || {}
@@ -420,12 +496,13 @@ async function selectPackage(id, version) {
     const destination = m.inputs.find(f => f.id === "games_root");
     d.innerHTML = `<h2>${esc(detail.name)} <small>${esc(detail.version)}</small></h2>
       <p class="pkg-error" role="alert" hidden></p>
+      <ol class="pkg-steps" aria-label="Installation steps"><li aria-current="step">Choose files &amp; trust package</li><li>Review software, if needed</li><li>Approve game installation</li></ol>
       ${packageRequirements(detail)}
-      <p class="bnote">Package fingerprint (integrity, not proof of trust)</p><code class="pkg-digest">${esc(detail.digest)}</code>
+      <details><summary>Package fingerprint (integrity, not proof of trust)</summary><code class="pkg-digest">${esc(detail.digest)}</code></details>
       ${detail.platform_issues.length ? `<p class="pkg-warning" role="alert">Installation blocked: ${esc(detail.platform_issues.join("; "))}</p>` : ""}
       <details><summary>Declared actions and test evidence</summary>
         ${packageJson({ platform: m.platform, actions: m.actions, dependencies: m.requires, testing: m.testing })}</details>
-      ${flatpak ? `<h3>Required game software</h3>
+      ${flatpak ? `<details ${flatpak.flatpak_available === false ? "open" : ""}><summary>Required game software: ${flatpak.installed ? "already installed" : "preparation needed"}</summary>
         <p class="bnote">${!flatpak.flatpak_available ? "Flatpak is missing. Install it through your Ubuntu system tools first."
           : flatpak.installed ? `Required software is installed (${esc(flatpak.version || "version unknown")}). It will not be automatically upgraded.`
           : "Momentum will prepare the software this game needs. Review required downloads first; after compatibility checks, review the game files in the same setup job."}</p>
@@ -434,8 +511,8 @@ async function selectPackage(id, version) {
         <p class="pkg-warning">${detail.install_enabled
           ? "This game setup is supported by compatibility evidence. Installation still requires review and approval of this plan; confirm gameplay for your installation afterward."
           : "This package and software build need matching compatibility evidence. Momentum checks before changing game files."}</p>
-        <details><summary>Technical software details</summary>${packageJson(flatpak)}</details>` : ""}
-      ${native ? `<h3>Required game software</h3>
+        <details><summary>Technical software details</summary>${packageJson(flatpak)}</details></details>` : ""}
+      ${native ? `<details><summary>Required game software: ${native.installed ? "already installed" : "preparation needed"}</summary>
         <p class="bnote">${native.installed ? "Required software is installed. Momentum will reuse it without upgrading or changing its settings."
           : detail.dependencies?.openbor
             ? "Momentum will prepare the exact OpenBOR 6391 runtime bundled in this package after your approval. No engine download or FUSE is required. Then review the separate game installation and download plan."
@@ -444,7 +521,7 @@ async function selectPackage(id, version) {
             : "Momentum will get the required software from its pinned official release after your approval. Then review the game installation plan."}</p>
         ${softwareLocation(native)}
         <p class="pkg-warning">Installer checks do not certify gameplay. Confirm controls, display and saved progress for this installation.</p>
-        <details><summary>Technical software details</summary>${packageJson(native)}</details>` : ""}
+        <details><summary>Technical software details</summary>${packageJson(native)}</details></details>` : ""}
       ${compatibilityNotice(detail)}
       ${detail.engine_selection ? `<details><summary>Engine selection and supported builds</summary>
         ${packageJson(detail.engine_selection)}</details>` : ""}
@@ -453,8 +530,7 @@ async function selectPackage(id, version) {
         <h3>Your game files</h3>
         ${detail.dependencies?.ironwail ? '<p class="bnote">QBJ3 is downloaded separately from its official-site-linked mirror because its assets cannot be bundled. The pinned download is about 2.7 GB; allow about 17 GiB free for a fresh download and installation. A complete existing qbj3 folder is reused read-only. Review source/software preparation first, then approve the separate game installation plan.</p>' : ""}
         ${source ? `${packageInput(source, detail)}
-          <p class="bnote">Leave your game files where they are. Choose their folder, or type/paste its full path; Momentum copies them and leaves your originals untouched.
-          ${esc(packageFileHelp(source, detail))}</p>` : ""}
+          <p class="bnote">Choose a folder or paste its full path; Momentum copies them and leaves your originals untouched.</p>` : ""}
         ${m.inputs.filter(f => f !== source && f !== destination).map(f =>
           packageInput(f, detail) + (f.help ? `<p class="bnote">${esc(f.help)}</p>` : "")).join("")}
         ${destination ? `<p class="bnote">Momentum will install your game here:</p>
@@ -464,7 +540,8 @@ async function selectPackage(id, version) {
         <label>Link to a library entry (does not take ownership of existing files)
           <select id="pkg-association"><option value="">Create a new library entry</option>
             ${games.map(g => `<option value="${esc(g.id)}">${esc(g.name)}</option>`).join("")}</select></label></details>
-        <p class="bnote">Nothing is installed yet. Next, review the exact changes before approving installation.</p>
+        <p class="bnote">This first permission lets the package check your setup. It does not approve installation.
+          Required software and game changes are reviewed separately when needed.</p>
         <label class="pkg-check"><input type="checkbox" id="pkg-trust">I trust this package's publisher and permit its preflight code to run.</label>
         <p class="pkg-warning">Installer scripts run as your user and can access your files. Checksums and declared actions do not sandbox them.</p>
         <div class="btns"><button type="button" id="pkg-back">Back</button>
@@ -541,9 +618,15 @@ async function reviewPackagePlan(id) {
     if (job.status !== "awaiting-approval") throw new Error("This job is no longer waiting for approval.");
     if (job.plan_error || job.plan == null) throw new Error(job.plan_error || "No reviewable plan was supplied.");
     const plan = job.plan, actions = Array.isArray(plan.actions) ? plan.actions : [];
-    d.innerHTML = `<h2>Review: ${esc(job.title)}</h2>
+    const preparing = plan.operation === "prepare-dependency";
+    d.innerHTML = `<h2>${plan.operation === "uninstall" ? "Review uninstall" : preparing ? "Review required software" : "Review game installation"}: ${esc(job.title)}</h2>
       <p class="pkg-error" role="alert" hidden></p>
-      <p class="bnote">Approval is bound to these exact saved plan bytes. No installation changes have been authorized yet.</p>
+      <p class="bnote">${plan.operation === "uninstall" ? "Remove unchanged installer-owned files; keep player state and modified files."
+        : preparing ? "Prepare the software this game needs. You will review the game installation afterward."
+        : "Check the destination and changes below. This approval installs the game using the saved plan."}
+        Approval applies only to this exact plan, not future changes.</p>
+      <p class="pkg-plan-summary">${preparing ? "Software preparation only. Review the required downloads and locations below."
+        : `${actions.length} planned file change${actions.length === 1 ? "" : "s"}. Expand the file list to inspect paths and backups.`}</p>
       <details><summary>Plan fingerprint</summary><code class="pkg-digest">${esc(job.plan_digest)}</code></details>
       ${plan.game_directory ? `<h3>Game destination</h3><p class="pkg-path">${esc(plan.game_directory)}</p>` : ""}
       <details><summary>Planned file changes (${actions.length}), including backups</summary>
@@ -578,8 +661,8 @@ async function reviewPackagePlan(id) {
           ? "The shared runtime is retained after game removal. Cancellation is checked at safe extraction/publication boundaries. After preparation, review the separate game installation plan."
           : "Shared software remains installed if later game work fails. Cancellation waits for an active download/install transaction to finish. After preparation, Momentum checks compatibility and asks you to review the game files."}</p>` : ""}
       <details><summary>Preserved files and state</summary>${packageJson({ preserve: plan.preserve || [], state: plan.state_destinations || [] })}</details>
-      <h3>Manual setup after installation</h3>
-      <ul>${(plan.manual_actions || []).map(a => `<li>${esc(a.message || a.action_id)}</li>`).join("") || "<li>No manual actions listed.</li>"}</ul>
+      ${plan.manual_actions?.length ? `<h3>${plan.operation === "uninstall" ? "Removal notes" : "Manual setup after installation"}</h3>
+        <ul>${plan.manual_actions.map(a => `<li>${esc(a.message || a.action_id)}</li>`).join("")}</ul>` : ""}
       <details><summary>Complete saved plan (including hashes and inventories)</summary>${packageJson(plan)}</details>
       ${job.approval_blocked ? (compatibilityNotice(job) || `<p class="pkg-warning">${esc(job.approval_blocked)}</p>`) : ""}
       ${prerequisiteNotes(job.host_prerequisites)}
@@ -587,7 +670,7 @@ async function reviewPackagePlan(id) {
         ${packageJson(job.engine_selection)}</details>` : ""}
       <label class="pkg-check"><input type="checkbox" id="plan-consent" ${job.approval_blocked ? "disabled" : ""}>I approve the listed changes.</label>
       <div class="btns"><button type="button" id="plan-close" autofocus>Close</button><button type="button" id="plan-cancel">Cancel job</button>
-        <button type="button" id="plan-approve" class="primary" disabled>${plan.managed_engine ? "Prepare tested isolated engine" : plan.operation === "prepare-dependency" ? (plan.downloads ? "Approve software / source preparation" : "Approve required software") : "Approve and install"}</button></div>`;
+        <button type="button" id="plan-approve" class="primary" disabled>${plan.operation === "uninstall" ? "Approve and uninstall" : plan.managed_engine ? "Prepare tested isolated engine" : plan.operation === "prepare-dependency" ? (plan.downloads ? "Approve software / source preparation" : "Approve required software") : "Approve and install"}</button></div>`;
     const approve = d.querySelector("#plan-approve");
     d.querySelector("#plan-consent").onchange = e => { approve.disabled = !e.target.checked || Boolean(job.approval_blocked); };
     d.onclick = async e => {

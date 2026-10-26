@@ -104,6 +104,138 @@ class InstallsTests(unittest.TestCase):
         self.assertEqual(out["tags"], ["Rail", "Mouse"])
         self.assertIsNone(out["icon"])  # artwork never auto-refilled after first association
 
+    def test_cached_installer_protects_installed_version_but_allows_retired_version(self):
+        receipt = {"package_version": "1.0.0", "installation": "installed"}
+        with mock.patch.object(self.inst, "_load_receipt", return_value=receipt), \
+                mock.patch.object(installs.packages, "snapshot_path", return_value=self.root / "cache/snapshot"), \
+                mock.patch.object(installs.packages, "remove_package") as remove:
+            with self.assertRaisesRegex(installs.InstallError, "Uninstall first"):
+                self.inst.remove_cached_package("test-game", "1.0.0")
+            remove.assert_not_called()
+            self.inst.remove_cached_package("test-game", "0.9.0")
+            remove.assert_called_once_with(self.root, "test-game", "0.9.0")
+            receipt["installation"] = "removed"
+            self.inst.remove_cached_package("test-game", "1.0.0")
+
+    def test_cache_removal_refuses_recovery_and_unsafe_paths(self):
+        job = {"id": "j00000001", "status": "failed", "manual": True,
+               "meta": {"kind": "download", "package_id": "test-game", "package_version": "1.0.0"}}
+        self.jobs.jobs[job["id"]] = job
+        with mock.patch.object(self.inst, "_load_receipt", return_value=None), \
+                mock.patch.object(installs.packages, "remove_package") as remove:
+            with self.assertRaisesRegex(installs.InstallError, "recovery"):
+                self.inst.remove_cached_package("test-game", "1.0.0")
+            self.jobs.jobs.clear()
+            with self.assertRaises(installs.packages.PackageError):
+                self.inst.remove_cached_package("../escape", "1.0.0")
+            remove.assert_not_called()
+
+    def test_installation_summaries_include_removed_receipts_without_mutation(self):
+        job, _ = self.fixture()
+        self.assertIsNone(self.inst.on_success(job))
+        path = self.inst._receipt_path(job["meta"]["package_id"])
+        original = path.read_bytes()
+        summaries = self.inst.list_installations()
+        self.assertEqual(len(summaries), 1)
+        self.assertEqual(summaries[0]["installation"], "installed")
+        self.assertEqual(summaries[0]["package_id"], job["meta"]["package_id"])
+        self.assertNotIn("resources", summaries[0])
+        self.assertEqual(path.read_bytes(), original)
+        receipt = json.loads(original)
+        receipt["installation"] = "removed"
+        path.write_text(json.dumps(receipt))
+        self.assertEqual(self.inst.list_installations()[0]["installation"], "removed")
+
+    def test_uninstall_review_blocks_launching_the_associated_game(self):
+        self.jobs.jobs["j00000001"] = {
+            "id": "j00000001", "status": "awaiting-approval", "game": "test-game",
+            "meta": {"kind": "install", "operation": "uninstall"},
+            "steps": [{"context": {"catalog_entry_id": "edited-slug"}}]}
+        self.assertTrue(self.inst.busy_for_game("edited-slug"))
+        self.assertTrue(self.inst.busy_for_game("test-game"))
+        self.assertFalse(self.inst.busy_for_game("another-game"))
+
+    def test_uninstall_does_not_resurrect_a_removed_library_entry(self):
+        job, result = self.fixture()
+        receipt = self.inst._receipt_from(job, result)
+        receipt["installation"] = "removed"
+        result["installation"] = "removed"
+        self.games_file.write_text("[]")
+        self.inst._complete_commit(job, receipt, result)
+        self.assertEqual(json.loads(self.games_file.read_text()), [])
+        self.assertEqual(self.inst._load_receipt(receipt["package_id"])["installation"], "removed")
+        self.assertFalse((self.jobs.paths(job["id"])["job_dir"] / "catalog-pending.json").exists())
+
+    def test_new_grid_field_seeds_once_without_refilling_cleared_artwork(self):
+        defaults = {"grid": "media/new-grid.png", "cover": "media/new-cover.png"}
+        self.assertEqual(installs._merge_catalog({}, defaults, {}, False), defaults)
+        self.assertEqual(installs._merge_catalog({"grid": None}, defaults, {}, False)["grid"], None)
+        self.assertNotIn("grid", installs._merge_catalog({}, defaults, {"grid": "old.png"}, False))
+        edited = {"grid": "my-grid.png", "cover": "my-cover.png"}
+        self.assertEqual(installs._merge_catalog(edited, defaults, {}, False), edited)
+
+    def test_package_presentation_retains_served_media_and_preserves_clear(self):
+        job, result = self.fixture(association=None)
+        rec = self.inst._receipt_from(job, result)
+        defaults = result["catalog_proposal"]["defaults"]
+        for field, asset in installs.PRESENTATION_ASSETS.items():
+            path = Path(rec["paths"]["support"]) / asset
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(("validated " + field).encode())
+            rec["resources"].append({"path": str(path), "kind": "file", "ownership": "managed",
+                                     "sha256": installs._hash_file(path)})
+            defaults[field] = asset
+        self.inst._commit_catalog(rec, result)
+        game = json.loads(self.games_file.read_text())[-1]
+        for field, asset in installs.PRESENTATION_ASSETS.items():
+            self.assertTrue(game[field].startswith("media/"), game)
+            self.assertEqual((self.root / game[field]).read_bytes(),
+                             (Path(rec["paths"]["support"]) / asset).read_bytes())
+        games = json.loads(self.games_file.read_text())
+        games[-1]["grid"] = None
+        self.inst.write_games(games)
+        rec["last_job_id"] = "j00000002"
+        self.inst._commit_catalog(rec, result)
+        self.assertIsNone(json.loads(self.games_file.read_text())[-1]["grid"])
+
+    def test_package_presentation_recovers_after_catalog_write_failure(self):
+        job, result = self.fixture(association=None)
+        paths = self.jobs.paths(job["id"])
+        envelope = json.loads(paths["approved_plan_file"].read_text())
+        seq = len(paths["intent_file"].read_text().splitlines())
+        for field, asset in installs.PRESENTATION_ASSETS.items():
+            path = Path(job["meta"]["paths"]["support"]) / asset
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(("validated " + field).encode())
+            resource = dict(path=str(path), kind="file", ownership="managed",
+                            sha256=installs._hash_file(path))
+            result["resources"].append(resource)
+            result["catalog_proposal"]["defaults"][field] = asset
+            job["meta"]["catalog_defaults"][field] = asset
+            action = dict(path=str(path), op="create", ownership="managed",
+                          before={"kind": "absent", "sha256": None},
+                          after={"kind": "file", "sha256": resource["sha256"]}, backup=None)
+            envelope["plan"]["actions"].append(action)
+            seq += 1
+            with paths["intent_file"].open("ab") as stream:
+                stream.write(ownership.packed(dict(action, job_id=job["id"], intent_version=1,
+                                                   seq=seq, step="configure")))
+            result["published_changes"].append(dict(resource, intent_seq=seq))
+        data = ownership.packed(envelope)
+        paths["approved_plan_file"].write_bytes(data)
+        job["approved_plan_digest"] = ownership.digest(data)
+        (paths["results_dir"] / "step-1.json").write_text(json.dumps(result))
+        with mock.patch.object(self.inst, "write_games", side_effect=OSError("catalog failure")):
+            self.assertIn("catalog failure", self.inst.on_success(job))
+        self.inst.recover_pending_catalog()
+        self.assertEqual(job["status"], "succeeded", job)
+        self.assertFalse((paths["job_dir"] / "catalog-pending.json").exists())
+        game = json.loads(self.games_file.read_text())[-1]
+        for field, asset in installs.PRESENTATION_ASSETS.items():
+            self.assertTrue(game[field].startswith("media/"))
+            self.assertEqual((self.root / game[field]).read_bytes(),
+                             (Path(job["meta"]["paths"]["support"]) / asset).read_bytes())
+
     def test_ubuntu_prerequisite_instructions_are_copyable_and_never_run_by_momentum(self):
         with mock.patch("installs.platform.freedesktop_os_release",
                         return_value={"ID": "ubuntu", "VERSION_ID": "24.04"}):

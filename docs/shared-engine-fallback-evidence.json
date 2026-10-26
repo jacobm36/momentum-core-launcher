@@ -18,6 +18,7 @@
     "frontend": "Remains private; no new public launcher release. candidate/production fields describe frontend deployment, not package download visibility."
   },
   "candidate_enabled_for": [
+    "the-house-of-the-dead-2 0.3.1",
     "the-house-of-the-dead-2 0.3.0",
     "brutal-doom 0.3.0",
     "brutal-doom-64 0.3.0"
@@ -27,6 +28,13 @@
     "digest": "sha256:c7a5a55a7fc89f8209810b1a257c3ed409e9d4b36785c2721279263903034500",
     "verification": "24 package lifecycle tests and exact synthetic runner existing-engine reuse, preparation, repair/removal/reinstall and managed separate approvals, no-change repeat and descriptor-drift refusal passed.",
     "limits": "Reuses the unchanged managed helper and pinned UZDoom 5.0.1 build. No new real isolated engine acquisition or graphical BD64 gameplay/save acceptance is claimed. Earlier owner acceptance above does not apply to this package."
+  },
+  "hod2_presentation_extension": {
+    "publication_approved": "2026-10-25",
+    "version": "0.3.1",
+    "digest": "sha256:cb33b6695d791d03fa19b6bde97c55dc27b2d82716d9640f2330fe98789dcf9c",
+    "verification": "31 package tests and exact synthetic runner ordinary/managed installs, separate approvals, media retention, no-change repeat, repair/removal/reinstall preserving profile/engine and binding-drift refusal passed.",
+    "limits": "Unchanged retained managed helper; wrapper seeds absent-only owner mouse mapping into the bound profile. No new engine acquisition or gameplay certification. Earlier owner gameplay reports are not transferred to this revision."
   },
   "managed_contract": "momentum-flatpak-1",
   "retained_helper_sha256": "b5798de5056f7c3976fc1acc953fc044405e8b5656e9e2f8f2c34440aa004399",

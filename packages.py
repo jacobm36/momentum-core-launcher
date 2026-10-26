@@ -462,7 +462,7 @@ def check_manifest(m, files, root):
         if not all(isinstance(x, str) for x in lst("tags", cat, "catalog.")):
             P.append("catalog.tags must be a list of strings")
         pkg_file(cat.get("icon"), "catalog.icon", png=True)
-        for k in ("cover", "video"):
+        for k in ("cover", "grid", "video"):
             if cat.get(k) is not None:
                 pkg_file(cat[k], f"catalog.{k}")
         for i, x in enumerate(lst("screenshots", cat, "catalog.", req=False)):
@@ -641,7 +641,9 @@ def snapshot_path(here, pid, version):
 
 
 def remove_package(here, pid, version):
-    _rmtree(snapshot_path(here, pid, version).parent)
+    with open(cache_dir(here) / ".lock", "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        _rmtree(snapshot_path(here, pid, version).parent)
 
 
 def main(argv):

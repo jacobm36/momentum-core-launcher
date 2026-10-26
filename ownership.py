@@ -83,6 +83,24 @@ def inventory_paths(action, job_dir, game):
     return rows, resources
 
 
+def released_uninstall_resources(job, result, plan):
+    """Retire stale ownership, never acquire ownership of preserved player edits."""
+    context = job["steps"][-1]["context"]
+    if context.get("operation") != "uninstall" or result.get("installation") != "removed":
+        return set()
+    touched = {action["path"] for action in plan["actions"]}
+    preserved = {row["path"] for row in plan.get("preserve", []) if isinstance(row, dict) and "path" in row}
+    released = set()
+    for resource in (context.get("previous_receipt") or {}).get("resources", []):
+        name = resource["path"]
+        if name in touched:
+            continue
+        actual = fact(safe_path(name))
+        if actual["kind"] == "absent" or (name in preserved and not matches(actual, resource)):
+            released.add(name)
+    return released
+
+
 def reconcile(job, result, paths, missing_user_state=()):
     """No filesystem existence alone grants ownership. Uncertain/contradictory evidence stops."""
     context = job["steps"][-1]["context"]
@@ -206,6 +224,7 @@ def reconcile(job, result, paths, missing_user_state=()):
     resources = result.get("resources")
     if not isinstance(resources, list):
         raise OwnershipError("Resources must be a list")
+    released = released_uninstall_resources(job, result, plan)
     seen = set()
     for resource in resources:
         name = resource.get("path") if isinstance(resource, dict) else None
@@ -218,6 +237,10 @@ def reconcile(job, result, paths, missing_user_state=()):
             raise OwnershipError(f"Ownership lacks approved mutation or previous receipt evidence: {name}")
         seen.add(name)
         expected = evidence[name]
+        if name in released:
+            if resource != old.get(name):
+                raise OwnershipError("Uninstall cannot change ownership records for preserved edits")
+            continue
         comparison = expected
         if name in old and expected["ownership"] in ("user-state", "borrowed"):
             # These are retained facts, never deletion grants. Their contents may legitimately evolve.
@@ -226,7 +249,7 @@ def reconcile(job, result, paths, missing_user_state=()):
             raise OwnershipError(f"Resource ownership/hash differs from evidence: {name}")
         if not matches(fact(path), resource):
             raise OwnershipError(f"Resource changed before receipt commit: {name}")
-    if set(evidence) != seen:
+    if set(evidence) - released != seen - released:
         raise OwnershipError("Proposal dropped retained ownership resources")
     if not records and not previous:
         raise OwnershipError("A fresh installation cannot claim ownership without intents")

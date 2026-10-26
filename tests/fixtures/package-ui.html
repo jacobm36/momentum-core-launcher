@@ -14,6 +14,7 @@ function editor(game, manual) { manualOpened = game === null && manual; }
 let submitted = [], failApprove = false, blockApproval = true, importFailed = false;
 let discoveryFailed = false, discoveryImportFailed = false;
 let catalogOffline = false, installerReady = true, downloadStatus = "succeeded";
+let installations = [], cacheRemovalFails = false;
 let pickerPath = "/home/test/Game Files", pickerFailed = false;
 let recoveryEligible = true, recoveryFails = false;
 const digest = "sha256:" + "a".repeat(64), jobDigest = "sha256:" + "b".repeat(64);
@@ -40,7 +41,7 @@ fetch = async path => {
     message: "Saved files will be verified.", missing_user_state: ["/home/test/Game/<optional>.txt"],
     journal: "/home/test/launcher/jobs/j00000001", instruction: "Keep this job and its journal."
   });
-  if (path === "/api/packages") return reply({ packages: installerReady ? [summary] : [] });
+  if (path === "/api/packages") return reply({ packages: installerReady ? [summary] : [], installations });
   if (path === "/api/catalog") return catalogOffline ? reply({ error: "Cannot load available games: offline" }, 502)
     : reply({ catalog_version: 1, games: [{
       ...summary, description: "Bring your own game files.", icon_url: "/web/icon.svg",
@@ -72,6 +73,12 @@ async function post(path, body, raw) {
   if (path === "/api/packages/import-upload") return importFailed ? reply({ error: "Invalid ZIP" }, 400) : reply(summary);
   if (path === "/api/packages/import") return reply(summary);
   if (path === "/api/packages/install") return reply({ id: job.id });
+  if (path === "/api/packages/uninstall") return reply({ id: job.id });
+  if (path === "/api/packages/remove-cache") {
+    if (cacheRemovalFails) return reply({ error: "Installer is needed for recovery" }, 400);
+    installerReady = false;
+    return reply({ status: "removed" });
+  }
   if (path === "/api/packages/download") return reply({ id: "j00000002" });
   if (path === "/api/dependencies/flycast/prepare") return reply({ id: job.id });
   if (path.endsWith("/approve")) return failApprove ? reply({ error: "The plan changed; review it again" }, 409) : reply({ status: "approve" });
@@ -138,7 +145,7 @@ async function until(fn) {
   check($("#catalog-games .runtime-badge").textContent === "<i>UZDoom</i>" && !$("#catalog-games .runtime-badge i"),
     "runtime badge shown and escaped");
   check($("#catalog-games img").getAttribute("src") === "/web/icon.svg", "catalog card artwork only");
-  check($("[data-game]").textContent.includes("Continue setup"), "validated imported installer reuses setup");
+  check($("[data-game]").textContent.includes("Installer ready"), "downloaded is not confused with incomplete setup");
   $("[data-game]").click(); await until(() => $("#pkg-setup"));
   check($("#pkg-preflight").disabled, "catalog selection never skips trust");
   $("#pkg-back").click(); await until(() => $("[data-game]"));
@@ -236,9 +243,16 @@ async function until(fn) {
     message: "A newer package may require a launcher update." };
   await selectPackage("test-game", "1.0.0");
   check($("#pdlg a").textContent.includes("latest Momentum"), "missing evidence has actionable update link");
+  check($("#pdlg a").href === "https://github.com/jacobm36/momentum-core-launcher/releases",
+    "launcher updates lead to launcher releases, including public previews, not game packages");
   check($("#pdlg").textContent.includes("Keep your old folders"), "update guidance preserves old state");
   detail.compatibility = null;
   check($("#pkg-input-mode").value === "careful", "choice default retained");
+  check($(".pkg-steps [aria-current]").textContent.includes("trust"), "setup explains the current permission step");
+  const softwareDetails = [...$("#pdlg").querySelectorAll("details")].find(
+    element => element.querySelector("summary").textContent.startsWith("Required game software"));
+  check(softwareDetails && !softwareDetails.open, "repetitive software evidence is expandable, not another gate");
+  check($("#pdlg").textContent.includes("does not approve installation"), "preflight permission distinguished from install approval");
   check($("#pdlg").textContent.includes("v2.7"), "detected dependency version shown");
   check($("#pdlg").textContent.includes("not be automatically upgraded"), "dependency reuse promise shown");
   check($("#pdlg").textContent.includes("need matching compatibility evidence"), "untested package gate explained");
@@ -265,6 +279,8 @@ async function until(fn) {
   check(!$("#idlg [data-a=approve]"), "no unreviewed approve shortcut");
   await until(() => $("#plan-approve"));
   check($("#rdlg").open, "requested setup automatically opens its ready approval");
+  check($("#rdlg h2").textContent.startsWith("Review game installation")
+    && $(".pkg-plan-summary").textContent.includes("1 planned file change"), "review explains stage and exact change count");
   check(!submitted.some(s => s.path.endsWith("/approve")), "guidance never posts an automatic approval");
   check(topDlg().id === "rdlg", "review dialog controller focus");
   const bounds = $("#rdlg").getBoundingClientRect();
@@ -348,6 +364,11 @@ async function until(fn) {
   await selectPackage("test-game", "1.0.0");
   check($("#pdlg").textContent.includes("supported by compatibility evidence"), "enabled target evidence explained");
   check($("#pkg-preflight").disabled && !$("#pkg-trust").checked, "enabled target still requires trust");
+  detail.dependencies.flycast.flatpak_available = false;
+  await selectPackage("test-game", "1.0.0");
+  check([...$("#pdlg").querySelectorAll("details")].some(element =>
+    element.open && element.textContent.includes("Flatpak is missing")), "missing prerequisite guidance stays expanded");
+  detail.dependencies.flycast.flatpak_available = true;
   detail.platform_issues = ["Wrong architecture"];
   await selectPackage("test-game", "1.0.0"); $("#pkg-trust").click();
   check($("#pkg-preflight").disabled, "unsupported platform blocked");
@@ -469,6 +490,46 @@ async function until(fn) {
   check($("#plan-approve").textContent === "Approve software / source preparation", "preparation approval button is explicit");
   check($("#plan-approve").disabled && !$("#plan-consent").checked, "source download requires fresh explicit consent");
   $("#rdlg").close();
+  $("#idlg").close();
+  installations = [{package_id:"test-game",package_version:"1.0.0",package_digest:digest,
+    installation:"installed",game_directory:"/home/test/Games/Test"}];
+  check(packageStoreState(summary, {packages:[summary], installations}) === "Installed", "installed receipt overrides cached installer");
+  check(packageStoreState({...summary, version:"1.1.0"}, {packages:[], installations}) === "New version available", "new catalog revision is distinguished");
+  check(packageStoreState({...summary, version:"0.9.0"}, {packages:[], installations}) === "Installed", "older catalog never offers downgrade as upgrade");
+  check(packageStoreState(summary, {packages:[], installations:[]}) === "Set up game", "no installer is a fresh setup");
+  openPackages();
+  await until(() => $("[data-game]"));
+  check($("[data-game]").textContent.trim() === "Installed", "store shows installed, not continue setup");
+  $("[data-game]").click();
+  await until(() => $("#uninstall-check"));
+  check($("#uninstall-check").disabled, "uninstall preflight needs trust");
+  check($("#pdlg").textContent.includes("saves") && $("#pdlg").textContent.includes("shared engines"), "uninstall explains retained state");
+  plan.plan = {operation:"uninstall",actions:[],preserve:[{path:"/home/test/save"}]};
+  $("#uninstall-trust").click();
+  $("#uninstall-check").click();
+  await until(() => $("#rdlg").open && $("#plan-consent"));
+  const uninstallSubmit = submitted.filter(s => s.path === "/api/packages/uninstall").at(-1);
+  check(uninstallSubmit.body.trusted_digest === digest, "uninstall trust binds installed bytes");
+  check($("#plan-approve").textContent === "Approve and uninstall" && $("#plan-approve").disabled, "uninstall requires separate exact-plan consent");
+  $("#rdlg").close(); $("#idlg").close();
+  openImportedPackages();
+  await until(() => $("[data-cache-id]"));
+  check($("[data-manage]") && !$("#pdlg [data-package]"), "local current installer also offers management instead of repeat setup");
+  const originalAsk = ask;
+  ask = async () => false;
+  $("[data-cache-id]").click(); await tick();
+  check(!submitted.some(s => s.path === "/api/packages/remove-cache"), "declining cache removal makes no request");
+  ask = async () => true;
+  cacheRemovalFails = true;
+  $("[data-cache-id]").click();
+  await until(() => !$("#pdlg .pkg-error").hidden);
+  check($("#pdlg .pkg-error").textContent.includes("recovery"), "cache protection error visible");
+  cacheRemovalFails = false;
+  $("[data-cache-id]").click();
+  await until(() => !$("#pdlg [data-cache-id]"));
+  check(submitted.filter(s => s.path === "/api/packages/remove-cache").at(-1).body.version === "1.0.0", "cache removal selects exact version");
+  ask = originalAsk;
+  $("#pdlg").close();
   document.querySelector("#result").textContent = "PASS: imports, trust, plan, controller focus, platform, capability gates and game software review";
 })().catch(error => { document.querySelector("#result").textContent = "FAIL: " + error.stack; });
 </script></body></html>

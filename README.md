@@ -4,6 +4,28 @@
 
 **Less setup. More PLAY.**
 
+## Public preview
+
+[Download the launcher](https://github.com/jacobm36/momentum-core-launcher/releases/tag/v2026.10.25-preview.1)
+and choose the launcher ZIP, not GitHub's source-code archives. Extract into a
+**new writable folder**, close any old launcher, and run:
+
+```bash
+bash start-candidate.sh
+```
+
+This opens a normal window. Use `bash launch.sh` for fullscreen and
+`bash install.sh` when you want app-menu/Desktop shortcuts.
+The tested baseline is **Ubuntu 24.04 x86_64 with X11**, Python 3 and
+Chrome/Chromium. Other desktops, Wayland and controllers may behave differently.
+This is an early public preview, not a promise of universal game compatibility.
+See [requirements](#take-it-for-a-spin) below.
+
+No games or personal library data are bundled. When trying a new version, keep
+your original launcher folder, library, artwork, saves and recovery journals.
+A fresh extracted folder does not automatically migrate your old library;
+normal launches still use your account's shared package installation receipts.
+
 Steam shortcuts. Native games. Emulator launches. Your own scripts. Your games
 don't all come from the same place, and they don't all launch the same way.
 Momentum gives every one of them a single controller-friendly home, with an
@@ -39,16 +61,36 @@ show matching games out of that total; Favorites and Recently played do not
 count the same library entry twice.
 
 Momentum remembers your selected game, search, tag filters and library scroll
-position across restarts in the same browser profile. **About Momentum** shows
+position across restarts in the same browser profile. Choose **List**, landscape
+**Tiles**, or portrait **Grid** above the library. List retains the Classic or
+Featured presentation and organization controls. Both artwork layouts keep
+compact game actions; opening a card shows a details dialog with description,
+screenshots, existing preview video, play history and Play.
+The browsing view and each view's scroll position are remembered separately.
+Grid has a separate **Grid cover** slot; existing covers fit without cropping
+when portrait art is missing, followed by icons or initials. Tiles still use
+background art and icons. No artwork setup is required. **About Momentum** shows
 the launcher build identity and platform. A selected game's **Folders** action
 opens recorded working, game and saves/settings directories where available;
 it never guesses a save location from a launch command.
+
+Landscape Tiles can preview an existing game video when selected by keyboard or
+controller, or hovered with the mouse. Artwork stays still until a half-second
+delay, then a single muted looping preview plays; portrait Grid stays static.
+In Edit, pause/scrub the video and choose **Capture frame for Tiles** to review
+and save a still image without changing the portrait cover.
+
+In Tiles/Grid, the sidebar navigates **All games**, **Favorites**,
+**Recently played**, and categories with game counts. Search and tags narrow the
+selected collection, which is remembered across restarts; List still shows the
+full library. Add game stays at the bottom, with less-used controls under
+**Settings & tools**, including About, playtime, backup, and presentation settings.
 
 The game editor separates **Game details — Steam** (**Get Steam details**) from
 **Artwork — SteamGridDB** in a compact **Find details & artwork online**
 section. Advanced search and key setup stay collapsed until needed, with an
 optional alternate search title and remembered SteamGridDB game ID. Choose
-background or icon artwork without renaming the game or changing its launch
+background, portrait grid cover or icon artwork without renaming the game or changing its launch
 command. A personal API key is stored privately outside the library; see the
 [user guide](USER-GUIDE.md#steamgriddb-artwork) for setup and removal.
 
@@ -142,7 +184,7 @@ rebuild by hand.
 - **Couch-friendly browsing:** gamepad navigation, menu focus and an on-screen
   keyboard, alongside familiar mouse and keyboard controls.
 - **A collection, not a pile:** categories, drag-to-reorder, search, favorites,
-  tags and recently played games.
+  tags and recently played games, with optional tiled browsing for larger libraries.
 - **Your own presentation:** drop or paste artwork, add video, look up Steam
   metadata, or grab a video frame as a cover.
 - **A little history:** playtime, launch counts, streaks and a weekly chart.
@@ -167,23 +209,41 @@ Momentum does not install system prerequisites or elevate itself. If a host
 dependency is missing, setup tells you what needs attention. Packages run as
 your user, so only approve installers from publishers you trust.
 
+The browser interface talks to a **loopback-only local server**, not a hosted
+account service. Keep it local; do not expose or reverse-proxy it to a network.
+Checksums verify package integrity, not publisher trust. Approved package scripts
+and game commands run with your user permissions, not in a sandbox.
+
+Installed packages have **Manage installation → Review uninstall**. You approve
+the exact removal plan; unchanged installer-owned files are removed while player
+state, modified files and shared engines are retained. **Remove from library**
+only removes the entry. **Remove cached installer** deletes an unused installer
+download, not a game; active installations and recovery data are protected.
+Newer package versions are indicated in the store; there is no automatic update.
+
 ## In the package store today
 
 The store groups packages by experience, and each card shows the runtime it
 uses.
 
-| Pillar | Game | Runtime | Package |
-|---|---|---|---|
-| OpenBOR | Marvel Infinity War | OpenBOR 6391 | 0.2.0 |
-| Momentum Mouse Arcade | Star Wars Trilogy Arcade | Supermodel | 0.2.1 |
-| Momentum Mouse Arcade | L.A. Machineguns | Supermodel | 0.2.2 |
-| Momentum Mouse Arcade | The House of the Dead 2 | Flycast | 0.3.0 |
-| Boomer Shooters | Brutal Doom | UZDoom | 0.3.0 |
-| Boomer Shooters | Slave Zero X: Episode Enyo | vkQuake | 0.3.0 |
+| Pillar | Game | Runtime |
+|---|---|---|
+| OpenBOR | Marvel Infinity War | OpenBOR 6391 |
+| OpenBOR | Ultimate Double Dragon 3 | OpenBOR 6391 |
+| Momentum Mouse Arcade | Star Wars Trilogy Arcade | Supermodel |
+| Momentum Mouse Arcade | L.A. Machineguns | Supermodel |
+| Momentum Mouse Arcade | The House of the Dead 2 | Flycast |
+| Momentum Mouse Arcade | Virtua Cop 2 | Flycast |
+| Momentum Mouse Arcade | Time Crisis II | MAME |
+| Boomer Shooters | Brutal Doom | UZDoom |
+| Boomer Shooters | Brutal Doom 64 | UZDoom |
+| Boomer Shooters | Slave Zero X: Episode Enyo | vkQuake |
 
 The [public distribution repository](https://github.com/jacobm36/momentum-distribution)
 hosts the catalog and installer downloads; no GitHub account is needed to obtain
-them. Launcher and package-authoring development currently remain private.
+them. It is separate from this public launcher repository. For current package
+versions, use the [store catalog](https://github.com/jacobm36/momentum-distribution/blob/main/catalog.json).
+Package-authoring development remains separate.
 
 You supply commercial base-game files, ROMs and BIOS files where required.
 Packages may bundle mod content or obtain a pinned release from its source;
@@ -216,9 +276,11 @@ To add an app-menu/Desktop shortcut, run `bash install.sh`.
 If you're testing a supplied candidate bundle, use its `start-candidate.sh`
 or isolated-test instructions instead.
 
-**Quick controls:** arrows to browse, **Enter** to play, **F** to favorite,
+**Quick controls:** arrows to browse, **Enter** to open details in Tiles/Grid
+(or play in List), **F** to favorite,
 **S** to sort, **T** for playtime, **Ctrl+Q** to exit.
-On a gamepad, use the D-pad and **A**; **Start** opens menu navigation.
+On a gamepad, use the D-pad and **A** to open a card's details (or play in List);
+choose **Play** to launch from details. **Start** opens menu navigation.
 Controller navigation pauses while any tracked game is running, while a launch
 request is pending, or whenever the launcher is hidden or unfocused. After
 returning, release the buttons and center the sticks before browsing resumes.
@@ -261,6 +323,17 @@ media-link fetching.
 Developers: the source checkout also includes `docs/development.md` for tests,
 build profiles, engine integration and release checks. It is not shipped in
 runtime-only deliveries.
+
+### Feedback and support
+
+This is an individual's noncommercial hobby project; support is best-effort.
+[Report a problem](https://github.com/jacobm36/momentum-core-launcher/issues)
+with the build shown in **About Momentum**, Linux distribution, X11/Wayland
+session, package version if relevant, and steps to reproduce. Review logs before
+sharing: remove personal paths, API keys and other private information. Do not
+upload ROMs, BIOS files, commercial game data or your complete player-state folder.
+Installer checks are not gameplay certification; please describe which controls,
+display settings or saved-state behavior you actually tested.
 
 ---
 

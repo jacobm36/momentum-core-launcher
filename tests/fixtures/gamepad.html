@@ -12,15 +12,22 @@ let running = new Set(), launchPending = false, padOn = false, focused = true, h
 let games = [{id: "first", name: "First"}, {id: "second", name: "Second"}], sel = "first", requests = 0, moves = 0;
 let resolveLaunch, rejectLaunch;
 let pads = [{buttons: Array.from({length: 17}, () => ({pressed: false, value: 0})), axes: [0, 0, 0, 0]}];
-Object.defineProperty(navigator, "getGamepads", {value: () => pads});
+let padReads = 0, idleDelay = null, frameRequests = 0;
+Object.defineProperty(navigator, "getGamepads", {value: () => { padReads++; return pads; }});
 Object.defineProperty(document, "hidden", {get: () => hidden});
 document.hasFocus = () => focused;
-window.requestAnimationFrame = () => {};
+window.requestAnimationFrame = () => { frameRequests++; };
+const realTimeout = window.setTimeout;
+window.setTimeout = (fn, delay, ...args) => {
+  if (fn.name === "pollPad") { idleDelay = delay; return 0; }
+  return realTimeout(fn, delay, ...args);
+};
 window.fetch = () => { requests++; return new Promise((resolve, reject) => { resolveLaunch = resolve; rejectLaunch = reject; }); };
 const hints = () => {}, sfx = () => {}, renderList = () => {}, renderDetail = () => {};
 const animOn = () => false, notify = () => {};
 const step = () => moves++, jump = () => moves++, jumpTo = () => moves++;
 const recent = () => [], favs = () => [], cycleSort = () => moves++, openStats = () => moves++;
+const tiledLibrary = () => false;
 const clearFilters = () => moves++, openAddGame = () => moves++;
 </script>
 <script src="/web/actions.js"></script>
@@ -48,6 +55,10 @@ const flush = async () => { await Promise.resolve(); await Promise.resolve(); aw
   check(!launchPending && running.size === 0 && $("#toast").textContent.includes("test failure"), "failed launch unlocks and reports error");
   focused = false; dispatchEvent(new Event("blur")); neutral(); button(true); pollPad();
   check(requests === 2, "unfocused launcher ignores input");
+  const readsBefore = padReads, framesBefore = frameRequests;
+  pollPad();
+  check(padReads === readsBefore && frameRequests === framesBefore && idleDelay === 250,
+    "suspended controller uses a low-frequency timer without reading pads or requesting frames");
   focused = true; pollPad();
   check(requests === 2, "focus regain requires neutral");
   neutral(); hidden = true; document.dispatchEvent(new Event("visibilitychange")); button(true); pollPad();
@@ -62,8 +73,12 @@ const flush = async () => { await Promise.resolve(); await Promise.resolve(); aw
   rejectLaunch(new Error("offline")); await flush();
   check(!launchPending && $("#toast").textContent.includes("offline"), "transport failure unlocks and reports error");
   pads = []; pollPad();
+  check(idleDelay === 250, "no controller uses low-frequency discovery");
   pads = [{buttons: [{pressed: true, value: 1}], axes: [0, 0]}]; pollPad();
   check(requests === 3, "reconnection with held input requires neutral");
+  const activeFrames = frameRequests;
+  neutral();
+  check(frameRequests > activeFrames, "connected neutral controller resumes frame-rate polling");
   const disclosure = document.createElement("details");
   disclosure.innerHTML = '<summary>Online lookup</summary><button>Hidden search</button>';
   document.body.append(disclosure);

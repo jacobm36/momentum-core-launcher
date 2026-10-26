@@ -33,7 +33,9 @@ import openbor
 import ownership
 
 DESC_FIELDS = ("name", "description", "tagline", "category", "tags")
-ART_FIELDS = ("icon", "cover", "video", "screenshots")
+ART_FIELDS = ("icon", "cover", "grid", "video", "screenshots")
+PRESENTATION_ASSETS = {"cover": "assets/cover.png", "grid": "assets/grid.png",
+                       "video": "assets/preview.mp4"}
 OWNERSHIP = {"managed", "borrowed", "user-state", "shared-dependency"}
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -197,6 +199,9 @@ def _merge_catalog(entry, defaults, prev_defaults, first_association):
                 out[k] = _json_copy(new)
             else:
                 out.pop(k, None)
+    for k in ART_FIELDS:
+        if k not in out and k not in prev_defaults and not _is_missing(defaults.get(k)):
+            out[k] = _json_copy(defaults[k])
     return out
 
 
@@ -626,6 +631,85 @@ class Installs:
             steps = self._dependency_steps()
             return self.jobs.submit("Prepare Flycast", steps, meta={"kind": "dependency"})
 
+    def list_installations(self):
+        directory = self._receipt_path("index").parent
+        ownership.safe_path(str(directory))
+        out = []
+        for path in sorted(directory.glob("*.json")):
+            receipt = self._load_receipt(path.stem)
+            if receipt is not None:
+                out.append(self._installation_summary(receipt))
+        return out
+
+    @staticmethod
+    def _installation_summary(receipt):
+        return {key: receipt.get(key) for key in
+                ("package_id", "package_version", "package_digest", "installation", "game_directory")}
+
+    def remove_cached_package(self, package_id, version):
+        with self.submit_lock, self.jobs.lock:
+            self._check_active_operations()
+            receipt = self._load_receipt(package_id)
+            if receipt and receipt["package_version"] == version and receipt["installation"] != "removed":
+                raise InstallError("Keep this installed version's installer for uninstall and recovery. Uninstall first.")
+            for job in self.jobs.jobs.values():
+                meta = job.get("meta") or {}
+                if meta.get("package_id") == package_id and meta.get("package_version") == version and (
+                        job["status"] in ("queued", "running", "cancel-requested", "awaiting-approval")
+                        or job.get("manual")
+                        or (self.jobs.paths(job["id"])["job_dir"] / "catalog-pending.json").exists()):
+                    raise InstallError("This installer is needed by an active job or recovery journal")
+            target = packages.snapshot_path(self.here, package_id, version).parent
+            ownership.safe_path(str(target))
+            packages.remove_package(self.here, package_id, version)
+
+    def submit_uninstall(self, package_id, trusted_digest):
+        with self.submit_lock:
+            self._check_active_operations()
+            previous = self._load_receipt(package_id)
+            if not previous or previous.get("installation") != "installed":
+                raise InstallError("No installed package receipt is available to uninstall")
+            version = previous["package_version"]
+            if trusted_digest != previous["package_digest"]:
+                raise InstallError("Trust approval must match the installed package digest")
+            # Retained support is the exact package snapshot, even after its download is retired.
+            cached = any(p["id"] == package_id and p["version"] == version
+                         for p in packages.list_packages(self.here))
+            if not cached:
+                support = ownership.safe_path(previous["paths"]["support"])
+                if packages.check(support)["digest"] != trusted_digest:
+                    raise InstallError("Retained uninstall support differs from the installed package")
+                packages.import_package(support, self.here)
+            detail = self.package_details(package_id, version)
+            if detail["digest"] != trusted_digest or not detail["package_supported"] or detail["platform_issues"]:
+                raise InstallError("Uninstall requires the exact supported installed package and platform")
+            manifest = detail["manifest"]
+            snapshot = packages.snapshot_path(self.here, package_id, version)
+            inputs = _json_copy(previous.get("inputs") or {})
+            inputs["games_root"] = str(Path(previous["game_directory"]).parent)
+            source = previous.get("locations", {}).get("source_reference")
+            if source is not None:
+                inputs["source_dir"] = source
+            base = dict(contract_version=manifest["contract_version"], package_id=package_id,
+                        package_version=version, package_digest=trusted_digest, package_root=str(snapshot),
+                        operation="uninstall", inputs=inputs, game_directory=previous["game_directory"],
+                        paths=previous["paths"], dependencies=previous["dependencies"],
+                        previous_receipt=previous, catalog_entry_id=previous["catalog"]["entry_id"])
+            steps = [
+                dict(name=f"Uninstall {phase}", protocol=True, approve_after=phase == "preflight",
+                     declared_steps=manifest["operations"]["uninstall"]["steps"],
+                     argv=["bash", manifest["operations"]["uninstall"]["entrypoint"],
+                           "--context", "{context_file}", "--phase", phase],
+                     cwd=str(snapshot), context=dict(base, phase=phase))
+                for phase in ("preflight", "apply")]
+            meta = dict(kind="install", operation="uninstall", package_id=package_id,
+                        package_version=version, package_digest=trusted_digest,
+                        game_directory=base["game_directory"], paths=base["paths"],
+                        manifest={"name": manifest["name"]}, install_enabled=True,
+                        catalog_defaults={**manifest["catalog"], "name": manifest["name"],
+                                          "icon": base["paths"]["icon"]})
+            return self.jobs.submit(f"Uninstall {manifest['name']}", steps, game=package_id, meta=meta)
+
     def submit_install(self, package_id, version, source_dir=None, games_root=None, catalog_entry_id=None,
                        trusted_digest=None, inputs=None):
         with self.submit_lock:
@@ -792,11 +876,15 @@ class Installs:
                     return "This game package lacks matching target evidence"
                 if preparing and meta.get("managed_fallback") != detail.get("managed_fallback"):
                     return "Isolated engine selection changed; start a new setup review."
-                if not preparing and (not meta.get("install_enabled") or not detail["install_enabled"]):
+                uninstalling = meta.get("operation") == "uninstall"
+                if uninstalling and (not detail["package_supported"] or detail["platform_issues"]
+                                     or not previous or previous["package_digest"] != meta["package_digest"]):
+                    return "Uninstall requires the exact supported installed package and platform"
+                if not uninstalling and not preparing and (not meta.get("install_enabled") or not detail["install_enabled"]):
                     if detail.get("compatibility"):
                         return detail["compatibility"]["title"] + ": " + detail["compatibility"]["message"]
                     return "This exact game package/software build lacks matching installer capability evidence"
-                if not preparing:
+                if not preparing and not uninstalling:
                     planned = job["steps"][-1]["context"].get("dependencies", {})
                     for runtime in ("flycast", "uzdoom", "mame"):
                         if runtime in planned and engines.identity(planned[runtime]) != engines.identity(
@@ -850,7 +938,12 @@ class Installs:
     def _validate_result(self, j, res, missing_user_state=()):
         res = copy.deepcopy(res)
         missing_user_state = set(missing_user_state)
-        ownership.reconcile(j, res, self.jobs.paths(j["id"]), missing_user_state=missing_user_state)
+        plan = ownership.reconcile(j, res, self.jobs.paths(j["id"]), missing_user_state=missing_user_state)
+        released = ownership.released_uninstall_resources(j, res, plan)
+        if any(r["path"] in released for r in res["resources"]):
+            res["resources"] = [r for r in res["resources"] if r["path"] not in released]
+            res["recovery_notes"].append(
+                "Uninstall released stale ownership records for absent or preserved modified files; no player edits were deleted.")
         if missing_user_state:
             res["resources"] = [r for r in res["resources"] if r["path"] not in missing_user_state]
             res["recovery_notes"].append(
@@ -867,16 +960,16 @@ class Installs:
                 retained = f"media/{gid}/package-icon-{resource['sha256']}.png"
                 if defaults.get("icon") == retained:
                     expected["icon"] = retained
-        if m["package_id"] in packages.OPENBOR_PACKAGES and isinstance(defaults, dict):
+        if isinstance(defaults, dict):
             assoc = self._load_receipt(m["package_id"])
             gid = (assoc or {}).get("catalog", {}).get("entry_id")
-            for field in ("cover", "video"):
+            for field, asset in PRESENTATION_ASSETS.items():
                 if not expected.get(field):
                     continue
-                source = Path(m["paths"]["support"]) / expected[field]
+                source = Path(m["paths"]["support"]) / asset
                 resource = next((r for r in res["resources"] if r["path"] == str(source)), None)
                 if resource:
-                    suffix = ".png" if field == "cover" else ".mp4"
+                    suffix = Path(asset).suffix
                     retained = f"media/{gid}/package-{field}-{resource['sha256']}{suffix}"
                     if defaults.get(field) == retained:
                         expected[field] = retained
@@ -930,7 +1023,9 @@ class Installs:
     def busy_for_game(self, entry_id):
         with self.jobs.lock:
             return any((j.get("meta") or {}).get("kind") == "install"
-                       and j["status"] in ("queued", "running", "cancel-requested")
+                       and (j["status"] in ("queued", "running", "cancel-requested")
+                            or (j["status"] == "awaiting-approval"
+                                and j["meta"].get("operation") == "uninstall"))
                        and entry_id in (j.get("game"), j["steps"][-1].get("context", {}).get("catalog_entry_id"))
                        for j in self.jobs.jobs.values())
 
@@ -966,6 +1061,7 @@ class Installs:
                 "working_directory": (res.get("catalog_proposal") or {}).get("working_directory"),
             },
             "dependencies": res.get("dependencies"),
+            "inputs": _json_copy(j["steps"][-1]["context"].get("inputs") or {}),
             "resources": res.get("resources"),
             "game_directory": res.get("game_directory"),
             "paths": _json_copy(m["paths"]),
@@ -988,6 +1084,15 @@ class Installs:
             entry_id = rec["catalog"]["entry_id"]
             existing = by_id.get(entry_id) if entry_id else None
             first = not bool(rec["catalog"]["associated_once"])
+            if existing is None and rec.get("installation") == "removed":
+                # Uninstall must not resurrect an entry the player already removed.
+                if journal is not None:
+                    marker = {"commit_version": 1, "job_id": rec["last_job_id"], "receipt": rec, "result": res}
+                    if recovery_policy:
+                        marker["recovery_policy"] = recovery_policy
+                    _write_atomic(journal, (json.dumps(marker, indent=2) + "\n").encode())
+                    _write_atomic(self._receipt_path(rec["package_id"]), (json.dumps(rec, indent=2) + "\n").encode())
+                return
             if existing is None:
                 if entry_id:
                     gid = entry_id
@@ -1031,19 +1136,22 @@ class Installs:
                     if recovery_policy:
                         marker["recovery_policy"] = recovery_policy
                     _write_atomic(journal, (json.dumps(marker, indent=2) + "\n").encode())
-            if first and rec["package_id"] in packages.OPENBOR_PACKAGES:
-                for field in ("cover", "video"):
-                    if not _is_missing(existing.get(field)) or not defaults.get(field):
+            if any(defaults.get(field) for field in PRESENTATION_ASSETS):
+                for field, asset in PRESENTATION_ASSETS.items():
+                    eligible = (_is_missing(existing.get(field)) if first else
+                                field not in existing and field not in rec["catalog"]["previous_defaults"])
+                    if not eligible or not defaults.get(field):
                         continue
-                    asset = "assets/cover.png" if field == "cover" else "assets/preview.mp4"
                     source = ownership.safe_path(str(Path(rec["paths"]["support"]) / asset))
                     if not source.is_relative_to(Path(rec["paths"]["support"])):
                         raise InstallError(f"Catalog {field} must be retained inside installed support")
                     resource = next((r for r in rec["resources"] if r["path"] == str(source)), None)
                     if not resource or resource["kind"] != "file" or resource["sha256"] != _hash_file(source):
                         raise InstallError(f"Catalog {field} has no validated retained resource")
-                    suffix = ".png" if field == "cover" else ".mp4"
+                    suffix = Path(asset).suffix
                     rel = Path("media") / rec["catalog"]["entry_id"] / f"package-{field}-{resource['sha256']}{suffix}"
+                    if defaults[field] not in (asset, rel.as_posix()):
+                        raise InstallError(f"Catalog {field} must use the standard package asset {asset}")
                     _write_atomic(self.here / rel, source.read_bytes())
                     defaults[field] = rel.as_posix()
                 res["catalog_proposal"]["defaults"] = _json_copy(defaults)
@@ -1084,7 +1192,7 @@ class Installs:
             return f"install result missing: {e}"
         try:
             with self._receipt_guard(m["package_id"]):
-                self._validate_result(j, res)
+                res = self._validate_result(j, res)
                 old = self._load_receipt(m["package_id"])
                 if old != j["steps"][-1]["context"].get("previous_receipt"):
                     raise InstallError("Installation receipt changed since preflight; reconcile before commit")
@@ -1201,7 +1309,7 @@ class Installs:
                         missing = set(policy["paths"])
                         if self._missing_user_state(job) != missing:
                             raise InstallError("Optional media changed after recovery approval; evidence retained")
-                    self._validate_result(job, result, missing_user_state=missing)
+                    result = self._validate_result(job, result, missing_user_state=missing)
                     if rec.get("last_job_id") != jid or rec.get("package_id") != result["package_id"]:
                         raise InstallError("Receipt recovery identity mismatch")
                     for key in ("package_version", "package_digest", "paths", "game_directory", "resources",

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Tile browsing regression</title>
+<link rel="stylesheet" href="/web/style.css">
+<style>#result{position:fixed;bottom:0;pointer-events:none;z-index:10;background:#05060c}</style></head><body>
+<aside><header><img src="/web/logo-full.png" alt="Momentum"><span>CORE LAUNCHER</span></header>
+<input id="search"><div id="library-count"></div><select id="library-view"><option value="list">List</option><option value="tiles">Tiles</option><option value="grid">Grid</option></select><button id="about">About</button>
+<div id="tagbar"></div><nav id="list"></nav><div class="side-btns">
+<button id="add">Add</button><button id="sort">Sort</button><button id="stats">Stats</button><button id="theme">Theme</button>
+<button id="panel">Panel</button><button id="rum">Rumble</button></div><footer id="hints"></footer></aside>
+<main id="stage"><p id="tile-help" hidden>Organize games and see full details in List view.</p>
+<div id="art"></div><video id="bg"></video><section id="detail"></section></main>
+<dialog id="dlg"></dialog><dialog id="odlg"></dialog><dialog id="qdlg"></dialog>
+<pre id="result">RUNNING</pre>
+<script>
+const sfx = () => {}, hints = () => {}, galleryStrip = () => "", applyAccent = () => {};
+let edited = null, folders = null, errors = [], requests = [];
+const openFolders = g => { folders = g.id; };
+const openStats = () => {}, cycleTheme = () => {};
+const notify = message => errors.push(message);
+const collection = Array.from({length:60}, (_, i) => ({
+  id:"game-" + i, name:"Game " + i + " with a long readable title", category:"Arcade",
+  tags:i % 2 ? ["Action"] : ["Action", "Mouse"], description:"A description.",
+  ...(i === 0 ? {cover:"web/logo-full.png", icon:"web/icon-256.png", video:"missing.webm"} : {}),
+  ...(i === 1 ? {icon:"web/icon-256.png"} : {}),
+  ...(i === 3 ? {cover:"missing-cover.png", icon:"web/icon-256.png"} : {}),
+  ...(i === 4 ? {icon:"missing-icon.png"} : {})
+}));
+let runningIds = [];
+window.fetch = async (path, options) => {
+  if (path === "/api/games") return {json:async () => ({games:collection, token:"test", running:runningIds, stats:{}})};
+  requests.push(path);
+  if (path.startsWith("/api/favorite/")) collection.find(g => path.endsWith(g.id)).favorite = JSON.parse(options.body).on;
+  if (path.startsWith("/api/delete/")) collection.splice(collection.findIndex(g => path.endsWith(g.id)), 1);
+  if (path === "/api/reorder") {
+    const items = JSON.parse(options.body).items;
+    const next = items.map(item => ({...collection.find(g => g.id === item.id), category:item.category}));
+    collection.splice(0, collection.length, ...next);
+  }
+  return {json:async () => ({status:"launched"})};
+};
+const reopened = sessionStorage.getItem("tiles-reopen") === "yes";
+if (!reopened) localStorage.clear();
+localStorage.setItem("mcl-anim", "off");
+</script>
+<script src="/web/core.js"></script><script src="/web/library.js"></script>
+<script src="/web/actions.js"></script><script src="/web/navigation.js"></script><script src="/web/gamepad.js"></script>
+<script>
+editor = g => { edited = g?.id; };
+ask = async () => true;
+const check = (value, message) => { if (!value) throw new Error(message); };
+const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+const key = (name, target = document.body) => target.dispatchEvent(new KeyboardEvent("keydown", {key:name, bubbles:true, cancelable:true}));
+const all = selector => [...document.querySelectorAll(selector)];
+const toggleView = () => {
+  $("#library-view").value = tiledLibrary() ? "list" : "tiles";
+  $("#library-view").dispatchEvent(new Event("change"));
+};
+(async () => {
+  applyLibraryView(); applyPanel(); await refresh(true);
+  if (reopened) {
+    check(tiledLibrary() && sel === "game-25" && $("#list").scrollTop === 400, "reload restores tile mode, selection and scroll");
+    toggleView();
+    check(!tiledLibrary() && $("#list").scrollTop === 500, "reload retains separate List scroll");
+    $("#result").textContent = "PASS: tiles, density, fallback, spatial input, filtering, state/reload, actions, refresh, media and List preservation";
+    return;
+  }
+  check(!tiledLibrary() && !document.body.classList.contains("tiles"), "List remains default");
+  localStorage.setItem("mcl-panel", "featured"); applyPanel();
+  $("#list").scrollTo({top:500, behavior:"instant"}); saveBrowsing();
+  toggleView();
+  check(tiledLibrary() && $("#stage").contains($("#list")) && $("#panel").hidden, "wide grid and independent panel setting");
+  check(all(".tile").length === 60 && $("#library-count").textContent === "60 games", "60 matching cards");
+  check(all(".catbtns, [draggable=true]").length === 0, "no misleading tile organization controls");
+  const tileDrag = new DragEvent("dragstart", {bubbles:true, cancelable:true, dataTransfer:new DataTransfer()});
+  all(".tile")[0].querySelector("img").dispatchEvent(tileDrag);
+  check(tileDrag.defaultPrevented && !dragging, "native image dragging cannot reorder tiles");
+  check(all(".tile")[0].querySelector(".tile-art img") && all(".tile")[1].querySelector(".tile-icon")
+    && !all(".tile")[2].querySelector("img"), "cover, icon and initial fallback");
+  const brokenCover = all(".tile")[3].querySelector("img");
+  brokenCover.dispatchEvent(new Event("error"));
+  check(brokenCover.classList.contains("tile-icon") && brokenCover.src.includes("icon-256"), "broken cover falls back to icon");
+  brokenCover.dispatchEvent(new Event("error"));
+  check(!all(".tile")[3].querySelector("img"), "broken icon leaves readable initial");
+  check(all('.tile[tabindex="0"]').length === 1, "one keyboard tab stop for tile collection");
+  const firstRow = all(".tile").filter(t => Math.abs(t.getBoundingClientRect().top - all(".tile")[0].getBoundingClientRect().top) < 2);
+  check(firstRow.length >= 4, "at least four columns: " + firstRow.length);
+  const viewport = $("#list").getBoundingClientRect();
+  const complete = all(".tile").filter(t => { const r = t.getBoundingClientRect(); return r.top >= viewport.top && r.bottom <= viewport.bottom; });
+  check(complete.length >= 8, "at least eight complete tiles: " + complete.length + " viewport " + viewport.height);
+  check($("#bg").paused && !$("#bg").getAttribute("src"), "no grid preview playback");
+  toggleView();
+  check($("#bg").getAttribute("src")?.includes("missing.webm"), "List restores selected-game video source");
+  toggleView();
+  check($("#bg").paused && !$("#bg").getAttribute("src"), "entering Tiles pauses and clears List video");
+  for (const id of ["play", "fav", "folders", "edit", "del"]) {
+    const r = $("#" + id).getBoundingClientRect();
+    check(r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, "visible action " + id);
+  }
+  check($("#list").scrollWidth <= $("#list").clientWidth + 1 && $("#detail").scrollWidth <= $("#detail").clientWidth + 1, "no horizontal overflow");
+  all(".tile")[0].click(); check(requests.length === 0 && sel === "game-0" && gameDetailsOpen(), "click opens details without launch");
+  closeGameDetails();
+  key("ArrowRight"); check(sel === "game-1", "keyboard right");
+  key("ArrowDown"); check(sel === "game-" + (1 + firstRow.length), "keyboard down follows row");
+  key("ArrowUp"); key("ArrowLeft"); check(sel === "game-0", "keyboard up and left");
+  key("ArrowLeft"); check(sel === "game-0", "spatial edge stays put");
+  selectedItem().focus(); key("ArrowRight", selectedItem());
+  check(document.activeElement.dataset.id === sel, "tile focus follows navigation");
+  key("Enter", selectedItem()); await tick();
+  check(gameDetailsOpen() && requests.length === 0, "Enter opens details without launch");
+  $("#play").click(); await tick();
+  check(requests.filter(p => p.startsWith("/api/launch/")).length === 1, "Play uses shared launch once");
+  closeGameDetails();
+  running.clear(); runningIds = [];
+  $("#library-view").focus(); key("ArrowRight", $("#library-view"));
+  check(sel === "game-1", "view control arrows never browse or launch");
+  // Force a different rendered width; movement must use current geometry.
+  $("#stage").style.maxWidth = "720px"; renderList();
+  select("game-0"); const cols = all(".tile").filter(t => Math.abs(t.getBoundingClientRect().top - all(".tile")[0].getBoundingClientRect().top) < 2).length;
+  moveTile("down"); check(sel === "game-" + cols && cols < firstRow.length, "resized row movement");
+  $("#stage").style.maxWidth = "";
+  const cutoff = firstRow.length + 1;
+  collection.forEach((g, i) => { g.category = i < cutoff ? "Short category" : "Rest"; });
+  renderList(); select("game-" + (cutoff - 1)); moveTile("down");
+  check(sel === "game-" + cutoff, "partial row crosses category at closest column: " + sel);
+  collection[0].favorite = true; stats["game-2"] = {last:Date.now()/1000, launches:1};
+  renderList(); check(all(".tile-section").length === 2 && all(".tile").length === 60, "All games shows each entry once");
+  jumpTo(favs(), "favorites"); check(sel === "game-0" && all(".tile").length === 1, "favorite shortcut opens collection");
+  jumpTo(recent(), "recent"); check(sel === "game-2" && all(".tile").length === 1, "recent shortcut opens collection");
+  chooseCollection("all");
+  for (const [sort] of SORTS) { localStorage.setItem("mcl-sort", sort); renderList(); check(all(".tile").length === 60, "sort " + sort); }
+  localStorage.setItem("mcl-sort", "cat"); collection[0].favorite = false; stats = {};
+  filter = "Game 1"; renderList();
+  check(sel === "game-1" && all(".tile").length === 11 && $("#library-count").textContent === "11 of 60 games", "search selects visible match");
+  toggleTag("Mouse"); check(all(".tile").length === 5 && visible().every(g => g.tags.includes("Mouse")), "search and tag intersection");
+  toggleTag("Action"); check(all(".tile").length === 5, "combined tags");
+  filter = "no such game"; renderList(); check(!sel && !$("#play") && all(".tile").length === 0, "empty filter clears stale launch");
+  key("Enter"); check(requests.filter(p => p.startsWith("/api/launch/")).length === 1, "empty results cannot launch");
+  clearFilters(); select("game-10"); $("#edit").click(); $("#folders").click();
+  check(edited === "game-10" && folders === "game-10", "shared edit and folder actions");
+  $("#fav").click(); await tick(); check(collection[10].favorite && selectedItem().querySelector(".star"), "favorite updates tile");
+  collection[10].name = "Edited title"; await refresh();
+  check(selectedItem().textContent.includes("Edited title") && $("#detail h1").textContent === "Edited title", "edited title refresh");
+  runningIds = ["game-10"]; await refresh();
+  check(selectedItem().querySelector(".dot") && $("#play").disabled, "running state refresh");
+  runningIds = []; await refresh();
+  $("#list").scrollTo({top:400, behavior:"instant"}); saveBrowsing(); selectedItem().focus({preventScroll:true});
+  const focus = document.activeElement.dataset.position; await refresh();
+  check($("#list").scrollTop === 400 && document.activeElement.dataset.position === focus, "refresh keeps scroll and focus");
+  $("#toast").textContent = "Launch failure stays visible";
+  await refresh();
+  check($("#toast").textContent === "Launch failure stays visible", "unchanged refresh preserves action feedback");
+  padNeedsNeutral = false; document.hasFocus = () => true;
+  select("game-" + cutoff); padAction(i => i === 15, 0, 0); check(sel === "game-" + (cutoff + 1), "controller right");
+  suspendPad(); padAction(i => i === 15, 0, 0); check(sel === "game-" + (cutoff + 1), "controller neutral guard");
+  padNeedsNeutral = false; running.add(sel); padAction(i => i === 13, 0, 0);
+  check(sel === "game-" + (cutoff + 1), "gameplay blocks grid movement"); running.clear();
+  const guarded = sel;
+  launchPending = true; padAction(i => i === 13, 0, 0); check(sel === guarded, "pending launch blocks grid movement"); launchPending = false;
+  document.hasFocus = () => false; padAction(i => i === 13, 0, 0); check(sel === guarded, "blur blocks grid movement"); document.hasFocus = () => true;
+  enterUi(); check(document.activeElement.id === "play" && !document.activeElement.classList.contains("tile"), "menu mode starts on actions instead of walking tiles");
+  moveFocus("left"); check(!document.activeElement.classList.contains("tile"), "menu mode skips tile collection"); leaveUi();
+  select("game-10"); await removeGame(collection.find(g => g.id === sel)); check(!collection.some(g => g.id === "game-10") && sel !== "game-10", "remove selects remaining game");
+  toggleView();
+  check(!tiledLibrary() && featuredPanel() && $("#stage").classList.contains("featured") && !$("#panel").hidden, "List retains Featured preference");
+  check($("#list").scrollTop === 500 && all(".catbtns").length > 0 && all("[draggable=true]").length > 0, "List scroll and organization restored");
+  const transfer = new DataTransfer(), source = document.querySelector('.item[data-id="game-0"]'), target = document.querySelector('.item[data-id="game-1"]');
+  source.dispatchEvent(new DragEvent("dragstart", {bubbles:true, dataTransfer:transfer}));
+  const bounds = target.getBoundingClientRect();
+  target.dispatchEvent(new DragEvent("drop", {bubbles:true, cancelable:true, dataTransfer:transfer, clientY:bounds.bottom}));
+  await tick();
+  check(collection[0].id === "game-1" && collection[1].id === "game-0" && !dragging, "List drag reorder still saves");
+  document.querySelector('.cat[data-cat="Rest"] [data-act="up"]').click(); await tick();
+  check(collection[0].category === "Rest", "List category move still saves");
+  localStorage.setItem("mcl-panel", "classic"); applyPanel(); renderDetail();
+  check(!$("#stage").classList.contains("featured") && $("#play"), "Classic retained");
+  toggleView(); select("game-25");
+  $("#list").scrollTo({top:400, behavior:"instant"}); saveBrowsing();
+  sessionStorage.setItem("tiles-reopen", "yes"); location.reload();
+})().catch(error => { $("#result").textContent = "FAIL: " + error.stack; });
+</script></body></html>

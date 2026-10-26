@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Tile preview regression</title>
+<link rel="stylesheet" href="/web/style.css"><style>#result{position:fixed;bottom:0;pointer-events:none;z-index:20;background:#05060c}</style></head><body>
+<aside><input id="search"><div id="library-count"></div>
+<select id="library-view"><option value="list">List</option><option value="tiles">Tiles</option><option value="grid">Grid</option></select>
+<div id="tagbar"></div><nav id="list"></nav><div class="side-btns"><button id="add">Add</button><button id="sort">Sort</button><button id="stats">Stats</button><button id="theme">Theme</button><button id="panel">Panel</button></div></aside>
+<main id="stage"><div id="art"></div><video id="bg"></video><section id="detail"></section></main>
+<dialog id="dlg"></dialog><dialog id="qdlg"></dialog><dialog id="odlg"></dialog>
+<pre id="result">RUNNING</pre>
+<script>
+localStorage.clear(); localStorage.setItem("mcl-view","tiles"); localStorage.setItem("mcl-anim","off");
+const sfx = () => {}, applyAccent = () => {}, hints = () => {}, galleryStrip = () => "";
+const openFolders = () => {}, cycleTheme = () => {}, openStats = () => {};
+let focused = true, hidden = false, reduceMotion = false, playCalls = 0, pauseCalls = 0, rejectPlay = false, requests = [], runningIds = [];
+document.hasFocus = () => focused;
+Object.defineProperty(document, "hidden", {get:() => hidden});
+const nativeMatchMedia = window.matchMedia;
+window.matchMedia = q => q.includes("prefers-reduced-motion") ? {get matches(){return reduceMotion;},addEventListener:() => {}} : nativeMatchMedia(q);
+const originalPlay = HTMLMediaElement.prototype.play, originalPause = HTMLMediaElement.prototype.pause;
+const nativeSource = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "src");
+Object.defineProperty(HTMLMediaElement.prototype, "src", {
+  get() { return this.classList.contains("tile-preview") ? this.dataset.requestedSource : nativeSource.get.call(this); },
+  set(value) { if (this.classList.contains("tile-preview")) this.dataset.requestedSource = value; else nativeSource.set.call(this,value); }
+});
+HTMLMediaElement.prototype.play = function() {
+  if (!this.classList.contains("tile-preview")) return Promise.resolve();
+  playCalls++;
+  if (rejectPlay) return Promise.reject(new Error("Simulated autoplay rejection"));
+  this.dispatchEvent(new Event("playing")); return Promise.resolve();
+};
+HTMLMediaElement.prototype.pause = function() { if (this.classList.contains("tile-preview")) pauseCalls++; };
+const collection = Array.from({length:40}, (_,i) => ({id:"g"+i,name:"Game "+i,category:"Arcade",tags:[],
+  cover:"web/logo-full.png", ...(i !== 2 ? {video:"video"+i+".webm"} : {})}));
+window.fetch = async (path, options) => {
+  if (path === "/api/games") return {json:async () => ({games:collection,stats:{},running:runningIds,token:"test"})};
+  requests.push(path); return {json:async () => ({status:"launched"})};
+};
+</script>
+<script src="/web/core.js"></script><script src="/web/library.js"></script><script src="/web/actions.js"></script>
+<script src="/web/navigation.js"></script><script src="/web/gamepad.js"></script><script src="/web/tile-preview.js"></script>
+<script>
+const check = (value, message) => { if (!value) throw new Error(message); };
+const wait = ms => new Promise(resolve => setTimeout(resolve,ms));
+const video = () => document.querySelector(".tile-preview");
+const cardFor = id => document.querySelector(`.tile[data-id="${id}"]`);
+const hover = id => cardFor(id).dispatchEvent(new PointerEvent("pointerover",{pointerType:"mouse",bubbles:true}));
+const leave = () => $("#list").dispatchEvent(new PointerEvent("pointerleave",{pointerType:"mouse"}));
+const view = mode => { $("#library-view").value = mode; $("#library-view").dispatchEvent(new Event("change")); };
+(async () => {
+  applyLibraryView(); await refresh(true);
+  if (new URLSearchParams(location.search).has("preview")) {
+    $("#result").textContent = "Preview ready"; return;
+  }
+  check(!video() && playCalls === 0, "static art before delay");
+  await wait(250); check(!video(), "no playback before 500ms");
+  select("g1"); await wait(300);
+  check(!video() && playCalls === 0, "rapid selection cancels old timer");
+  await wait(230);
+  const first = video();
+  check(first && first.closest(".tile").dataset.id === "g1" && playCalls === 1
+    && first.muted && first.loop && first.playsInline && first.classList.contains("on"), "one delayed muted looping preview");
+  check(cardFor("g1").querySelector("img") && requests.length === 0 && !topDlg(), "art underneath and no launch/details");
+  await refresh(); await wait(20);
+  check(video() === first && playCalls === 1, "periodic refresh preserves playing element/source");
+  select("g2");
+  check(!video() && !first.hasAttribute("src") && pauseCalls === 1, "selection releases old preview");
+  await wait(520); check(!video(), "game without video stays static");
+  hover("g0"); check(sel === "g0" && !topDlg() && !requests.length, "hover selects without opening or launch");
+  await wait(520); check(video()?.closest(".tile").dataset.id === "g0", "mouse hover starts selected preview");
+  cardFor("g0").dispatchEvent(new PointerEvent("pointerout",{pointerType:"mouse",bubbles:true,relatedTarget:$("#list")}));
+  check(!video(), "moving into a gap restores still artwork");
+  hover("g0"); await wait(520); check(video(), "hovering the selected tile again resumes");
+  leave(); check(!video(), "mouse leaving library restores art");
+  await refresh(); await wait(520); check(!video(), "refresh does not revive a mouse-abandoned preview");
+  selectedItem().focus(); await wait(520); check(video(), "keyboard focus resumes preview");
+  openGameDetails(); check(!video(), "details stops tile immediately");
+  await wait(520); check(!video(), "no tile playback behind details");
+  closeGameDetails(); await wait(520); check(video(), "closing details can resume selected tile after delay");
+  $("#dlg").showModal(); await wait(0); check(!video(), "any dialog stops background tile");
+  $("#dlg").close(); await wait(0);
+  select("g1"); selectedItem().focus();
+  const key = new KeyboardEvent("keydown",{key:"ArrowLeft",bubbles:true,cancelable:true});
+  selectedItem().dispatchEvent(key);
+  check(sel === "g0", "keyboard uses spatial selection");
+  await wait(520); check(video()?.closest(".tile").dataset.id === "g0", "keyboard navigation previews selected game");
+  for (const k in held) delete held[k];
+  padNeedsNeutral = false; uiMode = false; padAction(i => i === 15,0,0);
+  await wait(520); check(sel === "g1" && video()?.closest(".tile").dataset.id === "g1", "controller navigation previews without activation");
+  focused = false; dispatchEvent(new Event("blur")); check(!video(), "blur releases preview");
+  await refresh(); await wait(10); check(!video(), "unfocused refresh cannot play");
+  focused = true; dispatchEvent(new Event("focus")); await wait(520); check(video(), "focus resumes after delay");
+  hidden = true; document.dispatchEvent(new Event("visibilitychange")); check(!video(), "hidden page stops preview");
+  hidden = false; document.dispatchEvent(new Event("visibilitychange"));
+  view("grid"); await wait(520); check(!video(), "portrait Grid stays static");
+  view("list"); await wait(10); check(!video() && $("#bg").getAttribute("src"), "List retains background preview path");
+  view("tiles"); reduceMotion = true; syncTilePreview(); await wait(10); check(!video(), "reduced motion suppresses tile playback");
+  reduceMotion = false; requestTilePreview(); await wait(520);
+  const playing = video(); check(playing, "preview can resume after reduced motion");
+  $("#list").scrollTo({top:$("#list").scrollHeight,behavior:"instant"}); syncTilePreview();
+  check(!video() && !playing.hasAttribute("src"), "offscreen tile releases media");
+  $("#list").scrollTo({top:0,behavior:"instant"}); requestTilePreview(); await wait(520);
+  const failed = video(); check(failed, "visible tile resumes");
+  failed.dispatchEvent(new Event("error"));
+  check(!video() && !failed.getAttribute("src") && selectedItem().querySelector(".tile-preview-status"), "load error keeps still with visible explanation");
+  const beforeFailureRefresh = playCalls; await refresh(); await wait(520);
+  check(playCalls === beforeFailureRefresh && !video(), "failure not retried on each refresh");
+  rejectPlay = true; select("g0"); await wait(520);
+  check(!video() && selectedItem().textContent.includes("Preview unavailable"), "autoplay rejection falls back visibly");
+  rejectPlay = false; select("g1"); await wait(520);
+  check(video(), "a different selection can preview");
+  runningIds = ["g10"]; await refresh(); check(!video(), "any running game suppresses browsing playback");
+  runningIds = []; await refresh(); await wait(520); check(video(), "game exit resumes browsing preview");
+  const launched = video(); await launch(collection[1]);
+  check(!video() && !launched.hasAttribute("src") && requests.filter(p => p.startsWith("/api/launch/")).length === 1, "explicit launch releases tile and sends one request");
+  running.clear(); await refresh(); select("g0"); await wait(520);
+  filter = "nothing"; renderList(); check(!video() && !sel, "filter removing selected tile stops playback");
+  clearFilters(); select("g0"); dispatchEvent(new Event("pagehide"));
+  check(!video() && tilePreviewTimer === null, "pagehide cancels media and pending work");
+  $("#result").textContent = "PASS: delay, mouse/keyboard/controller, one preview, stable refresh, fallback, dialogs, focus, visibility, reduced motion, scrolling, launch and layouts";
+})().catch(error => { $("#result").textContent = "FAIL: " + error.stack; });
+</script></body></html>

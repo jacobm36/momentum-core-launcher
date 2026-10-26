@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Bounded motion regression</title>
+<link rel="stylesheet" href="/web/style.css"></head><body>
+<div class="art swap"></div><div class="grid"></div>
+<button class="item sel">Selected game</button><button id="play">Play</button>
+<div class="feature-art">Artwork</div>
+<div id="launching"><div class="ring"></div></div>
+<button id="jobsbtn" class="busy">Installing</button>
+<pre id="result">RUNNING</pre>
+<script>
+const $ = selector => document.querySelector(selector);
+let pageHidden = false;
+Object.defineProperty(document, "hidden", {get:() => pageHidden});
+</script>
+<script src="/web/shell.js"></script>
+<script>
+const check = (value, message) => { if (!value) throw new Error(message); };
+const style = selector => getComputedStyle($(selector));
+try {
+  for (const selector of [".grid", ".item.sel", "#play", ".feature-art", ".ring"]) {
+    check(style(selector).animationName === "none", selector + " has no idle animation");
+  }
+  check(style(".art").animationName === "artin"
+    && style(".art").animationIterationCount === "1", "artwork retains a finite entry transition");
+  check(style("#launching").visibility === "hidden", "inactive launch overlay is not painted");
+  $("#launching").classList.add("on");
+  check(style(".ring").animationName === "spin"
+    && style("#launching").visibility === "visible", "actual launch retains visible spinner");
+  $("#launching").classList.remove("on");
+  check(style(".ring").animationName === "none", "spinner stops immediately after launch overlay closes");
+  check(style("#jobsbtn").animationName === "jpulse", "active installation feedback retained");
+  pageHidden = true; document.dispatchEvent(new Event("visibilitychange"));
+  check(document.body.classList.contains("page-hidden")
+    && style("#jobsbtn").animationPlayState === "paused", "hidden page pauses recurring activity feedback");
+  pageHidden = false; document.dispatchEvent(new Event("visibilitychange"));
+  check(!document.body.classList.contains("page-hidden")
+    && style("#jobsbtn").animationPlayState === "running", "visible page resumes activity feedback");
+  document.body.classList.add("noanim"); $("#launching").classList.add("on");
+  check(style(".art").animationName === "none" && style(".ring").animationName === "none"
+    && style("#launching").display === "none", "effects-off preference still honored");
+  $("#result").textContent = "PASS: static decoration, finite entry, launch-only spinner, hidden-page suspension and effects preference";
+} catch (error) { $("#result").textContent = "FAIL: " + error.stack; }
+</script></body></html>

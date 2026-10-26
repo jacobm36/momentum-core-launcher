@@ -1,7 +1,13 @@
 // Launching, favorites, removal, media upload and the game editor.
 async function launch(g) {
+  if (g.install_status === "removed") {
+    notify("This package was uninstalled. Set it up again from the store before playing.", { kind: "warn", title: g.name });
+    return;
+  }
   if (launchPending || running.has(g.id)) return;
   launchPending = true;
+  if (typeof stopTilePreview === "function") stopTilePreview();
+  document.querySelector("#game-details video")?.pause();
   try {
     $("#toast").textContent = "Launching…";
     const r = await fetch(`/api/launch/${g.id}`, { method: "POST", headers: { "X-Token": token } });
@@ -43,8 +49,8 @@ async function removeGame(g) {
   await refresh(); select(next && next !== g.id ? next : flat()[0]?.id);
 }
 
-const ACCEPT = { cover: "image/*", icon: "image/*", video: "video/mp4,video/webm", shot: "image/*" };
-const LABEL = { cover: "Background art", icon: "Icon", video: "Background video", shot: "Screenshot" };
+const ACCEPT = { cover: "image/*", grid: "image/png,image/jpeg,image/webp", icon: "image/*", video: "video/mp4,video/webm", shot: "image/*" };
+const LABEL = { cover: "Background art", grid: "Grid cover", icon: "Icon", video: "Background video", shot: "Screenshot" };
 const extOf = f => (f.name.split(".").pop() || "").toLowerCase();
 const kindOfFile = f => f.type.startsWith("video/") ? "video" : f.type.startsWith("image/") ? "cover" : null;
 
@@ -57,6 +63,7 @@ async function sendMedia(id, kind, p) {
 
 function editor(g, manual = false) {
   if (!g && !manual) return openAddGame();
+  if (typeof stopTilePreview === "function") stopTilePreview();
   const isNew = !g, d = $("#dlg"), f = $("#form"), pending = {}, blobs = [], shots = [];
   g = g || { tags: [] };
   const cats = [...new Set(games.map(x => x.category).filter(Boolean))];
@@ -67,7 +74,14 @@ function editor(g, manual = false) {
     <div class="preview" id="pv-${k}"></div>
     <div class="slot-in"><input type="file" name="${k}" accept="${ACCEPT[k]}"><input type="url" name="url-${k}" placeholder="…or paste a link (https://)"></div>
     <small class="drop-hint">Drop a file here${k === "cover" ? " or paste an image" : ""}.
-    ${g[k] ? `<a href="#" data-clear="${k}">Remove current</a>` : ""}${k === "video" ? ' <a href="#" id="frame" hidden>Use current frame as cover</a>' : ""}</small></div>`;
+    ${g[k] ? `<a href="#" data-clear="${k}">Remove current</a>` : ""}</small>
+    ${k === "video" ? `<div id="frame-tools" hidden>
+      <p class="lookup-hint">Find a good moment in the video, then capture tile artwork. Save the game to apply it; portrait Grid cover stays unchanged.</p>
+      <div class="frame-buttons"><button type="button" id="frame-back">Back 1s</button><button type="button" id="frame-pause">Play preview</button><button type="button" id="frame-next">Forward 1s</button></div>
+      <button type="button" id="frame" disabled>Capture frame for Tiles</button>
+      <p id="frame-status" role="status">Load a video frame to capture artwork.</p>
+      <div id="frame-review" hidden><img alt="Captured tile artwork preview"><p>This frame is staged as Background art. Choose Save to apply it.</p><button type="button" id="frame-discard">Discard captured frame</button></div>
+    </div>` : ""}</div>`;
   f.innerHTML = `<h2>${isNew ? "Add game" : "Edit " + esc(g.name)}</h2>
     <label>Name *<input name="name" required value="${esc(g.name || "")}"></label>
     <label>Launch command or script path *<input name="exec" required value="${esc(g.exec || "")}" placeholder="/home/you/Games/game.sh"></label>
@@ -104,7 +118,7 @@ function editor(g, manual = false) {
           <button type="button" id="sgdb-save-key">Save / remove key</button></details>
       </fieldset>
     </details>
-    ${["cover", "icon", "video"].map(slot).join("")}
+    ${["cover", "grid", "icon", "video"].map(slot).join("")}
     <div class="slot" data-kind="shot"><div class="slot-h">Screenshots</div><div class="shotgrid" id="shotgrid"></div>
       <div class="slot-in"><input type="file" name="shot" accept="image/*" multiple><input type="url" name="url-shot" placeholder="…or paste an image link and press Enter"></div>
       <small class="drop-hint">Drop images here. Up to 24 per game.</small></div>
@@ -112,13 +126,56 @@ function editor(g, manual = false) {
     <div class="padhint" ${padOn ? "" : "hidden"}><kbd>D-pad</kbd>Move <kbd>A</kbd>Select / type <kbd>Start</kbd>Save <kbd>B</kbd>Cancel</div>
     <div class="btns"><button type="button" id="cancel">Cancel</button><button type="submit" class="primary">Save</button></div>`;
 
+  let frameGeneration = 0, beforeFrame, hasCapturedFrame = false, frameCapturing = false;
+  const clearFrameReview = () => {
+    frameGeneration++;
+    frameCapturing = false;
+    hasCapturedFrame = false;
+    $("#frame-review").hidden = true;
+    $("#frame-review img").removeAttribute("src");
+  };
   const preview = k => {
     const el = $("#pv-" + k), p = pending[k], src = p ? (p.file ? (p.blobUrl ||= URL.createObjectURL(p.file)) : p.url) : g[k] ? url(g[k]) : "";
     if (p?.blobUrl) blobs.push(p.blobUrl);
+    if (k === "video") {
+      frameGeneration++;
+      frameCapturing = false;
+      el.querySelector("video")?.pause();
+    }
     el.innerHTML = !src ? "" : k === "video" ? `<video src="${esc(src)}" controls muted preload="metadata"></video>` : `<img src="${esc(src)}" alt="">`;
-    if (k === "video") $("#frame").hidden = !src;
+    if (k === "video") {
+      $("#frame-tools").hidden = !src;
+      $("#frame").disabled = true;
+      $("#frame-status").textContent = "Load a video frame to capture artwork.";
+      const video = el.querySelector("video");
+      if (video) {
+        const update = () => {
+          if ($("#pv-video video") !== video || !d.open) return;
+          $("#frame").disabled = frameCapturing || video.readyState < 2 || video.seeking || !video.videoWidth || !video.videoHeight;
+          $("#frame-pause").textContent = video.paused ? "Play preview" : "Pause preview";
+        };
+        for (const event of ["loadeddata", "canplay", "seeking", "seeked", "play", "pause"]) video.addEventListener(event, update);
+        video.addEventListener("loadeddata", () => {
+          if ($("#pv-video video") !== video || !d.open) return;
+          $("#frame-status").textContent = "Pause or scrub to a frame, then choose Capture frame for Tiles.";
+        });
+        video.onerror = () => {
+          if ($("#pv-video video") !== video || !d.open) return;
+          $("#frame").disabled = true;
+          $("#frame-status").textContent = "Video could not load. Choose a local video file, or save a video link first and reopen Edit.";
+        };
+      }
+    }
   };
-  const setPending = (k, p) => { pending[k] = p; if (!p.file) f.elements[k].value = ""; f.elements["url-" + k].value = p.url || ""; preview(k); };
+  const setPending = (k, p, captured = false) => {
+    if (k === "cover" && !captured) {
+      clearFrameReview();
+      const video = $("#pv-video video");
+      $("#frame").disabled = !video || video.readyState < 2 || video.seeking;
+    }
+    pending[k] = p; if (!p.file) f.elements[k].value = "";
+    f.elements["url-" + k].value = p.url || ""; preview(k);
+  };
   wireSteamGridDB(f, setPending);
   f.querySelectorAll("input,select,textarea").forEach(input => {
     input.oninvalid = () => {
@@ -127,10 +184,14 @@ function editor(g, manual = false) {
       }
     };
   });
-  ["cover", "icon", "video"].forEach(k => {
+  ["cover", "grid", "icon", "video"].forEach(k => {
     preview(k);
     f.elements[k].onchange = e => { const file = e.target.files[0]; if (file) setPending(k, { file }); };
-    f.elements["url-" + k].onchange = e => { const v = e.target.value.trim(); if (v) setPending(k, { url: v }); else delete pending[k], preview(k); };
+    f.elements["url-" + k].onchange = e => {
+      const v = e.target.value.trim();
+      if (v) setPending(k, {url:v});
+      else { if (k === "cover") clearFrameReview(); delete pending[k]; preview(k); }
+    };
     const s = f.querySelector(`.slot[data-kind="${k}"]`);
     s.ondragover = e => { if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); s.classList.add("over"); } };
     s.ondragleave = () => s.classList.remove("over");
@@ -139,16 +200,71 @@ function editor(g, manual = false) {
   f.onpaste = e => { const file = [...e.clipboardData.files].find(x => x.type.startsWith("image/")); if (file) { e.preventDefault(); setPending("cover", { file: new File([file], "pasted." + (file.type.split("/")[1] || "png"), { type: file.type }) }); } };
   f.querySelectorAll("[data-clear]").forEach(a => a.onclick = async e => {
     e.preventDefault(); const k = a.dataset.clear;
+    if (k === "cover") clearFrameReview();
     await post(`/api/clear/${g.id}/${k}`, {}); g[k] = null; delete pending[k]; a.remove(); ver = Date.now(); preview(k); await refresh(); renderDetail();
   });
-  $("#frame").onclick = e => {
-    e.preventDefault();
-    const v = $("#pv-video video"); if (!v) return;
+  const seekFrame = delta => {
+    const video = $("#pv-video video");
+    if (!video || !Number.isFinite(video.duration)) {
+      $("#frame-status").textContent = "Wait for the video to load before seeking."; return;
+    }
+    video.pause();
+    video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + delta));
+  };
+  $("#frame-back").onclick = () => seekFrame(-1);
+  $("#frame-next").onclick = () => seekFrame(1);
+  $("#frame-pause").onclick = () => {
+    const video = $("#pv-video video");
+    if (!video) return;
+    if (video.paused) video.play().catch(error => {
+      if ($("#pv-video video") !== video || !d.open) return;
+      console.warn("Editor video preview could not play.", error);
+      $("#frame-status").textContent = "Video could not play. Choose a local video file, or save the link first.";
+    });
+    else video.pause();
+  };
+  $("#frame").onclick = () => {
+    const v = $("#pv-video video"), status = $("#frame-status");
+    if (!v || v.readyState < 2 || v.seeking || !v.videoWidth || !v.videoHeight) {
+      status.textContent = "Wait for a loaded, stable video frame before capturing."; return;
+    }
+    v.pause();
+    const generation = ++frameGeneration;
+    frameCapturing = true;
+    $("#frame").disabled = true;
+    status.textContent = "Capturing frame...";
     try {
       const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight;
       c.getContext("2d").drawImage(v, 0, 0);
-      c.toBlob(b => b ? setPending("cover", { file: new File([b], "frame.jpg", { type: "image/jpeg" }) }) : ($("#ferr").textContent = "Couldn't grab a frame."), "image/jpeg", 0.92);
-    } catch { $("#ferr").textContent = "Frames can only be grabbed from videos on this computer: upload the file, or save first."; }
+      c.toBlob(blob => {
+        if (!d.open || generation !== frameGeneration || $("#pv-video video") !== v) return;
+        frameCapturing = false;
+        $("#frame").disabled = false;
+        if (!blob) { status.textContent = "Could not capture this frame. Try another moment in the video."; return; }
+        if (!hasCapturedFrame) beforeFrame = pending.cover;
+        setPending("cover", {file:new File([blob], "tile-frame.jpg", {type:"image/jpeg"})}, true);
+        hasCapturedFrame = true;
+        $("#frame-review img").src = pending.cover.blobUrl;
+        $("#frame-review").hidden = false;
+        status.textContent = `Captured ${c.width} x ${c.height}. Review the tile image below, then Save the game.`;
+      }, "image/jpeg", 0.92);
+    } catch (error) {
+      console.warn("Video frame capture failed.", error);
+      frameCapturing = false;
+      $("#frame").disabled = false;
+      status.textContent = "Frame capture requires a local or already saved video. Choose a file from this computer, or save the video link and reopen Edit.";
+    }
+  };
+  $("#frame-discard").onclick = () => {
+    frameGeneration++;
+    frameCapturing = false;
+    if (beforeFrame) setPending("cover", beforeFrame);
+    else {
+      delete pending.cover;
+      f.elements.cover.value = ""; f.elements["url-cover"].value = "";
+      preview("cover"); clearFrameReview();
+    }
+    $("#frame-status").textContent = "Captured frame discarded. Your previous artwork choice is unchanged.";
   };
 
   const tagList = () => f.elements.tags.value.split(",").map(t => t.trim()).filter(Boolean);
@@ -224,11 +340,21 @@ function editor(g, manual = false) {
   const snap = () => JSON.stringify([...new FormData(f)].filter(([, v]) => typeof v === "string"));
   const before = snap();
   f.dirty = () => snap() !== before || Object.keys(pending).length > 0 || shots.length > 0;
-  d.onclose = () => blobs.forEach(URL.revokeObjectURL);
-  $("#cancel").onclick = () => d.close();
+  let editorReleased = false;
+  const releaseEditor = () => {
+    if (editorReleased) return;
+    editorReleased = true;
+    frameGeneration++;
+    const video = $("#pv-video video");
+    if (video) { video.pause(); video.removeAttribute("src"); video.load(); }
+    blobs.forEach(URL.revokeObjectURL);
+  };
+  d.onclose = () => { if (!d.open) releaseEditor(); };
+  $("#cancel").onclick = () => { releaseEditor(); d.close(); };
   f.onsubmit = async e => {
     e.preventDefault();
     const v = Object.fromEntries(new FormData(f).entries()), err = $("#ferr");
+    if (frameCapturing) { err.textContent = "Wait for frame capture to finish before saving."; return; }
     const r = await post("/api/save", { id: g.id, ...v, tags: v.tags.split(",") }), j = await r.json();
     if (j.error) { err.textContent = j.error; sfx("err"); return; }
     g.id = j.id; // so a retry after a failed upload edits this game instead of adding another
@@ -244,7 +370,7 @@ function editor(g, manual = false) {
       if (u.error) { err.textContent = `Screenshot: ${u.error}. Remove it or fix it, then Save again.`; sfx("err"); return; }
       shots.splice(shots.indexOf(p), 1);
     }
-    d.close(); sfx("ok"); ver = Date.now(); await refresh(); select(j.id);
+    releaseEditor(); d.close(); sfx("ok"); ver = Date.now(); await refresh(); select(j.id);
   };
   d.showModal(); sfx("open");
 }

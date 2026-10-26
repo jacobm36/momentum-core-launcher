@@ -6,10 +6,11 @@
 <script>
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
-let games = [{id:"miw",name:"Marvel Infinity War",cover:"cover.png",icon:"icon.png",video:"preview.mp4"}];
+let games = [{id:"miw",name:"Marvel Infinity War",cover:"cover.png",screenshots:["screenshot.png"],icon:"icon.png",video:"preview.mp4"}];
 let sel = "miw", shown = null, ver = 1, stats = {}, running = new Set(), tagSel = new Set(), filter = "";
 let featured = false, rejectVideo = false, playResolve;
 const featuredPanel = () => featured;
+const tiledLibrary = () => false;
 const galleryStrip = () => "";
 const applyAccent = () => {};
 const hue = () => 1;
@@ -23,7 +24,7 @@ $("#bg").pause = () => {};
 const check = (value, message) => { if (!value) throw new Error(message); };
 (async () => {
   renderDetail();
-  check(!$("#art").hidden, "artwork stays until video starts");
+  check(!$("#art").hidden && $("#art").style.background.includes("screenshot.png"), "screenshot stays until video starts");
   $("#bg").onplaying(); playResolve();
   check($("#art").hidden && $("#bg").classList.contains("on"), "classic video excludes overlapping artwork");
   featured = true; renderDetail(); $("#bg").onplaying(); playResolve();
@@ -33,6 +34,19 @@ const check = (value, message) => { if (!value) throw new Error(message); };
   check(!$("#art").hidden && !$("#bg").classList.contains("on"), "failed video restores artwork");
   rejectVideo = true; renderDetail(); await new Promise(resolve => setTimeout(resolve, 0));
   check(!$("#art").hidden && !$("#bg").classList.contains("on"), "autoplay failure restores artwork");
+  rejectVideo = false;
+  let hidden = true, plays = 0, pauses = 0;
+  Object.defineProperty(document, "hidden", {configurable:true, get:() => hidden});
+  $("#bg").play = () => { plays++; return Promise.resolve(); };
+  $("#bg").pause = () => { pauses++; };
+  renderDetail();
+  check(plays === 0 && pauses > 0, "hidden Classic refresh does not play video");
+  hidden = false; running.add("miw"); renderDetail();
+  check(plays === 0, "running game suppresses Classic video");
+  running.clear(); renderDetail(); check(plays === 1, "visible idle Classic can play");
+  games.push({id:"icon",name:"Icon only",icon:"icon.png"}); sel = "icon"; renderDetail();
+  check($("#art").style.background.includes("icon.png") && !$("#bg").hasAttribute("src"),
+    "Classic falls back to icon without a screenshot or cover");
   games.push({id:"still",name:"Still image",cover:"still.png"}); sel = "still"; renderDetail();
   check(!$("#art").hidden && !$("#bg").hasAttribute("src") && $("#art").style.background.includes("still.png"),
     "image-only game restores artwork and clears video");

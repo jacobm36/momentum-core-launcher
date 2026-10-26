@@ -4,6 +4,7 @@ MCL_ARCADE_TESTS=1 python3 -m unittest tests.test_arcade_installs
 Uses official native software only for isolated prerequisite/command verification.
 """
 import contextlib
+import copy
 import importlib.util
 import io
 import json
@@ -38,8 +39,8 @@ class ArcadeInstalls(unittest.TestCase):
         return runner.get(jid)
 
     def exercise(self, game_id, software_missing=False, wrong_build=False):
-        version = {'virtua-cop-2': '0.1.2', 'star-wars-trilogy-arcade': '0.2.1',
-                   'l-a-machineguns': '0.2.2'}[game_id]
+        version = {'virtua-cop-2': '0.1.3', 'star-wars-trilogy-arcade': '0.2.2',
+                   'l-a-machineguns': '0.2.3'}[game_id]
         archive = PACKAGE_REPO / 'dist' / f'{game_id}-{version}.zip'
         source_package = PACKAGE_REPO / game_id / 'package'
         profile = json.loads((source_package / 'profile.json').read_text())
@@ -137,8 +138,19 @@ else: sys.exit('Game/emulator launch prohibited in this test')
             catalog_path = app / 'games.json'
             catalog_path.write_text('[]')
             env = {'HOME': str(home), 'PATH': str(tools) + ':' + os.environ['PATH']}
-            with mock.patch.dict(os.environ, env):
+            with contextlib.ExitStack() as overrides, mock.patch.dict(os.environ, env):
                 info = packages.import_package(archive, app)
+                if os.environ.get('MCL_CANDIDATE_EVIDENCE') == '1':
+                    evidence_path = Path(installs.__file__).parent / 'docs/arcade-installer-evidence.json'
+                    original_read = Path.read_text
+                    evidence = json.loads(evidence_path.read_text())
+                    record = copy.deepcopy(next(r for r in evidence['packages'] if r['id'] == game_id))
+                    record.update(version=version, digest=info['digest'], gameplay='not-tested-for-this-package')
+                    evidence['packages'].insert(0, record)
+
+                    def read(path, *args, **kwargs):
+                        return json.dumps(evidence) if path == evidence_path else original_read(path, *args, **kwargs)
+                    overrides.enter_context(mock.patch.object(Path, 'read_text', read))
                 runner = jobs.Jobs(app / 'jobs')
                 inst = installs.Installs(app, threading.Lock(), lambda: json.loads(catalog_path.read_text()),
                                         lambda games: installs._write_atomic(catalog_path, json.dumps(games).encode()), runner)
@@ -176,6 +188,12 @@ else: sys.exit('Game/emulator launch prohibited in this test')
                     self.assertEqual((source / 'user-save').read_text(), 'preserve original')
                     # Construct exact launch command and seed isolated state WITHOUT execution.
                     support = Path(receipt['paths']['support'])
+                    game = json.loads(catalog_path.read_text())[0]
+                    manifest = json.loads((support / 'package.json').read_text())
+                    self.assertEqual(game['description'], manifest['catalog']['description'])
+                    for field, asset in installs.PRESENTATION_ASSETS.items():
+                        self.assertTrue(game[field].startswith('media/'), game)
+                        self.assertEqual((app / game[field]).read_bytes(), (support / asset).read_bytes())
                     spec = importlib.util.spec_from_file_location('arcade_launch', support / 'launch.py')
                     module = importlib.util.module_from_spec(spec)
                     with mock.patch.object(sys, 'dont_write_bytecode', True):
@@ -193,15 +211,76 @@ else: sys.exit('Game/emulator launch prohibited in this test')
                         module.build_command(Path(receipt['game_directory']), cwd,
                                              inst.package_details(game_id, version)['dependencies']['supermodel']['root'])
                         self.assertEqual(config.read_text(), 'user settings')
+                        seed_name = 'swtrilgy.nv' if game_id.startswith('star-') else 'lamachin.nv'
+                        nvram = cwd / 'NVRAM' / seed_name
+                        self.assertEqual(nvram.read_bytes(), (support / 'presets' / seed_name).read_bytes())
+                        nvram.write_bytes(b'player state')
+                        module.build_command(Path(receipt['game_directory']), cwd,
+                                             inst.package_details(game_id, version)['dependencies']['supermodel']['root'])
+                        self.assertEqual(nvram.read_bytes(), b'player state')
                     else:
                         self.assertIn('--command=sh', command)
                         self.assertIn(str(receipt['paths']['state']), command)
                         self.assertIn('config:Dreamcast.Region=0', command)
                         self.assertIn('config:rend.ThreadedRendering=no', command)
+                        mapping = Path(receipt['paths']['state']) / 'config/flycast/mappings/SDL_Default Mouse_HDR-0061.cfg'
+                        self.assertEqual(mapping.read_bytes(), (support / 'presets' / mapping.name).read_bytes())
+                        self.assertIn('bind1 = 1:reload', mapping.read_text())
+                        mapping.write_text('personal binding')
+                        module.build_command(Path(receipt['game_directory']), Path(receipt['paths']['state']))
+                        self.assertEqual(mapping.read_text(), 'personal binding')
                     second = inst.submit_install(game_id, version, str(source), trusted_digest=info['digest'])
                     self.assertEqual(self.wait(runner, second)['status'], 'awaiting-approval')
                     runner.cancel(second)
                     self.assertEqual(inst._load_receipt(game_id), receipt)
+                    with self.assertRaisesRegex(installs.InstallError, "Trust approval"):
+                        inst.submit_uninstall(game_id, "sha256:" + "0" * 64)
+                    with self.assertRaisesRegex(installs.InstallError, "Uninstall first"):
+                        inst.remove_cached_package(game_id, version)
+                    if game_id == 'virtua-cop-2':
+                        # Historical installs may have lost their local intake cache.
+                        packages.remove_package(app, game_id, version)
+                    before_uninstall = inst._load_receipt(game_id)
+                    cancelled = inst.submit_uninstall(game_id, info['digest'])
+                    review = self.wait(runner, cancelled)
+                    self.assertEqual(review['status'], 'awaiting-approval', review)
+                    self.assertTrue(Path(receipt['paths']['launcher']).is_file())
+                    runner.cancel(cancelled)
+                    self.assertEqual(inst._load_receipt(game_id), before_uninstall)
+                    custom = Path(receipt['game_directory']) / 'personal-file.txt'
+                    custom.write_text('keep personal file')
+                    wrapper = Path(receipt['paths']['launcher'])
+                    wrapper.write_text('keep edited wrapper')
+                    # Real public maintenance entrypoint, not a hand-constructed test job.
+                    uninstall = inst.submit_uninstall(game_id, info['digest'])
+                    review = self.wait(runner, uninstall)
+                    self.assertEqual(review['status'], 'awaiting-approval', review)
+                    self.assertEqual(review['plan']['operation'], 'uninstall')
+                    if game_id == 'virtua-cop-2':
+                        with mock.patch.object(inst, 'write_games', side_effect=OSError('catalog interrupted')):
+                            self.assertIs(inst.approve(uninstall, review['plan_digest']), True)
+                            interrupted = self.wait(runner, uninstall)
+                            self.assertEqual(interrupted['status'], 'failed', interrupted)
+                            self.assertTrue(interrupted['manual'])
+                        inst.recover_pending_catalog()
+                    else:
+                        self.assertIs(inst.approve(uninstall, review['plan_digest']), True)
+                    removed = self.wait(runner, uninstall)
+                    self.assertEqual(removed['status'], 'succeeded', removed)
+                    self.assertEqual(inst._load_receipt(game_id)['installation'], 'removed')
+                    self.assertNotIn('exec', json.loads(catalog_path.read_text())[0])
+                    if runtime == 'supermodel':
+                        self.assertEqual(nvram.read_bytes(), b'player state')
+                    else:
+                        self.assertEqual(mapping.read_text(), 'personal binding')
+                    self.assertEqual((source / 'user-save').read_text(), 'preserve original')
+                    self.assertTrue(support.is_dir())
+                    self.assertEqual(custom.read_text(), 'keep personal file')
+                    self.assertEqual(wrapper.read_text(), 'keep edited wrapper')
+                    self.assertNotIn(str(wrapper), {r['path'] for r in inst._load_receipt(game_id)['resources']})
+                    inst.remove_cached_package(game_id, version)
+                    self.assertEqual(packages.list_packages(app), [])
+                    self.assertEqual(inst._load_receipt(game_id)['installation'], 'removed')
                 finally:
                     runner.close()
 

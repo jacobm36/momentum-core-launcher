@@ -5,15 +5,16 @@ One window to launch all your games.
 ## Finding your place and game folders
 
 The library count above the list shows total entries, or matching entries out
-of that total when search/tag filters are active. Favorites and Recently played
-are shortcuts to those entries, not extra games.
+of that total when search/tag filters or an artwork-layout collection are active.
+Favorites and Recently played never count as extra games.
 
-Your selected game, search text, tag filters and library scroll position are
+Your selected game, search text, tag filters, List/Tiles/Grid view and library scroll positions are
 remembered across launcher restarts using the same browser profile. Clear the
 search/tags (or press controller B outside menu mode) to see the whole library.
 If the remembered game no longer matches, reopening selects the first match.
 
-Choose **About Momentum** above the list for the version/build identity,
+Expand **Settings & tools** at the bottom of the sidebar and choose
+**About Momentum** for the version/build identity,
 platform and launcher folder. Development checkouts show their Git description,
 including a dirty marker for tracked local edits. Candidate bundles show their
 base revision and scope; copies without build metadata say unversioned.
@@ -49,13 +50,17 @@ Expand **Search options & game ID** to use an optional **Artwork search title**
 or edit a match manually. These advanced settings and API key setup start
 collapsed. An alternate title does not rename your game; otherwise the search
 uses the game name. Choose a result,
-then choose a background, grid cover or icon. Backgrounds and grid covers both
-fill Momentum's Background art slot; icons fill its Icon slot. They do not
+then choose a background, grid cover or icon. Backgrounds fill **Background art**,
+grid covers fill the separate **Grid cover** slot, and icons fill **Icon**. They do not
 replace a configured background video. Save the game to apply the artwork and
 remember the selected SteamGridDB game ID. **Load saved match** fetches artwork
 for that ID without another title search. You may also enter a known
 SteamGridDB game ID manually; it is not a Steam app ID. Clear the ID or search
 title and save to remove those optional fields.
+
+Grid artwork selected before the separate slot was introduced remains in
+Background art; it is not automatically moved or deleted. Choose the portrait
+art again for Grid cover if you want to keep different artwork for each layout.
 
 Only explicitly selected full-size artwork is saved, through the normal media
 import flow. Search queries go to SteamGridDB and thumbnails load from its
@@ -64,15 +69,55 @@ humor and epilepsy-tagged results excluded. Missing matches, API errors and
 rate limits appear in the artwork section. This is separate from **Get
 Steam details**, which still provides Steam descriptions and screenshots.
 
-The supported public catalog contains SWTA 0.2.1, L.A. Machineguns 0.2.2,
-HOD2, Brutal Doom and Episode Enyo 0.3.0, and Marvel Infinity War 0.2.0.
-Use the current private launcher for these packages. Existing installations are
-not removed when the catalog changes. Python performs bounded local
+Imported artwork and videos are untrusted media. Media responses are sandboxed:
+SVG icons can still display, but opening a saved icon directly cannot run its
+scripts or grant it access to launcher APIs. External resources referenced by
+an SVG are blocked; use self-contained artwork or a raster image.
+
+The store lists the currently published packages and their required original
+files. Package availability changes independently of launcher releases; use a
+current compatible launcher and review each package's setup guidance.
+Existing installations are not removed when the catalog changes. Python performs bounded local
 server checks. Missing Python or `flock` must be installed through your system
 tools; Momentum never elevates itself automatically. Failed startup reports
 the server log at `~/.cache/momentum-core-launcher/server.log`.
 
 ## Package setup and recovery
+
+### Installed games, uninstall and cached installers
+
+Store cards distinguish **Set up game** (installer not downloaded), **Installer
+ready** (downloaded, not installed), **Installed**, and **New version available**.
+These use installation receipts, not the age of a download job. An installed
+game may still need manual gameplay confirmation; that does not mean its
+installation needs to be repeated.
+
+For a package-installed game, choose **Manage installation** in its game details
+or List panel. Clicking **Installed** in the store opens the same management
+screen; a newer store version also offers **Manage installation** separately.
+Choose **Review uninstall**, consent to running the installed package's
+preflight code, then review the exact removals/preserved files and explicitly
+**Approve and uninstall**. Close the game/engine first. Preflight alone does not
+remove files, and cancellation before approval leaves the installation intact.
+
+Uninstall uses the exact version and digest in the receipt, not whichever
+version is newest in the store. It removes unchanged installer-owned files,
+preserving originals, saves, settings, modified/user-added files, shared engines
+and retained lifecycle support. The library entry stays, marked uninstalled with
+Play disabled. **Remove from library** is separate: it only removes that entry,
+not installed files. Untracked/manual entries have no package uninstall receipt.
+Packages include an `uninstall.sh` lifecycle entrypoint, but it requires runner
+context and approval evidence; do not run it as a standalone deletion script.
+
+To clear an unused downloaded installer, open **Local packages / import...** in
+the store and choose **Remove cached installer** for that exact version. This
+does not uninstall games or erase receipts. The installed version's cache is
+protected until uninstall; active jobs and recovery journals also block removal.
+An old, unused cached version can be removed without changing a newer install.
+Exact retained support can restore missing uninstall intake automatically.
+Completed job messages can be **Dismissed** in **Installs & jobs**; do not delete
+receipts or journals to clear a status. A missing or damaged receipt/support
+produces an explicit error rather than guessing which files to delete.
 
 ### When approval is blocked
 
@@ -142,12 +187,15 @@ installers, or choose a current title from the online store. See
 
 ## 1. Opening the launcher
 
-When a game has both a cover and a preview video, the background shows only the
-video while it plays. The cover remains available in the Featured panel. If the
-video cannot load or autoplay, the background falls back to the cover.
+Game details and the Classic background prefer a preview video, then the first
+screenshot (or saved Background art), then the icon. Only one main media item is
+shown at a time. If video cannot load or autoplay, still artwork remains
+available. The Featured panel retains its separate cover.
 
 - Click **Momentum Core Launcher** in the app menu or on the Desktop.
-- Pick a game on the left, then click **▶ PLAY** (or press Enter / gamepad A).
+- Pick a game, then click **▶ PLAY**. In Tiles/Grid, click a card, press
+  Enter/Space on it, or press gamepad A to open details before choosing Play.
+  In List, Enter/gamepad A still launches directly.
 - A green dot next to a game means it's running. The launcher closes its background server by itself shortly after you close the window.
 
 If the icon is ever missing, or you move the project folder, run:
@@ -161,8 +209,11 @@ cd /path/to/your/momentum-core-launcher
 
 | Action | Keyboard | Gamepad |
 |---|---|---|
-| Move up/down (wraps from the last game to the first and back) | ↑ / ↓ | D-pad / left stick |
-| Play | Enter | A |
+| Move in List (wraps from the last game to the first and back) | ↑ / ↓ | D-pad / left stick |
+| Move in Tiles/Grid (stops at the edges) | ← / ↑ / ↓ / → | D-pad / left stick |
+| Open a card's details in Tiles/Grid | Enter / Space on a card | A |
+| Play in List, or activate focused Play in details | Enter | A |
+| Close details or its topmost dialog | Esc | B |
 | Previous/next category | PgUp / PgDn | LB / RB |
 | Clear search | Esc | B |
 | Favorite / unfavorite the selected game | F, or the ☆ Favorite button | Back / Select |
@@ -177,9 +228,122 @@ cd /path/to/your/momentum-core-launcher
 | Edit the selected game | Edit button | Y |
 | Menu mode (reach every button) | Tab | Start |
 
-Alt + ↑ / ↓ moves the selected game up or down within its category (keyboard only; see section 4).
+Alt + ↑ / ↓ moves the selected game up or down within its category in **List
+view** (keyboard only; see section 4).
 
 Typing in the search box filters by game name or tag. If your controller isn't detected, press any button once.
+
+### List, Tiles and Grid browsing
+
+Choose a layout above the library: **List**, landscape **Tiles**, or portrait
+**Grid** (2:3 covers, like a Steam library). Click a card to open game details
+without launching. Use all four arrow keys or the controller
+D-pad/left stick to select cards; up/down goes to the closest column in
+the adjacent rendered row, including across category headings. Movement stops
+at the edges rather than wrapping. Enter/Space on a card or controller A opens
+details; choose **PLAY** there or in the compact library bar to launch.
+Arrow keys on a focused toolbar control do not browse the cards.
+
+Tiles and Grid share search, tag filters, sorting, category jumps, Favorites and Recently
+played with List. In artwork layouts, the sidebar provides **All games**,
+**Favorites**, **Recently played**, and **Categories** with counts. Selecting one
+filters the cards without opening details or launching a game. All games shows
+each entry once; Recently played includes every game with recorded play history,
+newest first with the default Category sort. Other sort choices still apply.
+Counts beside collections describe the full library, while the count above
+reflects the current collection plus search/tag filters.
+
+Search and tags narrow the chosen collection. Clearing them (Esc/controller B)
+keeps that collection selected; choose All games to leave it. A changed collection
+or filter selects a matching game or clears selection when there are no matches.
+Empty Favorites/Recently played remain selectable. If a selected category is
+removed or renamed, browsing returns to All games.
+
+Tiles and Grid remember the selected collection across layout changes and
+restarts. List ignores it and retains the full library, search/tags, favorite/recent
+shortcuts and organization controls. Returning to Tiles/Grid restores the
+collection. R/LT and Shift+F/RT open the corresponding focused collection in
+artwork layouts, then step through those shortcuts on subsequent presses.
+
+Tiles show static background art, falling back to the game's icon over a color
+gradient, then an initial if neither image is available or can load. Grid first
+uses **Grid cover**, then fits existing background art without cropping, then
+uses the icon or initial. Titles remain visible without artwork. Existing
+portrait package art, such as MIW's cover, works without reassignment.
+In landscape **Tiles**, the selected card starts its existing video after a
+half-second delay. Keyboard/controller movement selects a card; mouse hover
+selects without opening details. Only one preview plays, muted and looping.
+Moving to another card (or moving the mouse away) restores static artwork.
+Missing or unplayable video leaves the image in place; playback failures show
+**Preview unavailable** instead of an empty card. Routine refreshes do not
+restart a playing preview.
+
+Previews stop when the tile scrolls out of view, any dialog opens, a game is
+launching/running, or the launcher loses focus or becomes hidden. Returning can
+resume the selected card after the same delay. System reduced-motion preference
+disables tile previews. Portrait **Grid** cards remain static; List and the
+details dialog retain their existing video behavior.
+Decorative selection accents and the Play glow stay static to avoid continuous
+idle repainting. Artwork entry, splash and launch transitions remain; the launch
+spinner runs only while its overlay is active. Hidden windows pause CSS
+animations. Controller discovery checks four times per second when disconnected
+or input is suspended, returning to frame-rate polling for an active controller.
+The existing effects-off and reduced-motion preferences still apply. The
+four-second server refresh remains active so window-close detection and job
+status continue to work.
+The compact panel below the cards offers Play, Favorite, Folders, Edit, Remove,
+tags and play history.
+
+The shared details dialog includes the recorded description, category, runtime,
+tags, screenshots and the same management actions. A compact play-history row
+labels **Time played**, **Last played** and **Launches** separately. This history
+only covers launches tracked by Momentum; play time updates when a game closes.
+Unplayed games show **Not played yet** instead of empty statistics.
+Below the artwork, **About this version** shows the recorded **Engine / runtime**
+and installed **Package version**, when available. Package version identifies
+the installer release, not necessarily the game's own version. Unknown details
+are omitted; runtime names/builds are displayed as recorded, not inferred from
+launch commands. The runtime remains editable in the game's Add/Edit form.
+Play is focused
+when available; running games cannot be launched again. Screenshots open a
+lightbox above details. Existing preview videos play muted and loop, replacing
+the still image rather than appearing underneath it. Hover over the video or
+Tab to its playback control to reveal the **Pause preview** icon. When paused,
+the **Play preview** icon remains visible; touch devices always show the control.
+Missing or failed video leaves still artwork and an explanation. Hidden pages
+pause playback and resume only previews that were playing, without overriding a
+manual pause. Closing details releases the preview, and launching pauses it.
+No new videos are fetched automatically. Close/Esc/controller B returns
+to the selected card without clearing filters; if a lightbox or another dialog is
+on top, close that first. Edit closes details before opening the editor.
+
+Choose **List** to return to full descriptions, screenshots and preview
+videos using your existing **Classic/Featured** preference. That preference is
+independent of the browsing layout, and its button is hidden in Tiles/Grid.
+Drag-to-reorder, Alt+arrow reordering and category move/rename controls remain
+in List only.
+
+The chosen browsing view and each view's scroll position are remembered in the
+same browser profile. Switching views retains the selected game; navigating
+brings it into view. Background refreshes retain your scroll and focus.
+Controller **Start** reaches the view switch and other controls in menu mode
+without stepping through every tile.
+
+New and revised Momentum packages include a description, portrait Grid art and
+a real screenshot; a preview video is preferred. Compatible packages retain
+these assets locally so Tiles, Grid and Classic can use them without a network
+request. A fresh library entry receives the package presentation. Upgrades
+preserve edited descriptions and existing artwork, including explicit clears;
+only a previously absent artwork field can be introduced. NVRAM and control
+presets seed missing state only, never replacing existing saves or settings.
+
+The sidebar navigation scrolls independently, so long category lists do not push
+**Add game** or **Exit** away. Sorting, notifications, and jobs stay beside these
+bottom controls. **Settings & tools** groups About Momentum, playtime, backup,
+theme, panel style, animations, sound, rumble and fullscreen (when available).
+Expand it with a click, Enter/Space on its heading, or controller A in menu mode;
+the tool area scrolls if needed. Keyboard T/B and their existing controller
+shortcuts still work without opening this group.
 
 ### Using a gamepad for everything
 
@@ -215,7 +379,7 @@ Click the **⏻** button in the sidebar, or press **Ctrl+Q** (**Esc** only clear
 - Switching games fades in the background art and slides in the title and description. The art drifts slowly, the grid pulses, and PLAY glows gently.
 - Pressing PLAY punches the art in, blooms a flash from the PLAY button with a whoosh and impact, then dims the screen with a "launching" spinner for a couple of seconds.
 - **Accent colors:** each game tints the launcher's highlights (title line, PLAY button, selection bar, glows) with the dominant color of its art, fading smoothly as you switch. Grey or very dark art keeps the default blue/violet/orange. To choose a color yourself, put a hex value like `#ff3030` in **Accent color** in the Edit form (or `"accent": "#ff3030"` in `games.json`); leave it blank for automatic.
-- **Selected-game panel:** use the **▣ Featured / ▣ Classic** button in the sidebar to switch between the original presentation and a glassy artwork-and-details card. The card includes running/favorite status, play history and the usual game actions. Your choice is remembered.
+- **Selected-game panel:** in List view, use the **▣ Featured / ▣ Classic** button in the sidebar to switch between the original presentation and a glassy artwork-and-details card. The card includes running/favorite status, play history and the usual game actions. Your choice is remembered independently of List/Tiles/Grid.
 - **Selection highlight:** the selected game is brighter and outlined in the game's accent color, with a soft pulse that is shared with the Featured artwork. The pulse stops when animations are off (✨ button) or reduced motion is requested.
 - **Controller rumble:** with a gamepad connected, it buzzes when you launch a game (a strong build-up), switch categories, save or favorite, and on errors or removals. A **📳** button appears next to 🔊 while a gamepad is connected; click it (or press A on it) to turn rumble off. Rumble works even if sound is muted, and not every controller or browser supports it.
 - Click **✨ On** next to **+ Add game** to turn all of this off (it then shows **✨ Off**). The setting is remembered, and the effects are also off automatically if your system is set to reduce motion.
@@ -228,8 +392,8 @@ Short synthesized sounds play for moving through the list, switching category, o
 
 - Every launch is recorded: when you last played, how many times, and how long.
 - The game page shows a line like "Last played 2 hours ago · 5 launches · 3h 20m played".
-- Favorites you mark with ☆ appear under **★ Favorites** at the very top of the sidebar, above Recently played. They also keep their normal place in their category and show a ★. Both sections are hidden while searching. Favorites are saved in `games.json` and are not affected by editing or reordering.
-- The 5 most recently played games appear under **Recently played** at the top of the sidebar (hidden while searching).
+- In List, favorites you mark with ☆ appear under **★ Favorites** at the top of the sidebar, above Recently played. They also keep their normal place in their category and show a ★. Both shortcut sections are hidden while searching. Favorites are saved in `games.json` and are not affected by editing or reordering. Tiles/Grid use the dedicated Favorites collection instead of duplicate cards.
+- In List, the 5 most recently played games appear under **Recently played** at the top of the sidebar (hidden while searching). Tiles/Grid offer a Recently played collection containing all recorded played games.
 - Playtime counts the time the launched command keeps running. If a game's command just hands off to another program (some Steam or wrapper scripts do this), the time may be much shorter than your real playtime. If you close the launcher while a game is still running, the time up to that moment is counted.
 - Stats are stored in `playstats.json` next to `games.json`. Delete the file to reset everything. Removing a game also removes its stats.
 
@@ -292,6 +456,12 @@ You can do everything from the launcher window with the mouse and keyboard, and 
 
 **Edit a game:** select it and click **Edit** under the PLAY button. Change any field, choose a new file to replace art or video, or click **remove** next to a current file to clear it.
 
+**Grid cover** is a separate optional image slot in the editor. Upload/drop a
+PNG, JPEG or WebP, paste an image URL into that slot, or choose SteamGridDB's
+Grid covers. It does not replace Background art or Background video. Clearing
+it returns Grid to the normal fallback artwork. Library backups preserve the
+slot; include media to preserve its image bytes too.
+
 **Remove a game:** select it and click **Remove**, then confirm. This only removes it from the launcher. The game and its `media/` folder are not deleted.
 
 **Reorder games:**
@@ -307,7 +477,17 @@ Reordering and dragging are turned off while the search box has text, so clear t
 **Art, video and descriptions in the Add/Edit form**
 
 - **Choose, drop or paste:** for each of background art, icon and video you can click *Choose File*, drag a file onto its box, or paste a link (https://) and the launcher downloads it for you. In the form, pasting an image from your clipboard sets the background art. A preview appears before you save.
-- **Video frame as cover:** with a video file chosen, click **Use current frame as cover**. Pause the preview where you like first. This works for videos you've picked from your computer or already saved, not for pasted links.
+- **Video frame for tile artwork:** in Edit, find **Background video**. Use its
+  player controls to scrub to a moment, or **Back 1s / Forward 1s** and
+  **Play preview / Pause preview** to adjust it. Choose **Capture frame for Tiles**.
+  Capture pauses playback and shows the resulting image below the controls at
+  its original video resolution. It stages a JPEG in **Background art**; choose
+  **Save** to apply it, **Discard captured frame** to restore your earlier artwork
+  choice, or Cancel to abandon the edit. Capture/preview alone does not save or
+  upload anything. Portrait Grid cover stays unchanged; Background art is also
+  used by List and the details dialog. Capture requires a loaded local or already
+  saved video. For a pasted remote video link, save first and reopen Edit if
+  capture is blocked. Load, capture and save errors are shown explicitly.
 - **Game details — Steam:** type the game's name and click **Get Steam details**, then click the right match. It fills in the description, tags and tagline (the developer), and offers screenshots to pick as the background, plus an icon. Check the result and edit it freely. Games that aren't on Steam (most Doom mods, arcade ports) usually won't match. Steam trailers can't be downloaded this way, so add videos yourself.
 - **Quick art without opening the form:** drop an image or video file on the game page to set its background art or video. Pasting an image (Ctrl+V) while the game page is showing sets the background art.
 - **Link safety:** only public http/https links are fetched. Addresses on your own computer or network are refused.
@@ -412,20 +592,20 @@ The sidebar groups games by their `category` value. Groups appear in the order t
     2. Momentum downloads and checks the installer from its public GitHub distribution repository. No GitHub account is required. It checks the ZIP size/checksum, package identity/digest and platform; no installer scripts run during downloading.
     3. Under **Where are your game files?**, use **Choose folder...** to select the folder described by that game's setup screen, or type/paste its full path. HOD2 needs your USA CUE and matching BIN tracks together; the Model 3 games need their named ROM ZIP kept zipped. Marvel Infinity War can download its pinned game archive or use the exact offline PAK. The optional installation folder has the same picker. Cancelling leaves the path unchanged. Native selection requires Zenity or KDialog; if unavailable, Momentum shows an error and you can still enter paths manually. No game files are uploaded through the browser. Review trust, request the installation plan, then approve its changes. Your original files stay untouched.
     4. Downloads show progress and can be cancelled. Closing the interface leaves a download running. Reopen **Installs & jobs → Continue setup**, or select the game again after it finishes. Failed downloads can be retried; incomplete files are discarded. Downloads are not completed game installations.
-    - The public catalog contains the six titles listed at the top of this guide. Momentum selects required software; there are no emulator choices or automatic package upgrades. An internet connection is needed to load the public catalog/download new installers. Errors are shown rather than silently falling back to stale data.
+    - The public catalog lists current available titles and package versions. Momentum selects required software; there are no emulator choices or automatic package upgrades. An internet connection is needed to load the public catalog/download new installers. Errors are shown rather than silently falling back to stale data.
     - **System prerequisites are never installed by Momentum and never require passwordless sudo.** If Flatpak is missing, the package screen provides `sudo apt update` and `sudo apt install -y flatpak`; if an emulator lacks required host libraries, it identifies the missing library and shows its known Ubuntu package; Episode Enyo lists `libfuse2t64` and/or `libvulkan1`; and a pinned EDuke32 source build lists its compiler/development packages. Run the displayed commands yourself in a terminal, then retry the job or reopen setup. An unknown library is named but never guessed. Flatpak installs, remotes and runtimes are user-scope only; Momentum does not install or update system-wide software.
     - For a package with exact Flatpak build evidence, a missing UZDoom or Flycast is prepared in user scope and pinned to that evidence-backed commit before any game files are changed. The approved plan shows the commands. A current Flathub build is never silently accepted as compatible; if Flathub no longer offers the tested commit, preparation stops and the package remains blocked until evidence is refreshed. Already-installed engines, including system-wide engines, are not downgraded or otherwise changed.
     - **Episode Enyo** needs your Quake folder containing `id1/pak0.pak` and `id1/pak1.pak`. Version 0.3.0 reuses verified mod files or obtains the pinned mod from its publisher after separate approval; it does not bundle the mod. Existing `enyo` settings/saves are copied without modifying originals. Momentum uses the pinned official vkQuake 1.36.0 AppImage, never the Snap build. FUSE2 and Vulkan loaders are prerequisites. Fullscreen is requested without importing laptop display configuration or forcing a resolution; the wrapper accepts `-window`. Game-only removal retains base copies, settings, saves and the shared engine.
-    - **Brutal Doom** requires your `DOOM2.WAD` and uses the approved UZDoom flow. Doom Metal Volume 5 is included but enabled only with `~/.local/bin/brutal-doom --metal`; the incompatible Complete voxel addon is excluded. Existing compatible software is reused. An incompatible existing engine is left alone; separately approved private shared-engine fallback uses isolated state. See the package's included player guide for controls and saved-state locations.
-    - **HOD2** uses exact-build Flycast evidence. Existing incompatible engines and profiles are preserved; the separately approved private fallback provides its own state. Confirm Start/trigger mappings in Flycast; dedicated right-click reload is not verified.
-    - **Star Wars Trilogy Arcade and L.A. Machineguns** use the pinned native Supermodel runtime, prepared after separate approval if missing. Fullscreen is requested. SWTA retains stock credit settings (**3** for credit, **1** for Start); free play is a manual cabinet setting. L.A. Machineguns seeds clean calibration only when isolated NVRAM is absent. Existing NVRAM is never overwritten and may need manual AIM SET.
+    - **Brutal Doom** requires your `DOOM2.WAD` and uses the approved UZDoom flow. Doom Metal Volume 5 is included but enabled only with `~/.local/bin/brutal-doom --metal`; the incompatible Complete voxel addon is excluded. Existing compatible software is reused. An incompatible existing engine is left alone; separately approved shared-engine fallback uses isolated state. See the package's included player guide for controls and saved-state locations.
+    - **HOD2 and Virtua Cop 2** use exact-build Flycast evidence. Existing incompatible engines and profiles are preserved; HOD2's separately approved fallback provides its own state. Current packages seed the owner's right-click reload mapping only when absent; existing mappings are not overwritten. Confirm controls in your installation: shipping the mapping is not new gameplay acceptance.
+    - **Star Wars Trilogy Arcade and L.A. Machineguns** use the pinned native Supermodel runtime, prepared after separate approval if missing. Fullscreen is requested. Current packages seed the owner's NVRAM only when absent, preserving existing calibration, scores and settings. SWTA includes the owner's Free Play seed; **L.A. Machineguns Free Play is unconfirmed**, not a promised preset. Existing NVRAM is never overwritten and may need manual cabinet settings or AIM SET. A newer seed does not change an existing cabinet's state.
     - **Marvel Infinity War** uses bundled verified OpenBOR 6391 native files without FUSE or an engine download. Approve engine preparation separately, then download/install the game or supply the exact offline PAK. The fullscreen/CRT configuration and controller preset are seeded only when absent; other controllers can be remapped in-game. Settings and progress stay game-local. See [OpenBOR setup](docs/openbor.md).
     - **Add a game manually** opens the original library editor. Custom artwork uploads and Steam lookup are unchanged.
   - **Install packages (advanced local import):**
     1. Obtain a ZIP from a publisher you trust, or use a package already imported on this computer.
     2. Open **Add game → Browse the package store → Local packages / import...** and **Choose package ZIP...**, or enter an absolute local package-folder/ZIP path and choose **Import path**. ZIP uploads are limited to 1 GiB. Intake validates and copies the package; no package code runs.
     3. Choose **Set up**. Under **Where are your game files?**, choose the folder where your game files already live, or enter its full path. For HOD2, keep the CUE file and all matching BIN tracks together in that folder; the package does not include them. Momentum copies the files and leaves your originals untouched. **Momentum will install your game here** shows the destination inside your own `~/Games`, using a simple folder named after the package, such as `~/Games/the-house-of-the-dead-2`. Expand **Change installation folder** only if you want a different location. A game Momentum already installed keeps its existing folder when you upgrade or repair it, even if it has an older name such as `House of the Dead 2, The (USA)`. **Use an existing library entry** optionally links the installation to an entry without claiming ownership of existing files.
-    4. Check the trust box and choose **Check installation plan**. Momentum selects the software the game needs; you do not choose an emulator. If required software is missing, review and approve its downloads first. The same game job checks the installed build and then continues to the game-file plan. An untested build stops before changing game files. Package scripts run with your user permissions; checksums establish integrity, not publisher trust or sandboxing. Unsupported platforms cannot proceed.
+    4. Follow the three-step setup guide: choose files and trust the package, review software if needed, then approve game installation. Software evidence and fingerprints are expandable; required inputs and trust warnings stay visible. Check the trust box and choose **Check installation plan**. This permits preflight code, not installation. Momentum selects the software the game needs; you do not choose an emulator. If required software is missing, review and approve its downloads first. The same game job checks the installed build and then continues to the game-file plan. An untested build stops before changing game files. Package scripts run with your user permissions; checksums establish integrity, not publisher trust or sandboxing. Unsupported platforms cannot proceed.
     5. Keep **Installs & jobs** open: each approval step appears automatically when ready. If you closed it, choose **Review plan** to resume. Reopening the launcher retrieves the same saved waiting plan. **Approve and install** requires matching evidence for that exact package digest and software build. Approval rechecks evidence, receipt state and running software. Unknown builds remain gated, and game-package preflight does not install or upgrade an engine.
     - HOD2 0.1.1 and its approved artwork revisions 0.1.2/0.1.3 use the tested user-scope Flycast v2.7 build. These revisions inherit unchanged installer-code evidence, not separate gameplay runs. Version 0.1.3 restores the original t00ny icon; custom artwork and Steam lookup remain available. Other catalog games have separate installer evidence and do not inherit HOD2 gameplay confirmation.
     - The isolated target test confirmed fullscreen, Start, aiming, firing, off-screen reload and clean exit, with the original Flycast config/data unchanged. This is one laptop's evidence, not fresh-machine certification. A new installation still reports **installed / setup required** until its own gameplay is confirmed.

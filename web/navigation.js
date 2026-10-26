@@ -58,16 +58,46 @@ async function renameCat(cat) {
   await refresh(); renderDetail();
 }
 
-function select(id) {
+function select(id, position = null, scroll = true) {
+  const focused = document.activeElement?.classList.contains("tile");
   if (id !== sel) sfx("tick");
+  tilePosition = position;
   sel = id; localStorage.setItem("mcl-last", id); renderList(); renderDetail();
-  [...document.querySelectorAll(".item.sel")].pop()?.scrollIntoView({ block: "nearest", behavior: animOn() ? "smooth" : "auto" });
+  if (scroll) selectedItem()?.scrollIntoView({ block: "nearest", behavior: animOn() ? "smooth" : "auto" });
+  if (focused && scroll) selectedItem()?.focus({preventScroll:true});
+  if (typeof requestTilePreview === "function") requestTilePreview();
+}
+function moveTile(direction) {
+  const current = selectedItem();
+  if (!current) return;
+  const rect = current.getBoundingClientRect(), vertical = direction === "up" || direction === "down";
+  const sign = direction === "down" || direction === "right" ? 1 : -1;
+  let best = null, score = Infinity, bestSide = Infinity;
+  for (const item of document.querySelectorAll(".tile")) {
+    if (item === current) continue;
+    const r = item.getBoundingClientRect(), dx = r.left + r.width / 2 - rect.left - rect.width / 2;
+    const dy = r.top + r.height / 2 - rect.top - rect.height / 2;
+    const forward = (vertical ? dy : dx) * sign, side = Math.abs(vertical ? dx : dy);
+    if (forward < 2 || (!vertical && side > 2)) continue;
+    if (forward < score - 2 || (Math.abs(forward - score) <= 2 && side < bestSide)) {
+      score = forward; bestSide = side; best = item;
+    }
+  }
+  if (best) {
+    select(best.dataset.id, best.dataset.position);
+  }
 }
 function step(d) { const l = flat(), i = l.findIndex(g => g.id === sel); if (l.length) select(l[(i + d + l.length) % l.length].id); } // wraps around at either end
 // Jump to the Favorites or Recently played section; pressing again steps through its games.
-function jumpTo(list) {
-  if (filtering() || !list.length) return;
-  const i = list.findIndex(g => g.id === sel);
+function jumpTo(list, collection) {
+  if (filter || tagSel.size || !list.length) return;
+  const previous = sel;
+  if (tiledLibrary() && collection) {
+    chooseCollection(collection);
+    list = list.filter(g => visible().some(v => v.id === g.id));
+    if (!list.length) return;
+  }
+  const i = list.findIndex(g => g.id === previous);
   select(list[(i + 1) % list.length].id); sfx("cat");
 }
 function jump(d) { // previous/next category
@@ -103,7 +133,21 @@ async function refresh(first) {
 $("#list").onclick = e => {
   const b = e.target.closest("[data-act]");
   if (b) { const c = b.closest(".cat").dataset.cat, act = b.dataset.act; return act === "rename" ? renameCat(c) : moveCat(c, act === "up" ? -1 : 1); }
-   const i = e.target.closest(".item"); if (i) select(i.dataset.id); };
+   const i = e.target.closest(".item");
+   if (i) { select(i.dataset.id, i.dataset.position); if (tiledLibrary()) openGameDetails(); }
+};
+$("#library-view")?.addEventListener("change", e => {
+  saveBrowsing();
+  dragging = null; clearDrop();
+  localStorage.setItem("mcl-view", e.target.value);
+  const scroll = Number(localStorage.getItem(libraryScrollKey()));
+  restoredScroll = Number.isFinite(scroll) && scroll >= 0 ? scroll : 0;
+  applyLibraryView(); renderList(); renderDetail(); hints();
+});
+$("#library-nav")?.addEventListener("click", e => {
+  const button = e.target.closest("[data-collection]");
+  if (button) chooseCollection(button.dataset.collection);
+});
 $("#list").addEventListener("scroll", saveBrowsing);
 addEventListener("pagehide", saveBrowsing);
 if ($("#panel")) $("#panel").onclick = () => {
@@ -111,7 +155,10 @@ if ($("#panel")) $("#panel").onclick = () => {
   applyPanel(); renderDetail();
 };
 const clearDrop = () => document.querySelectorAll(".drop-before,.drop-after,.drop-into").forEach(x => x.classList.remove("drop-before", "drop-after", "drop-into"));
-$("#list").addEventListener("dragstart", e => { const i = e.target.closest(".item"); if (i) { dragging = i.dataset.id; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragging); } });
+$("#list").addEventListener("dragstart", e => {
+  if (tiledLibrary()) { e.preventDefault(); return; }
+  const i = e.target.closest(".item"); if (i) { dragging = i.dataset.id; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragging); }
+});
 $("#list").addEventListener("dragend", () => { dragging = null; clearDrop(); });
 $("#list").addEventListener("dragover", e => {
   if (!dragging) return;
@@ -149,17 +196,22 @@ document.addEventListener("keydown", e => {
     return;
   }
   if (topDlg()) return;
+  if (e.target.closest("select")) return;
   const inSearch = e.target.id === "search";
+  const onControl = e.target.closest("button, input, textarea, select, summary") && !e.target.closest(".tile");
   if (inSearch && !["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(e.key)) return;
-  if (e.altKey && !filtering() && sortMode() === "cat" && (e.key === "ArrowDown" || e.key === "ArrowUp")) { nudge(sel, e.key === "ArrowDown" ? 1 : -1); e.preventDefault(); }
-  else if (e.key === "ArrowDown") { step(1); e.preventDefault(); }
-  else if (e.key === "ArrowUp") { step(-1); e.preventDefault(); }
-  else if (e.key.toLowerCase() === "r" && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea")) jumpTo(recent());
-  else if (!e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea") && e.key.toLowerCase() === "s") cycleSort();
-  else if (!e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea") && e.key.toLowerCase() === "t") openStats();
-  else if (!e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea") && "nib".includes(e.key.toLowerCase()) && e.key.length === 1) ({ n: openNotes, i: openJobs, b: openBackup })[e.key.toLowerCase()]?.();
-  else if (e.key === "F" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea")) jumpTo(favs());
-  else if (e.key.toLowerCase() === "f" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !e.target.closest("button, input, textarea")) toggleFav(games.find(x => x.id === sel));
+  if (tiledLibrary() && !inSearch && e.target.closest("button,input,textarea,select,summary") && !e.target.closest(".tile")
+      && ["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Enter", " "].includes(e.key)) return;
+  if (tiledLibrary() && ["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(e.key) && !inSearch) { moveTile(e.key.slice(5).toLowerCase()); e.preventDefault(); }
+  else if (!tiledLibrary() && e.altKey && !filtering() && sortMode() === "cat" && (e.key === "ArrowDown" || e.key === "ArrowUp")) { nudge(sel, e.key === "ArrowDown" ? 1 : -1); e.preventDefault(); }
+  else if (e.key === "ArrowDown") { tiledLibrary() ? moveTile("down") : step(1); e.preventDefault(); }
+  else if (e.key === "ArrowUp") { tiledLibrary() ? moveTile("up") : step(-1); e.preventDefault(); }
+  else if (e.key.toLowerCase() === "r" && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !onControl) jumpTo(recent(), "recent");
+  else if (!e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !onControl && e.key.toLowerCase() === "s") cycleSort();
+  else if (!e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !onControl && e.key.toLowerCase() === "t") openStats();
+  else if (!e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !onControl && "nib".includes(e.key.toLowerCase()) && e.key.length === 1) ({ n: openNotes, i: openJobs, b: openBackup })[e.key.toLowerCase()]?.();
+  else if (e.key === "F" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !onControl) jumpTo(favs(), "favorites");
+  else if (e.key.toLowerCase() === "f" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !inSearch && !onControl) toggleFav(games.find(x => x.id === sel));
   else if (e.key === "PageDown") jump(1);
   else if (e.key === "PageUp") jump(-1);
   else if (e.key === "Escape") {
@@ -167,5 +219,6 @@ document.addEventListener("keydown", e => {
     $("#search").blur(); clearFilters();
   }
   else if ((e.key === "Enter" || e.key === " ") && e.target.closest("[data-act], [data-tag]")) { e.target.click(); e.preventDefault(); }
-  else if (e.key === "Enter" && !e.target.closest("button")) { const g = games.find(x => x.id === sel); if (g) launch(g); }
+  else if ((e.key === "Enter" || e.key === " ") && e.target.closest(".tile")) { e.preventDefault(); openGameDetails(); }
+  else if (e.key === "Enter" && !e.target.closest("button,select,summary")) { e.preventDefault(); const g = games.find(x => x.id === sel); if (g) tiledLibrary() ? openGameDetails() : launch(g); }
 });

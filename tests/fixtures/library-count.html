@@ -8,6 +8,8 @@ const esc = value => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt
 let games = [], stats = {}, running = new Set(), tagSel = new Set(), filter = "", sel = null, ver = 1;
 let restoredScroll = null, listFilterKey = null;
 const saveBrowsing = () => {};
+const tiledLibrary = () => false;
+const libraryView = () => "list";
 </script>
 <script src="/web/library.js"></script>
 <script>

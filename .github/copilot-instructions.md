@@ -23,5 +23,6 @@ expanding scope or spending substantial effort outside the requested task.
 Separate installer validation from reported gameplay acceptance.
 
 Preserve working engines, settings, saves and edited library entries. The
-canonical laptop checkout is this repository; launcher development remains
-private, while approved game packages are published separately.
+canonical laptop checkout is this repository. The owner approved public launcher
+source and a public preview release on October 25, 2026; game-package authoring
+remains separate, and approved game packages are published separately.

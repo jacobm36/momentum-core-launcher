@@ -1,5 +1,5 @@
 // Gamepad input, focus handling, on-screen keyboard and confirm dialogs.
-// Gamepad. Main screen: D-pad/stick = move, A = play, LB/RB = category, LT/RT = recent/favorites, L3 = sort, R3 = stats, X = add game, Y = edit game,
+// Gamepad. Main screen: D-pad/stick = move, A = details (cards) / play (List), LB/RB = category, LT/RT = recent/favorites, L3 = sort, R3 = stats, X = add game, Y = edit game,
 // Start = menu mode (move focus between every button), B = clear search / leave menu mode.
 // In dialogs: D-pad moves focus, A presses or edits a text field (on-screen keyboard), Start = save/done, B = cancel.
 const held = {};
@@ -17,11 +17,11 @@ function pressed(key, on, fn, repeat = 180) {
   if (!on) { delete held[key]; return; }
   if (!held[key] || now - held[key].t > (held[key].n ? repeat : 400)) { held[key] = { t: now, n: true }; fn(); }
 }
-const topDlg = () => ["odlg", "qdlg", "adlg", "fdlg", "rdlg", "pdlg", "gdlg", "bdlg", "idlg", "ndlg", "sdlg", "dlg"].map(i => $("#" + i)).find(d => d?.open);
+const topDlg = () => ["odlg", "qdlg", "adlg", "fdlg", "rdlg", "pdlg", "gdlg", "bdlg", "idlg", "ndlg", "sdlg", "dlg", "game-details"].map(i => $("#" + i)).find(d => d?.open);
 const FOCUSABLE = 'button,input:not([type=file]):not([type=hidden]),select,summary,textarea,a[href],[tabindex="0"]';
 const focusables = scope => [...scope.querySelectorAll(FOCUSABLE)].filter(e => !e.disabled && !e.hidden && e.checkVisibility() && e.getClientRects().length && !(e.closest("#odlg") && e.id === "oinp"));
 function moveFocus(dir) {
-  const scope = topDlg() || document.body, items = focusables(scope), cur = document.activeElement;
+  const scope = topDlg() || document.body, items = focusables(scope).filter(e => !e.classList.contains("tile")), cur = document.activeElement;
   if (!items.includes(cur)) { (items.find(e => e.id === "play") || items[0])?.focus(); return; }
   if (cur.closest("#list") && (dir === "up" || dir === "down")) { // the category buttons form one column, so step through them in order
     const col = items.filter(e => e.closest("#list")), n = col[col.indexOf(cur) + (dir === "down" ? 1 : -1)];
@@ -68,12 +68,16 @@ function padAction(b, ax, ay) {
   if (padSuspended() || padNeedsNeutral) return;
   const d = topDlg(), moves = { up: b(12) || ay < -0.55, down: b(13) || ay > 0.55, left: b(14) || ax < -0.55, right: b(15) || ax > 0.55 };
   if (!d && !uiMode) {
-    pressed("up", moves.up, () => step(-1));
-    pressed("down", moves.down, () => step(1));
+    if (tiledLibrary()) {
+      for (const k in moves) pressed(k, moves[k], () => moveTile(k));
+    } else {
+      pressed("up", moves.up, () => step(-1));
+      pressed("down", moves.down, () => step(1));
+    }
   } else for (const k in moves) pressed(k, moves[k], () => moveFocus(k));
   pressed("lb", b(4), () => { if (!d) jump(-1); else d.nav?.(-1); }, 300);
   pressed("rb", b(5), () => { if (!d) jump(1); else d.nav?.(1); }, 300);
-  pressed("a", b(0), () => { if (d || uiMode) activate(); else { const g = games.find(x => x.id === sel); if (g) launch(g); } }, 1e9);
+  pressed("a", b(0), () => { if (d || uiMode) activate(); else { const g = games.find(x => x.id === sel); if (g) tiledLibrary() ? openGameDetails() : launch(g); } }, 1e9);
   if (padSuspended()) { suspendPad(); return; }
   pressed("b", b(1), () => {
     if (d) cancelDialog(d);
@@ -82,8 +86,8 @@ function padAction(b, ax, ay) {
   }, 1e9);
   pressed("x", b(2), () => { if (d?.id === "odlg") d.oskKey?.("back"); else if (!d) editor(); }, d?.id === "odlg" ? 120 : 1e9);
   pressed("y", b(3), () => { if (d?.id === "odlg") d.oskKey?.(" "); else if (!d) { const g = games.find(x => x.id === sel); if (g) editor(g); } }, d?.id === "odlg" ? 120 : 1e9);
-  pressed("lt", b(6), () => { if (!d && !uiMode) jumpTo(recent()); }, 300);
-  pressed("rt", b(7), () => { if (!d && !uiMode) jumpTo(favs()); }, 300);
+  pressed("lt", b(6), () => { if (!d && !uiMode) jumpTo(recent(), "recent"); }, 300);
+  pressed("rt", b(7), () => { if (!d && !uiMode) jumpTo(favs(), "favorites"); }, 300);
   pressed("l3", b(10), () => { if (!d) cycleSort(); }, 1e9);
   pressed("r3", b(11), () => { if (!d) openStats(); }, 1e9);
   pressed("fav", b(8), () => { if (!d && !uiMode) toggleFav(games.find(x => x.id === sel)); }, 1e9);
@@ -93,11 +97,19 @@ function padAction(b, ax, ay) {
     else if (d.id === "odlg") d.close("ok");
   }, 1e9);
 }
+let padIdleTimer = null;
 function pollPad() {
-  const pads = [...(navigator.getGamepads?.() || [])].filter(Boolean), p = pads[0];
-  if (padSuspended() || !p) {
+  clearTimeout(padIdleTimer);
+  padIdleTimer = null;
+  if (padSuspended()) {
     suspendPad();
-    requestAnimationFrame(pollPad);
+    padIdleTimer = setTimeout(pollPad, 250);
+    return;
+  }
+  const pads = [...(navigator.getGamepads?.() || [])].filter(Boolean), p = pads[0];
+  if (!p) {
+    suspendPad();
+    padIdleTimer = setTimeout(pollPad, 250);
     return;
   }
   if (padNeedsNeutral) {

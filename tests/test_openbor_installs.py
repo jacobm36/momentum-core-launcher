@@ -145,6 +145,15 @@ class OpenBORInstalls(unittest.TestCase):
             operation_meta = copy.deepcopy(runner.jobs[jid]["meta"])
 
             def operation(name):
+                if name == "uninstall":
+                    opid = inst.submit_uninstall(GAME, imported["digest"])
+                    reviewed = self.wait(runner, opid)
+                    self.assertEqual(reviewed["status"], "awaiting-approval", reviewed)
+                    self.assertEqual(reviewed["plan"]["network"], [])
+                    self.assertIs(inst.approve(opid, reviewed["plan_digest"]), True)
+                    self.assertEqual(self.wait(runner, opid)["status"], "succeeded", runner.get(opid))
+                    self.assertNotIn("exec", library[0])
+                    return
                 current = inst.package_details(GAME, VERSION)
                 context = dict(template, operation=name, previous_receipt=inst._load_receipt(GAME),
                                dependencies=current["dependencies"],

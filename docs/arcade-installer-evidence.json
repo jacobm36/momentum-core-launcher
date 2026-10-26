@@ -9,6 +9,54 @@
   },
   "packages": [
     {
+      "id": "star-wars-trilogy-arcade",
+      "version": "0.2.2",
+      "digest": "sha256:e9afb71a269848ef0b0e100f00b9f4f42060850d1e996e0b77cbcb05abdec4bf",
+      "runtime": "supermodel",
+      "software": {
+        "provider": "native",
+        "scope": "user",
+        "version": "v0.3a-20260928-git-8b4de23",
+        "sha256": "4497b72c682d22f29b45d33607e07651240c2222a1e95e4b3f77846c9a7c1311",
+        "games_xml_sha256": "48c56b24ea720fb66188c0b2d94579a110be24971ac215ea808c563c665cf655"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "2026-10-25: package tests and exact synthetic-media real-runner intake, approval/reconnect, install, receipt/catalog commit, presentation retention and repeat cancellation passed in isolated homes with the copied pinned runtime. Absent-only config and NVRAM seeding preserve edits. Owner confirmed Free Play on the working seed and explicitly approved including its scores/bookkeeping. Existing player NVRAM is never replaced. Grid, screenshot and video reuse existing library media; screenshot visually inspected. No final-ZIP gameplay or new-machine certification."
+    },
+    {
+      "id": "l-a-machineguns",
+      "version": "0.2.3",
+      "digest": "sha256:43cfd52847a63dce24a1382c530e518df304b2a6e532f641a9813d92e76c7499",
+      "runtime": "supermodel",
+      "software": {
+        "provider": "native",
+        "scope": "user",
+        "version": "v0.3a-20260928-git-8b4de23",
+        "sha256": "4497b72c682d22f29b45d33607e07651240c2222a1e95e4b3f77846c9a7c1311",
+        "games_xml_sha256": "48c56b24ea720fb66188c0b2d94579a110be24971ac215ea808c563c665cf655"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "2026-10-25: package tests and exact synthetic-media real-runner intake, approval/reconnect, install, receipt/catalog commit, presentation retention and repeat cancellation passed in isolated homes with the copied pinned runtime. Absent-only config and NVRAM seeding preserve edits. Owner approved including the working NVRAM and its scores/bookkeeping; this replaces only the bundled default, not existing player calibration/NVRAM. Later owner testing found Free Play was not enabled as expected: Free Play is unconfirmed and is not a promised preset. Grid, screenshot and video reuse existing library media; screenshot visually inspected. No final-ZIP gameplay or new-machine certification."
+    },
+    {
+      "id": "virtua-cop-2",
+      "version": "0.1.3",
+      "digest": "sha256:fd90be3e89905fe726854031131cdae969aec98a99c6dde29871c65b511a9b9a",
+      "runtime": "flycast",
+      "software": {
+        "provider": "flatpak",
+        "scope": "user",
+        "app_id": "org.flycast.Flycast",
+        "version": "v2.7",
+        "commit": "86ec4d845a66ff07cdba8e003d8549e93cd7a814b519766e1f744e530c5d3e5b"
+      },
+      "installer_validated": true,
+      "gameplay": "not-tested-for-this-package",
+      "limits": "2026-10-25: 13 package tests and exact synthetic GDI real-runner install, approval/reconnect, receipt/catalog, presentation retention, repeat cancellation, missing-software preparation and wrong-build blocking passed with a Flatpak test double. Launch construction seeds exact owner HDR-0061 mouse mapping only when absent; right button binds reload and personal edits survive. Grid, screenshot and video reuse existing library media; screenshot visually inspected. No emulator/game launched; right-click gameplay and final-ZIP target acceptance remain separate."
+    },
+    {
       "id": "l-a-machineguns",
       "version": "0.2.2",
       "digest": "sha256:a6d1d7ca1110176d5d966f58938c9e356e4025c7fc3633f35e9b0ea44dadefad",

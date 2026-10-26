@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Library sidebar regression</title>
+<link rel="stylesheet" href="/web/style.css">
+<style>#result{position:fixed;bottom:0;pointer-events:none;z-index:100;background:#05060c}</style></head><body>
+<pre id="result">RUNNING</pre>
+<script>
+const sfx = () => {}, applyAccent = () => {}, wireSteamGridDB = () => {};
+const openStats = () => {}, cycleTheme = () => {}, openFolders = () => {};
+const collection = Array.from({length:70}, (_, i) => ({
+  id:"game-" + i, name:"Game " + i, description:"Description", tags:i % 2 ? ["Action"] : ["Action","Mouse"],
+  category:i < 20 ? "Arcade" : i < 40 ? "Shooter & platform" : i < 60 ? "A very long category title for readable wrapping" : undefined,
+  favorite:i < 3, ...(i === 0 ? {cover:"web/logo-full.png"} : {})
+}));
+const history = Object.fromEntries(Array.from({length:8}, (_, i) => ["game-" + i, {last:Date.now()/1000 - i*3600, launches:1}]));
+const nativeFetch = window.fetch.bind(window);
+let launches = 0;
+window.fetch = async (path, options) => {
+  if (path === "/api/games") return {json:async () => ({games:collection, token:"test", running:[], stats:history})};
+  if (path.startsWith("/api/launch/")) { launches++; return {json:async () => ({status:"launched"})}; }
+  if (path.startsWith("/api/favorite/")) {
+    collection.find(g => path.endsWith(g.id)).favorite = JSON.parse(options.body).on;
+    return {json:async () => ({status:"ok"})};
+  }
+  return nativeFetch(path, options);
+};
+const check = (value, message) => { if (!value) throw new Error(message); };
+const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+const loadScript = src => new Promise((resolve,reject) => {
+  const script = document.createElement("script"); script.src = src; script.onload = resolve;
+  script.onerror = () => reject(new Error("Could not load " + src)); document.body.append(script);
+});
+(async () => {
+  const html = new DOMParser().parseFromString(await (await nativeFetch("/web/index.html")).text(), "text/html");
+  for (const script of html.querySelectorAll("script")) script.remove();
+  html.querySelector("#splash").remove();
+  document.body.prepend(...html.body.children);
+  const reopened = sessionStorage.getItem("sidebar-reopen") === "yes";
+  if (!reopened) localStorage.clear();
+  localStorage.setItem("mcl-anim", "off");
+  for (const name of ["core","library","actions","navigation","gamepad","shell","gallery"]) await loadScript("/web/" + name + ".js");
+  applyLibraryView(); applyPanel(); applySort(); await refresh(true); hints();
+  const view = mode => { $("#library-view").value = mode; $("#library-view").dispatchEvent(new Event("change")); };
+  const nav = mode => [...$("#library-nav").querySelectorAll("button")].find(b => b.dataset.collection === mode);
+  const cards = () => [...document.querySelectorAll(".tile")];
+  const inside = el => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth; };
+  const key = (value, target = document.activeElement) => target.dispatchEvent(new KeyboardEvent("keydown", {key:value,bubbles:true,cancelable:true}));
+  if (new URLSearchParams(location.search).has("preview")) {
+    view("grid");
+    if (new URLSearchParams(location.search).get("preview") === "settings") $("#sidebar-settings").open = true;
+    $("#result").hidden = true; return;
+  }
+  if (reopened) {
+    check(libraryView() === "grid" && libraryCollection === "category:Shooter & platform" && sel === "game-25"
+      && filter === "Game" && tagSel.has("action"), "reopening restores category, layout, selection and search/tags");
+    check(cards().length === 20 && nav(libraryCollection).hasAttribute("aria-current"), "restored category applied");
+    view("list");
+    check(visible().length === 70 && $("#library-nav").hidden, "List ignores remembered collection after reload");
+    view("grid"); check(cards().length === 20, "artwork layout restores collection after List");
+    localStorage.setItem("mcl-collection", "category:Removed category"); await refresh(true);
+    check(libraryCollection === "all" && localStorage.getItem("mcl-collection") === "all", "stale saved category repaired");
+    $("#result").textContent = "PASS: production sidebar, collections, counts, filters, persistence, focus, tools, layouts and List preservation";
+    return;
+  }
+  check($("#library-nav").hidden && !$("#sidebar-settings").open, "List default and quiet tools");
+  view("tiles");
+  check(!$("#library-nav").hidden && cards().length === 70, "Tiles navigation with no duplicate cards");
+  check(nav("all").textContent.includes("70") && nav("favorites").textContent.includes("3")
+    && nav("recent").textContent.includes("8"), "collection counts reflect whole library");
+  check(nav("category:Other").textContent.includes("10") && nav("category:Shooter & platform").textContent.includes("20"), "category counts and escaping");
+  check([...$("#library-nav").querySelectorAll("[aria-current]")].length === 1, "one active collection");
+  const navHeight = $("#library-nav").clientHeight;
+  check(navHeight >= 130 && inside($("#add")) && inside($("#quit")) && inside($("#library-view")), "useful navigation space with anchored controls: nav=" + navHeight + " add=" + inside($("#add")) + " quit=" + inside($("#quit")));
+  check($("#library-nav").scrollWidth <= $("#library-nav").clientWidth + 1
+    && document.querySelector("aside").scrollWidth <= document.querySelector("aside").clientWidth + 1, "no sidebar overflow");
+  check($("#sort").getBoundingClientRect().height <= 40, "sort label remains on one line");
+  nav("favorites").focus(); nav("favorites").click();
+  check(cards().length === 3 && visible().every(g => g.favorite) && launches === 0 && !topDlg(), "Favorites filters without launching/opening");
+  check(document.activeElement.dataset.collection === "favorites", "navigation activation preserves focus");
+  $("#search").value = "Game 1"; $("#search").dispatchEvent(new Event("input"));
+  check(cards().length === 1 && sel === "game-1" && nav("favorites").textContent.includes("3"), "search intersects collection, counts stay global");
+  toggleTag("Mouse"); check(cards().length === 0 && !sel && !$("#play"), "tags intersect collection without stale Play");
+  clearFilters(); check(cards().length === 3 && libraryCollection === "favorites", "clear search/tags retains collection");
+  nav("favorites").focus(); await refresh();
+  check(document.activeElement.dataset.collection === "favorites", "unchanged refresh preserves sidebar focus");
+  nav("recent").click();
+  check(cards().length === 8 && flat()[0].id === "game-0" && flat()[7].id === "game-7", "Recently played includes full history newest first");
+  nav("category:Shooter & platform").click();
+  check(cards().length === 20 && sel === "game-20" && !topDlg(), "category selects matching game without details");
+  localStorage.setItem("mcl-sort","az"); applySort(); renderList();
+  check(cards().length === 20 && flat().every(g => g.category === "Shooter & platform"), "sorting retains scope");
+  $("#search").value = "not present"; $("#search").dispatchEvent(new Event("input"));
+  check(!sel && !$("#play") && $("#library-count").textContent === "0 of 70 games", "empty collection search count");
+  nav("all").click(); check(cards().length === 0 && filter === "not present", "switching collections retains search");
+  clearFilters(); nav("favorites").click();
+  nav("favorites").focus(); collection[0].favorite = false; await refresh();
+  check(cards().length === 2 && nav("favorites").textContent.includes("2")
+    && document.activeElement.dataset.collection === "favorites", "changed counts preserve navigation focus");
+  collection[1].favorite = false; collection[2].favorite = false; await refresh();
+  check(cards().length === 0 && !sel && !$("#play") && nav("favorites").hasAttribute("aria-current"), "empty Favorites remains a useful collection");
+  const special = "category:Shooter & platform";
+  nav(special).click();
+  collection.forEach(g => { if (g.category === "Shooter & platform") g.category = "Renamed category"; });
+  await refresh(); check(libraryCollection === "all" && nav("category:Renamed category"), "renamed category cannot strand filter");
+  collection.forEach((g,i) => { if (i >= 20 && i < 40) g.category = "Shooter & platform"; }); await refresh();
+  nav("all").click(); select("game-10");
+  key("R", document.body); check(libraryCollection === "recent" && sel === "game-0", "recent shortcut opens focused collection");
+  key("R", document.body); check(sel === "game-1", "recent shortcut advances from previous selection");
+  collection[0].favorite = true; await refresh();
+  const favKey = new KeyboardEvent("keydown", {key:"F",shiftKey:true,bubbles:true,cancelable:true});
+  document.body.dispatchEvent(favKey);
+  check(libraryCollection === "favorites" && sel === "game-0", "favorite shortcut opens correct collection even when also recent");
+  nav("all").click();
+  for (const k in held) delete held[k];
+  document.hasFocus = () => true; padNeedsNeutral = false; uiMode = true;
+  nav("all").focus(); padAction(i => i === 13,0,0);
+  check(document.activeElement.dataset.collection === "favorites", "controller moves through collection navigation");
+  padAction(() => false,0,0); padAction(i => i === 0,0,0);
+  check(libraryCollection === "favorites" && !topDlg() && launches === 0, "controller A chooses collection instead of launch");
+  leaveUi();
+  $("#sidebar-settings summary").focus(); $("#sidebar-settings summary").click();
+  check($("#sidebar-settings").open && $("#about").checkVisibility() && inside($("#quit")), "settings disclosure exposes tools without pushing Exit offscreen");
+  $("#sidebar-settings").scrollTop = $("#sidebar-settings").scrollHeight;
+  check($("#full").checkVisibility() && $("#sidebar-settings").scrollWidth <= $("#sidebar-settings").clientWidth + 1, "settings tools are scroll-accessible without horizontal overflow");
+  $("#sidebar-settings").open = false;
+  nav("all").click();
+  for (let i=0;i<35;i++) collection[i].category = "Extra category " + i;
+  await refresh();
+  $("#library-nav").scrollTop = $("#library-nav").scrollHeight;
+  const lastButton = $("#library-nav button:last-child"); lastButton.focus(); await refresh();
+  check(document.activeElement === lastButton && $("#library-nav").scrollTop > 0 && inside($("#add")) && inside($("#quit")), "many categories scroll independently of bottom controls");
+  collection.forEach((g,i) => { g.category = i < 20 ? "Arcade" : i < 40 ? "Shooter & platform" : i < 60 ? "A very long category title for readable wrapping" : undefined; }); await refresh();
+  nav(special).click(); view("grid");
+  check(cards().length === 20 && nav(special).hasAttribute("aria-current"), "Tiles/Grid share collection");
+  localStorage.setItem("mcl-sort","cat"); applySort(); view("list");
+  check($("#library-nav").hidden && visible().length === 70 && document.querySelectorAll("[draggable=true]").length > 0
+    && document.querySelector(".catbtns"), "List retains full library and organization");
+  const settingsKey = new KeyboardEvent("keydown", {key:"Enter",bubbles:true,cancelable:true});
+  $("#sidebar-settings summary").dispatchEvent(settingsKey);
+  check(!settingsKey.defaultPrevented && launches === 0, "List settings Enter does not launch selected game");
+  view("grid");
+  check(cards().length === 20 && libraryCollection === special, "collection returns after List");
+  filter = "Game"; tagSel = new Set(["action"]); renderList(); select("game-25"); saveBrowsing();
+  sessionStorage.setItem("sidebar-reopen","yes"); location.reload();
+})().catch(error => { document.querySelector("#result").textContent = "FAIL: " + error.stack; });
+</script></body></html>

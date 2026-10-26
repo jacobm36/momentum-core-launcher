@@ -12,13 +12,37 @@
   <header><img src="/web/logo-full.png" alt="Momentum"><span>CORE LAUNCHER</span></header>
   <input id="search" type="search" placeholder="Search games…" autocomplete="off">
   <div id="library-count" role="status"></div>
-  <button id="about" type="button" title="About Momentum and build version">About Momentum</button>
+  <select id="library-view" aria-label="Library layout"><option value="list">List</option><option value="tiles">Tiles</option><option value="grid">Grid</option></select>
   <div id="tagbar" hidden></div>
+  <nav id="library-nav" aria-label="Library collections" hidden></nav>
   <nav id="list"></nav>
-  <div class="side-btns"><button id="add">+ Add game</button><button id="sort" title="Sort order (S)"></button><button id="stats" title="Playtime summary (T)">📊</button><button id="theme" title="Color theme"></button><button id="bell" class="badged" title="Notifications (N)">🔔</button><button id="jobsbtn" class="badged" title="Installs &amp; jobs (I)">📥</button><button id="backupbtn" title="Backup &amp; restore (B)">💾</button><button id="panel" title="Toggle selected-game panel style" aria-pressed="false"></button><button id="fx" title="Toggle animations and intro"></button><button id="snd" title="Toggle sound effects"></button><button id="rum" title="Toggle controller rumble" hidden>📳</button><button id="full" title="Toggle fullscreen (F11)">⛶</button><button id="quit" title="Exit launcher">⏻</button></div>
+  <div class="side-btns">
+    <button id="add">+ Add game</button>
+    <div class="library-tools">
+      <button id="sort" title="Sort order (S)"></button>
+      <button id="bell" class="badged" title="Notifications (N)" aria-label="Notifications">🔔</button>
+      <button id="jobsbtn" class="badged" title="Installs &amp; jobs (I)" aria-label="Installs and jobs">📥</button>
+    </div>
+    <details id="sidebar-settings">
+      <summary>Settings &amp; tools</summary>
+      <div class="settings-tools">
+        <button id="about" type="button" title="About Momentum and build version">About Momentum</button>
+        <button id="stats" title="Playtime summary (T)">📊 Playtime summary</button>
+        <button id="backupbtn" class="badged" title="Backup &amp; restore (B)">💾 Backup &amp; restore</button>
+        <button id="theme" title="Color theme"></button>
+        <button id="panel" title="Toggle selected-game panel style" aria-pressed="false"></button>
+        <button id="fx" title="Toggle animations and intro"></button>
+        <button id="snd" title="Toggle sound effects" aria-label="Toggle sound effects"></button>
+        <button id="rum" title="Toggle controller rumble" aria-label="Toggle controller rumble" hidden>📳</button>
+        <button id="full" title="Toggle fullscreen (F11)" aria-label="Toggle fullscreen">⛶</button>
+      </div>
+    </details>
+    <button id="quit" title="Exit launcher">⏻ Exit</button>
+  </div>
   <footer id="hints"></footer>
 </aside>
 <main id="stage">
+  <p id="tile-help" hidden>Open a game for details, then choose Play. Use List view to organize games.</p>
   <div class="art" id="art"></div>
   <video id="bg" muted loop playsinline></video>
   <div class="grid"></div>
@@ -51,6 +75,7 @@
 <script src="/web/actions.js"></script>
 <script src="/web/navigation.js"></script>
 <script src="/web/gamepad.js"></script>
+<script src="/web/tile-preview.js"></script>
 <script src="/web/shell.js"></script>
 <script src="/web/stats.js"></script>
 <script src="/web/gallery.js"></script>

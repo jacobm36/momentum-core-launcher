@@ -68,6 +68,33 @@ describe delivery profiles, not publication or gameplay acceptance.
 See [repository and delivery contents](delivery-layout.md).
 Neither build profile publishes the private frontend or changes the online store.
 
+## Public-preview preparation (no publication)
+
+Use `--runtime-only --launcher-only` to prepare a clean application archive.
+Keep it local until the owner explicitly approves publication. The archive's
+base revision is not an exact source identity when built from an edited
+checkout: retain `candidate-build.json` and its per-file hashes with the tested
+ZIP and checksum. Do not substitute a later rebuild without repeating checks.
+
+Run the repository regression suite, including opt-in browser tests, before
+building. Verify the final ZIP against the runtime allowlist and recorded
+hashes, then extract it under temporary HOME/XDG directories. Check an empty
+library, browser onboarding, store access, required scripts, and startup probing
+without changing personal shortcuts, launching games or reusing real receipts.
+Record skipped tests and distinguish automated startup from real gameplay.
+
+The pre-exposure boundary review found imported SVG documents could execute
+same-origin script when directly navigated to. Media now receives a sandbox CSP
+without script or same-origin privileges, restrictive resource loading, and
+`nosniff`, including normalized path aliases and HEAD responses. API and browser
+regressions cover the fix; this is not a claim that all vulnerabilities have been
+excluded. Keep review findings and test results with the prepared delivery.
+
+Before announcing a release, complete an owner/fresh-machine smoke test, settle
+the final version/download instructions and support scope, and explicitly approve
+the exact bytes. Do not make the development repository public or upload a draft
+release merely as a preparation step.
+
 ## Setup and safety
 
 ### Shared engine selection
