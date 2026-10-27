@@ -737,6 +737,23 @@ class InstallsTests(unittest.TestCase):
                 mock.patch.object(self.inst, "_load_receipt", return_value={"changed": True}):
             self.assertIn("receipt changed", self.inst.approve(job["id"], "test-digest"))
 
+    def test_approval_rejects_changed_compatibility_token(self):
+        self.jobs.jobs["j00000001"] = {
+            "id": "j00000001", "status": "awaiting-approval", "game": "test-game", "plan_digest": "test-digest",
+            "meta": {"kind": "install", "operation": "install", "package_id": "test-game",
+                     "package_version": "1.0.0", "package_digest": "sha256:" + "a" * 64,
+                     "install_enabled": True, "compatibility_token": "sha256:" + "1" * 64},
+            "steps": [{"status": "succeeded"}, {"status": "pending"},
+                      {"context": {"previous_receipt": None, "dependencies": {}}}]}
+        detail = {"digest": "sha256:" + "a" * 64, "install_enabled": True, "package_supported": True,
+                  "platform_issues": [], "dependencies": {},
+                  "compatibility_token": "sha256:" + "2" * 64}
+        with mock.patch.object(self.inst, "package_details", return_value=detail), \
+                mock.patch.object(self.inst, "_load_receipt", return_value=None), \
+                mock.patch.object(self.jobs, "approve", return_value=True, create=True) as approve:
+            self.assertIn("Compatibility evidence changed", self.inst.approve("j00000001", "test-digest"))
+            approve.assert_not_called()
+
     def test_runtime_routing_keeps_exact_dependency_policies(self):
         snapshot = self.root / "snapshot"
         snapshot.mkdir()

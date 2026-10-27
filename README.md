@@ -213,6 +213,8 @@ The browser interface talks to a **loopback-only local server**, not a hosted
 account service. Keep it local; do not expose or reverse-proxy it to a network.
 Checksums verify package integrity, not publisher trust. Approved package scripts
 and game commands run with your user permissions, not in a sandbox.
+Compatibility support records are also verified by signature and cached locally
+for offline reuse; setup approvals remain bound to the exact preflight evidence.
 
 Installed packages have **Manage installation → Review uninstall**. You approve
 the exact removal plan; unchanged installer-owned files are removed while player

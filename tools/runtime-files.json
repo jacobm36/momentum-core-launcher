@@ -21,7 +21,8 @@
     "docs/shared-engine-fallback-evidence.json",
     "docs/eduke32-preparation.md", "docs/ironwail-preparation.md",
     "docs/openbor.md", "docs/shared-engine-fallback.md",
-    "docs/uzdoom-preparation.md", "docs/screenshot.png", "docs/stats.png",
+    "docs/uzdoom-preparation.md", "docs/support-data-public.pem",
+    "docs/screenshot.png", "docs/stats.png",
     "docs/delivery-layout.md"
   ]
 }

@@ -87,6 +87,13 @@ def _json_copy(v):
     return json.loads(json.dumps(v))
 
 
+def _compatibility_token(record):
+    if not isinstance(record, dict):
+        return None
+    canonical = json.dumps(record, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()
+
+
 def _ubuntu_apt_prerequisite(title, reason, packages):
     try:
         release = platform.freedesktop_os_release()
@@ -319,6 +326,7 @@ class Installs:
         host_prerequisites = []
         managed_fallback = None
         flatpak_prerequisite_added = False
+        selected_record = None
         for req in man["requires"]:
             runtime = req["id"]
             if runtime == "flycast":
@@ -418,6 +426,14 @@ class Installs:
                 "version": expected_flycast["version"], "commit": expected_flycast["commit"]}
             dependency_targets["flycast"] = {
                 "version": expected_flycast["version"], "commit": expected_flycast["commit"]}
+            selected_record = {
+                "id": package_id, "version": version, "digest": summary["digest"], "runtime": "flycast",
+                "installer_validated": True,
+                "software": {"provider": evidence["provider"], "scope": evidence["scope"],
+                             "app_id": evidence["app_id"], "version": expected_flycast["version"],
+                             "commit": expected_flycast["commit"]},
+                "additional_software": revision.get("additional_software", []),
+            }
         if enabled:
             flycast["capabilities_checked"] = True
             flycast["capability_note"] = (
@@ -443,6 +459,7 @@ class Installs:
             supported = bool(record and record.get("installer_validated") is True and not summary["platform_issues"])
             enabled = False
             if supported:
+                selected_record = record
                 runtime = record["runtime"]
                 current = facts.get(runtime, {})
                 builds = compatibility.software_builds(record)
@@ -546,6 +563,7 @@ class Installs:
                     host_prerequisites=host_prerequisites,
                     compatibility=compatibility.guidance(summary["platform_issues"], supported, enabled,
                                                          host_prerequisites, facts),
+                    compatibility_token=_compatibility_token(selected_record),
                     install_enabled=enabled, package_supported=supported)
 
     @staticmethod
@@ -578,9 +596,13 @@ class Installs:
             return None
         detail = self.package_details(meta["package_id"], meta["package_version"])
         detail_status = {"compatibility": detail.get("compatibility"),
+                         "compatibility_token": detail.get("compatibility_token"),
                          "host_prerequisites": _json_copy(detail.get("host_prerequisites", [])),
                          "engine_selection": _json_copy(detail.get("engine_selection", {})),
                          "supported_software": _json_copy(detail.get("supported_software", {}))}
+        if meta.get("compatibility_token") is not None and detail.get("compatibility_token") != meta.get("compatibility_token"):
+            return ("needs-action", "Compatibility evidence changed since preflight; start a new setup review. "
+                    "No game files were installed.")
         if detail["digest"] != meta["package_digest"] or not detail["install_enabled"]:
             with self.jobs.lock:
                 meta.update(detail_status)
@@ -713,6 +735,7 @@ class Installs:
                         package_version=version, package_digest=trusted_digest,
                         game_directory=base["game_directory"], paths=base["paths"],
                         manifest={"name": manifest["name"]}, install_enabled=True,
+                        compatibility_token=detail.get("compatibility_token"),
                         catalog_defaults={**manifest["catalog"], "name": manifest["name"],
                                           "icon": base["paths"]["icon"]})
             return self.jobs.submit(f"Uninstall {manifest['name']}", steps, game=package_id, meta=meta)
@@ -819,6 +842,7 @@ class Installs:
                 "package_digest": base["package_digest"], "operation": "install",
                 "game_directory": game_dir, "paths": paths, "manifest": {"name": man["name"]},
                 "install_enabled": detail["install_enabled"],
+                "compatibility_token": detail.get("compatibility_token"),
                 "compatibility": detail.get("compatibility"),
                 "host_prerequisites": detail.get("host_prerequisites", []),
                 "supported_software": detail.get("supported_software", {}),
@@ -884,6 +908,8 @@ class Installs:
                 detail = self.package_details(meta["package_id"], meta["package_version"])
                 if detail["digest"] != meta["package_digest"]:
                     return "Package changed since preflight; cancel and review a new job"
+                if meta.get("compatibility_token") is not None and detail.get("compatibility_token") != meta.get("compatibility_token"):
+                    return "Compatibility evidence changed since preflight; start a new setup review."
                 if preparing and not detail["package_supported"]:
                     return "This game package lacks matching target evidence"
                 if preparing and meta.get("managed_fallback") != detail.get("managed_fallback"):
