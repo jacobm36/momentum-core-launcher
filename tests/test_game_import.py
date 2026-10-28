@@ -63,6 +63,20 @@ class GameImport(unittest.TestCase):
         self.assertEqual(len(output), 1)
         self.assertEqual(len(result["skipped"]), 1)
 
+    def test_candidates_are_alphabetical_by_name_not_filename(self):
+        self.shortcut("a.desktop", "zork", "zork")
+        self.shortcut("b.desktop", "Ábaco", "abaco")
+        self.shortcut("c.desktop", "Doom", "doom")
+        self.shortcut("d.desktop", "alien", "alien")
+        self.shortcut("e.desktop", "Doom", "doom2")
+        self.shortcut("f.desktop", "Bad\tName", "bad")
+        self.shortcut("g.desktop", "Aa\tName", "aa")
+        scan = game_import.discover([], self.apps)
+        self.assertEqual([c["entry"]["name"] for c in scan["candidates"]], ["Ábaco", "alien", "Doom", "Doom", "zork"])
+        self.assertEqual([c["source"] for c in scan["candidates"]][2:4], ["c.desktop", "e.desktop"])
+        self.assertEqual([c["reason"] for c in scan["candidates"]][2:4], [None, "Duplicate of another discovered game"])
+        self.assertEqual([c["source"] for c in scan["skipped"]], [str(self.apps / "g.desktop"), str(self.apps / "f.desktop")])
+
     def test_emulators_are_opt_in_but_game_shortcuts_using_engines_remain(self):
         self.shortcut("uzdoom.desktop", "UZDoom", "uzdoom")
         self.shortcut("mame.desktop", "MAME", "mame")

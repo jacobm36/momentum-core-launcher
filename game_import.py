@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import unicodedata
 
 MAX_SHORTCUTS = 2000
 MAX_SHORTCUT_BYTES = 256 << 10
@@ -76,6 +77,10 @@ def command(value, name, source, icon):
     if not argv or not argv[0] or any(ord(c) < 32 for arg in argv for c in arg):
         raise ImportError("Missing or invalid launch command")
     return shlex.join(argv)
+
+
+def _sort_name(name):
+    return "".join(c for c in unicodedata.normalize("NFKD", name) if not unicodedata.combining(c)).casefold()
 
 
 def discover(games, directory=None, *, include_emulators=False):
@@ -152,6 +157,9 @@ def discover(games, directory=None, *, include_emulators=False):
             found.append(candidate)
         except (OSError, UnicodeError, configparser.Error, KeyError, ValueError) as exc:
             skipped.append({"source": str(source), "name": name, "reason": str(exc)})
+    # Sort after duplicate detection so directory precedence still decides which shortcut is available.
+    found.sort(key=lambda c: (_sort_name(c["entry"]["name"]), c["source"]))
+    skipped.sort(key=lambda c: (_sort_name(c["name"]), c["source"]))
     return {"directory": ", ".join(map(str, directories)), "directories": list(map(str, directories)),
             "candidates": found, "skipped": skipped, "ignored": ignored,
             "emulators_hidden": emulators_hidden}
