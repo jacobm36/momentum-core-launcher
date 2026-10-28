@@ -49,3 +49,20 @@ sound, input, save/load/relaunch and clean exit.
 See [exact evidence](qbj3-installer-evidence.json). The package's separate
 standalone adapter is not used by the trusted runner and has independent
 ownership/receipts; do not mix independently owned installations.
+
+## Existing-installation revisit
+
+The canonical laptop's managed 0.1.0 installation passed the package's read-only
+verify entrypoint with its current receipt and freshly checked Ironwail host
+facts. Verification covered pinned mod assets, base PAK structure, wrapper,
+desktop entry, artwork and installed support bytes/modes. Existing settings,
+saves and other unrecognized game files were backed up and checked unchanged;
+the receipt and edited catalog were also unchanged. All 24 targeted Ironwail
+unit tests passed.
+
+The historical source and reference-engine folders are absent, but the installed
+game and managed runtime remain intact. Those absent reference folders did not
+block installed verification and do not justify a repair or new download.
+No repair, reinstallation, engine upgrade or engine invocation was performed.
+Display, audio, input, representative-map performance and save/load/relaunch
+still need owner confirmation. Readiness remains **setup required**.
