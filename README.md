@@ -6,7 +6,7 @@
 
 ## Public preview
 
-[Download the launcher](https://github.com/jacobm36/momentum-core-launcher/releases/tag/v2026.10.25-preview.2)
+[Download the launcher](https://github.com/jacobm36/momentum-core-launcher/releases/tag/v2026.10.27-preview.3)
 and choose the launcher ZIP, not GitHub's source-code archives. Extract into a
 **new writable folder**, close any old launcher, and run:
 
@@ -241,6 +241,7 @@ uses.
 | Boomer Shooters | Brutal Doom 64 | UZDoom |
 | Boomer Shooters | Slave Zero X: Episode Enyo | vkQuake |
 | Boomer Shooters | Duke Nukem 3D | EDuke32 (bundled; preview.2+) |
+| Boomer Shooters | Quake Brutalist Jam III | Ironwail 0.8.2 |
 
 The [public distribution repository](https://github.com/jacobm36/momentum-distribution)
 hosts the catalog and installer downloads; no GitHub account is needed to obtain
