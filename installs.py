@@ -665,10 +665,21 @@ class Installs:
         ownership.safe_path(str(directory))
         out = []
         for path in sorted(directory.glob("*.json")):
+            if self._foreign_record(path):
+                continue
             receipt = self._load_receipt(path.stem)
             if receipt is not None:
                 out.append(self._installation_summary(receipt))
         return out
+
+    @staticmethod
+    def _foreign_record(path):
+        """Older standalone setup records share this folder; leave them in place and unlisted."""
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, ValueError):
+            return False
+        return isinstance(data, dict) and "receipt_version" not in data and "package_id" not in data
 
     @staticmethod
     def _installation_summary(receipt):

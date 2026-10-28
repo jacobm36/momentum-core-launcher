@@ -146,6 +146,22 @@ class InstallsTests(unittest.TestCase):
         path.write_text(json.dumps(receipt))
         self.assertEqual(self.inst.list_installations()[0]["installation"], "removed")
 
+    def test_installation_summaries_skip_foreign_setup_records_but_reject_damaged_receipts(self):
+        job, _ = self.fixture()
+        self.assertIsNone(self.inst.on_success(job))
+        directory = self.inst._receipt_path("index").parent
+        legacy = directory / "qbj3-setup.json"
+        legacy_bytes = json.dumps({"setup_version": "0.1.0", "game": "qbj3"}).encode()
+        legacy.write_bytes(legacy_bytes)
+        summaries = self.inst.list_installations()
+        self.assertEqual([s["package_id"] for s in summaries], [job["meta"]["package_id"]])
+        self.assertEqual(legacy.read_bytes(), legacy_bytes)
+        for damaged in ({"receipt_version": 1, "package_id": "other"}, {"package_id": "damaged"}, "[not json"):
+            with self.subTest(damaged=damaged):
+                (directory / "damaged.json").write_text(damaged if isinstance(damaged, str) else json.dumps(damaged))
+                with self.assertRaises(installs.InstallError):
+                    self.inst.list_installations()
+
     def test_uninstall_review_blocks_launching_the_associated_game(self):
         self.jobs.jobs["j00000001"] = {
             "id": "j00000001", "status": "awaiting-approval", "game": "test-game",
